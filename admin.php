@@ -1,3 +1,4 @@
+
 <?php
 /**
  * Admin Dashboard - Radarr/Sonarr Style
@@ -52,18 +53,30 @@ if (isset($_GET['api'])) {
             break;
             
         case 'daemon-start':
-            $result = shell_exec('nohup php ' . __DIR__ . '/background_sync_daemon.php --daemon > /dev/null 2>&1 & echo $!');
-            echo json_encode(['success' => true, 'pid' => trim($result)]);
+            // Try systemd first, fallback to manual start
+            $systemdResult = shell_exec('systemctl start streaming-sync.service 2>&1');
+            $isActive = trim(shell_exec('systemctl is-active streaming-sync.service 2>/dev/null') ?? '') === 'active';
+            if ($isActive) {
+                $pid = trim(shell_exec('systemctl show streaming-sync.service --property=MainPID --value 2>/dev/null') ?? '');
+                echo json_encode(['success' => true, 'pid' => $pid, 'method' => 'systemd']);
+            } else {
+                // Fallback to nohup
+                $result = shell_exec('nohup php ' . __DIR__ . '/background_sync_daemon.php --daemon > /dev/null 2>&1 & echo $!');
+                echo json_encode(['success' => true, 'pid' => trim($result), 'method' => 'manual']);
+            }
             break;
             
         case 'daemon-stop':
+            // Try systemd first
+            shell_exec('systemctl stop streaming-sync.service 2>/dev/null');
+            // Also clean up lock file if it exists
             $lockFile = __DIR__ . '/cache/sync_daemon.lock';
             if (file_exists($lockFile)) {
                 $pid = trim(file_get_contents($lockFile));
                 if ($pid) {
                     posix_kill(intval($pid), SIGTERM);
-                    unlink($lockFile);
                 }
+                unlink($lockFile);
             }
             echo json_encode(['success' => true]);
             break;
@@ -141,11 +154,9 @@ if (isset($_GET['api'])) {
             break;
             
         case 'sync-github':
-            // First sync playlists from GitHub
-            $syncResult = shell_exec('php ' . __DIR__ . '/background_sync_daemon.php 2>&1');
-            // Then trigger stream population in background
-            shell_exec('nohup php ' . __DIR__ . '/admin.php --populate-streams > /dev/null 2>&1 &');
-            echo json_encode(['success' => true, 'message' => 'Sync started, stream population running in background']);
+            // Sync playlists from GitHub (force to bypass time check)
+            $syncResult = shell_exec('php ' . __DIR__ . '/background_sync_daemon.php --force 2>&1');
+            echo json_encode(['success' => true, 'message' => 'GitHub sync completed']);
             break;
             
         case 'populate-streams-status':
@@ -235,19 +246,27 @@ function getSystemStatus() {
         'system' => []
     ];
     
-    // Check daemon status
-    $lockFile = __DIR__ . '/cache/sync_daemon.lock';
+    // Check daemon status - try systemd first, then lock file
     $daemonRunning = false;
     $daemonPid = null;
     
-    if (file_exists($lockFile)) {
-        $pid = trim(file_get_contents($lockFile));
-        if ($pid && file_exists("/proc/$pid")) {
-            $daemonRunning = true;
-            $daemonPid = $pid;
-        } elseif ($pid && posix_kill(intval($pid), 0)) {
-            $daemonRunning = true;
-            $daemonPid = $pid;
+    // Check systemd service status
+    $systemdStatus = trim(shell_exec('systemctl is-active streaming-sync.service 2>/dev/null') ?? '');
+    if ($systemdStatus === 'active') {
+        $daemonRunning = true;
+        $daemonPid = trim(shell_exec('systemctl show streaming-sync.service --property=MainPID --value 2>/dev/null') ?? '');
+    } else {
+        // Fallback to lock file check
+        $lockFile = __DIR__ . '/cache/sync_daemon.lock';
+        if (file_exists($lockFile)) {
+            $pid = trim(file_get_contents($lockFile));
+            if ($pid && file_exists("/proc/$pid")) {
+                $daemonRunning = true;
+                $daemonPid = $pid;
+            } elseif ($pid && posix_kill(intval($pid), 0)) {
+                $daemonRunning = true;
+                $daemonPid = $pid;
+            }
         }
     }
     
@@ -309,7 +328,7 @@ function getSystemStatus() {
     $cacheDb = __DIR__ . '/cache/episodes.db';
     if (file_exists($cacheDb)) {
         $db = new SQLite3($cacheDb);
-        $result = $db->querySingle("SELECT COUNT(*) FROM episode_cache");
+        $result = $db->querySingle("SELECT COUNT(*) FROM episodes");
         $status['cache']['episodes'] = [
             'count' => $result ?? 0,
             'size' => formatBytes(filesize($cacheDb))
@@ -318,7 +337,7 @@ function getSystemStatus() {
     }
     
     // Provider status
-    $providers = $GLOBALS['STREAM_PROVIDERS'] ?? ['comet', 'mediafusion', 'torrentio'];
+    $providers = $GLOBALS['STREAM_PROVIDERS'] ?? ['comet']; if (is_string($providers)) $providers = [$providers];
     foreach ($providers as $provider) {
         $status['providers'][$provider] = [
             'enabled' => true,
@@ -380,7 +399,7 @@ function getSystemStatus() {
         'userSetHost' => $GLOBALS['userSetHost'] ?? '',
         
         // Stream providers
-        'streamProviders' => $GLOBALS['STREAM_PROVIDERS'] ?? ['comet', 'mediafusion', 'torrentio'],
+        'streamProviders' => is_array($GLOBALS['STREAM_PROVIDERS'] ?? ['comet']) ? ($GLOBALS['STREAM_PROVIDERS'] ?? ['comet']) : [$GLOBALS['STREAM_PROVIDERS']],
         'torrentioProviders' => $GLOBALS['TORRENTIO_PROVIDERS'] ?? 'yts,eztv,rarbg,1337x,thepiratebay',
         'mediafusionEnabled' => $GLOBALS['MEDIAFUSION_ENABLED'] ?? true
     ];
@@ -713,26 +732,26 @@ function updateFilterConfig($filters) {
     
     // Update each filter setting
     $content = preg_replace(
-        "/\\\$GLOBALS\['EXCLUDED_RELEASE_GROUPS'\]\s*=\s*'[^']*'/",
-        "\$GLOBALS['EXCLUDED_RELEASE_GROUPS'] = '$releaseGroups'",
+        "/\\\$GLOBALS\['EXCLUDED_RELEASE_GROUPS'\]\s*=\s*'[^']*';/",
+        "\$GLOBALS['EXCLUDED_RELEASE_GROUPS'] = '$releaseGroups';",
         $content
     );
     
     $content = preg_replace(
-        "/\\\$GLOBALS\['EXCLUDED_LANGUAGES'\]\s*=\s*'[^']*'/",
-        "\$GLOBALS['EXCLUDED_LANGUAGES'] = '$languages'",
+        "/\\\$GLOBALS\['EXCLUDED_LANGUAGES'\]\s*=\s*'[^']*';/",
+        "\$GLOBALS['EXCLUDED_LANGUAGES'] = '$languages';",
         $content
     );
     
     $content = preg_replace(
-        "/\\\$GLOBALS\['EXCLUDED_QUALITIES'\]\s*=\s*'[^']*'/",
-        "\$GLOBALS['EXCLUDED_QUALITIES'] = '$qualities'",
+        "/\\\$GLOBALS\['EXCLUDED_QUALITIES'\]\s*=\s*'[^']*';/",
+        "\$GLOBALS['EXCLUDED_QUALITIES'] = '$qualities';",
         $content
     );
     
     $content = preg_replace(
-        "/\\\$GLOBALS\['EXCLUDED_CUSTOM'\]\s*=\s*'[^']*'/",
-        "\$GLOBALS['EXCLUDED_CUSTOM'] = '$custom'",
+        "/\\\$GLOBALS\['EXCLUDED_CUSTOM'\]\s*=\s*'[^']*';/",
+        "\$GLOBALS['EXCLUDED_CUSTOM'] = '$custom';",
         $content
     );
     
@@ -2516,9 +2535,7 @@ async function triggerAutoSync() {
         const result = await response.json();
         
         if (result.success) {
-            showToast('Sync complete! Stream population running in background...', 'success');
-            // Start polling for stream population status
-            pollStreamPopulationStatus();
+            showToast('GitHub sync complete!', 'success');
         } else {
             showToast('Sync issue: ' + (result.error || 'Check logs'), 'error');
         }
