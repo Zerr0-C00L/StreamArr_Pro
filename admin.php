@@ -843,6 +843,10 @@ function populateStreamsFromLists() {
             
             if (!$tmdbId) {
                 $skipped++;
+                // Update status every 10 items
+                if ($processed % 10 === 0) {
+                    $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processed: $processed / $totalMovies (cached: $cached, skipped: $skipped)");
+                }
                 continue;
             }
             
@@ -866,14 +870,21 @@ function populateStreamsFromLists() {
             }
             
             if (!$imdbId) {
-                $log("No IMDB ID for: $name (TMDB: $tmdbId)");
                 $skipped++;
+                // Update status every 10 items
+                if ($processed % 10 === 0) {
+                    $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processed: $processed / $totalMovies (cached: $cached, skipped: $skipped)");
+                }
                 continue;
             }
             
             // Check if we already have streams cached
             if ($db->hasValidStreams($imdbId, 'movie', null, null, 168)) { // 7 days TTL
                 $skipped++;
+                // Update status every 10 items
+                if ($processed % 10 === 0) {
+                    $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processed: $processed / $totalMovies (cached: $cached, skipped: $skipped)");
+                }
                 continue;
             }
             
