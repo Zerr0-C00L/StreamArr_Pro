@@ -242,6 +242,7 @@ class EpisodeCacheDB {
     
     /**
      * Get available streams for a movie/episode
+     * Sorted by quality (best first) then by size (largest first)
      */
     public function getStreams($imdbId, $type, $season = null, $episode = null) {
         $sql = 'SELECT * FROM streams WHERE imdb_id = :imdb AND type = :type';
@@ -272,10 +273,83 @@ class EpisodeCacheDB {
         $streams = [];
         
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            // Filter out collection packs and multi-movie torrents
+            $title = $row['title'] ?? '';
+            if ($this->isCollectionPack($title)) {
+                continue;
+            }
+            
+            // Extract size in bytes for sorting - prefer size column, fallback to title
+            $sizeText = $row['size'] ?? $title;
+            $row['_size_bytes'] = $this->parseSizeToBytes($sizeText);
             $streams[] = $row;
         }
         
+        // Sort by quality (already done by SQL) then by size within each quality
+        usort($streams, function($a, $b) {
+            // Quality order
+            $qualityOrder = ['2160P' => 1, '4K' => 1, '1080P' => 2, '720P' => 3, '480P' => 4];
+            $qa = $qualityOrder[$a['quality'] ?? ''] ?? 5;
+            $qb = $qualityOrder[$b['quality'] ?? ''] ?? 5;
+            
+            if ($qa !== $qb) {
+                return $qa - $qb;
+            }
+            
+            // Within same quality, sort by size (largest first)
+            return ($b['_size_bytes'] ?? 0) - ($a['_size_bytes'] ?? 0);
+        });
+        
+        // Remove internal field
+        foreach ($streams as &$s) {
+            unset($s['_size_bytes']);
+        }
+        
         return $streams;
+    }
+    
+    /**
+     * Check if a stream title indicates a collection/pack (multi-movie torrent)
+     */
+    private function isCollectionPack($title) {
+        // Patterns that indicate collection packs
+        $packPatterns = [
+            '/\d+\s*Movies?\s*(Collection|Pack|Part)/i',  // "500 Movies Collection", "67 Movies Part"
+            '/Collection.*\d+.*Movies?/i',                 // "Collection of 250 Movies"
+            '/IMDB\s*Top\s*\d+/i',                         // "IMDB Top 250"
+            '/Top\s*\d+\s*Movies?/i',                      // "Top 100 Movies"
+            '/\bPack\b.*\d+\s*(Movies?|Films?)/i',         // "Pack of 50 Movies"
+            '/\d+\s*(Classic|Best|Greatest)\s*(Movies?|Films?)/i',  // "500 Classic Movies"
+            '/Fanedit\s*Collection/i',                     // "Fanedit Collection"
+            '/Movies?\s*Collection\s*\d+/i',               // "Movies Collection 2024"
+        ];
+        
+        foreach ($packPatterns as $pattern) {
+            if (preg_match($pattern, $title)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Parse size string (e.g., "37.82 GB", "996.71 MB") to bytes
+     */
+    private function parseSizeToBytes($text) {
+        // Match patterns like "💾 37.82 GB" or "37.82 GB"
+        if (preg_match('/([\d.]+)\s*(TB|GB|MB|KB)/i', $text, $matches)) {
+            $size = floatval($matches[1]);
+            $unit = strtoupper($matches[2]);
+            
+            switch ($unit) {
+                case 'TB': return (int)($size * 1024 * 1024 * 1024 * 1024);
+                case 'GB': return (int)($size * 1024 * 1024 * 1024);
+                case 'MB': return (int)($size * 1024 * 1024);
+                case 'KB': return (int)($size * 1024);
+            }
+        }
+        return 0;
     }
     
     /**
