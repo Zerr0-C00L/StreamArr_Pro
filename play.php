@@ -498,8 +498,39 @@ function torrentioFastPlayDirect($imdbId, $type, $season = null, $episode = null
         }
     }
     
-    // Quality filters - exclude REMUX, HDR, DV, 3D, CAM
-    $excludePatterns = '/\bREMUX\b|\bHDR\b|\bDV\b|\bDolby.?Vision\b|\b3D\b|\bCAM\b|\bTS\b|\bSCR\b/i';
+    // Build exclude patterns from config settings
+    $excludePatterns = null;
+    if ($GLOBALS['ENABLE_RELEASE_FILTERS'] ?? true) {
+        $patterns = [];
+        
+        // Add quality filters (REMUX, HDR, DV, 3D, CAM, etc.)
+        $qualityExcludes = $GLOBALS['EXCLUDED_QUALITIES'] ?? 'REMUX|HDR|DV|Dolby.?Vision|3D|CAM|TS|SCR';
+        if (!empty($qualityExcludes)) {
+            $patterns[] = $qualityExcludes;
+        }
+        
+        // Add release group filters (TVHUB, FILM for Russian releases, etc.)
+        $releaseGroupExcludes = $GLOBALS['EXCLUDED_RELEASE_GROUPS'] ?? '';
+        if (!empty($releaseGroupExcludes)) {
+            $patterns[] = $releaseGroupExcludes;
+        }
+        
+        // Add language filters (RUSSIAN, RUS, HINDI, etc.)
+        $languageExcludes = $GLOBALS['EXCLUDED_LANGUAGES'] ?? '';
+        if (!empty($languageExcludes)) {
+            $patterns[] = $languageExcludes;
+        }
+        
+        // Add custom patterns
+        $customExcludes = $GLOBALS['EXCLUDED_CUSTOM'] ?? '';
+        if (!empty($customExcludes)) {
+            $patterns[] = $customExcludes;
+        }
+        
+        if (!empty($patterns)) {
+            $excludePatterns = '/\b(' . implode('|', $patterns) . ')\b/i';
+        }
+    }
     
     // If quality is specified, build a pattern for it
     $qualityMatchPattern = null;
@@ -525,8 +556,8 @@ function torrentioFastPlayDirect($imdbId, $type, $season = null, $episode = null
             continue;
         }
         
-        // Apply quality filter
-        if (preg_match($excludePatterns, $title) || preg_match($excludePatterns, $name)) {
+        // Apply release filters (quality, language, release groups)
+        if ($excludePatterns && (preg_match($excludePatterns, $title) || preg_match($excludePatterns, $name))) {
             if ($debug) echo "Skip filtered: " . substr($title, 0, 50) . "</br>";
             continue;
         }

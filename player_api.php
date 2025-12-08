@@ -172,6 +172,26 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_series_categories') {
 // Send the request to the playlist.
 if (isset($_GET['action']) && $_GET['action'] == 'get_vod_streams') {
 
+	// Check if we need to apply a limit
+	$limit = $GLOBALS['M3U8_LIMIT'] ?? 0;
+	
+	if ($limit > 0 && !$GLOBALS['INCLUDE_ADULT_VOD']) {
+		// Return limited movie list
+		$playlist = [];
+		if (file_exists(__DIR__ . '/playlist.json')) {
+			$playlist = json_decode(file_get_contents(__DIR__ . '/playlist.json'), true) ?: [];
+		}
+		
+		// Calculate movie limit (70% of total limit)
+		$movieLimit = intval($limit * 0.7);
+		if (count($playlist) > $movieLimit) {
+			$playlist = array_slice($playlist, 0, $movieLimit);
+		}
+		
+		header('Content-Type: application/json');
+		echo json_encode($playlist);
+		exit();
+	}
 	
 	if ($GLOBALS['INCLUDE_ADULT_VOD']) {
 		$jsonUrl = "https://raw.githubusercontent.com/gogetta69/public-files/main/adult-movies.json";
@@ -268,7 +288,28 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_vod_streams') {
 //Send the request to the playlist.
 if (isset($_GET['action']) && $_GET['action'] == 'get_series') {
 	
-		if(!$GLOBALS['userCreatePlaylist']){
+	// Check if we need to apply a limit
+	$limit = $GLOBALS['M3U8_LIMIT'] ?? 0;
+	
+	if ($limit > 0) {
+		// Return limited series list
+		$tvPlaylist = [];
+		if (file_exists(__DIR__ . '/tv_playlist.json')) {
+			$tvPlaylist = json_decode(file_get_contents(__DIR__ . '/tv_playlist.json'), true) ?: [];
+		}
+		
+		// Calculate TV limit (30% of total limit)
+		$tvLimit = intval($limit * 0.3);
+		if (count($tvPlaylist) > $tvLimit) {
+			$tvPlaylist = array_slice($tvPlaylist, 0, $tvLimit);
+		}
+		
+		header('Content-Type: application/json');
+		echo json_encode($tvPlaylist);
+		exit();
+	}
+	
+	if(!$GLOBALS['userCreatePlaylist']){
 		
 		$jsonUrl = "https://raw.githubusercontent.com/gogetta69/public-files/main/tv_playlist.json";
 		$jsonContent = file_get_contents($jsonUrl);

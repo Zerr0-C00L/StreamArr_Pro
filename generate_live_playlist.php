@@ -22,7 +22,8 @@ function runLivePlaylistGenerate() {
 
     $playlist = @file_get_contents($playlistUrl);
     if ($playlist === false) {
-        die("Failed to fetch playlist");
+        // Don't die - just return silently so other API calls can work
+        return false;
     }
 
     file_put_contents('channels/live_playlist.m3u8', $playlist);

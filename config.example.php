@@ -298,5 +298,31 @@ $GLOBALS['MEDIAFUSION_ENABLED'] = true;
 // Kept as fallback for residential IPs
 $GLOBALS['TORRENTIO_PROVIDERS'] = 'yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl';
 
+// ========== RELEASE FILTERING SETTINGS ==========
+// Filter out unwanted releases by release group, language tags, or custom patterns
+// These patterns are checked against the stream title/name
+
+// Excluded release groups/sources (e.g., TVHUB, FILM for Russian releases)
+// Add groups separated by | (pipe) - case insensitive
+// Examples: 'TVHUB|FILM' to block Russian releases, 'YTS' to block YTS releases
+$GLOBALS['EXCLUDED_RELEASE_GROUPS'] = 'TVHUB|FILM';
+
+// Excluded language tags in release names
+// Add language indicators separated by | (pipe) - case insensitive  
+// Examples: 'RUSSIAN|RUS|RU' for Russian, 'GERMAN|GER|DE' for German
+$GLOBALS['EXCLUDED_LANGUAGES'] = 'RUSSIAN|RUS|HINDI|HIN|GERMAN|GER|FRENCH|FRE|ITALIAN|ITA|SPANISH|SPA|LATINO';
+
+// Quality filters - exclude REMUX, HDR, DV, 3D, CAM, etc.
+// These are filtered out to ensure compatibility with most players
+$GLOBALS['EXCLUDED_QUALITIES'] = 'REMUX|HDR|DV|Dolby.?Vision|3D|CAM|TS|SCR|HDTS|HDCAM|TELESYNC|TELECINE|TC';
+
+// Custom exclude patterns (regex) - advanced users only
+// Add any custom regex pattern to filter out specific releases
+// Example: 'Sample|Trailer|\[Dual\]' to exclude samples, trailers, and dual audio
+$GLOBALS['EXCLUDED_CUSTOM'] = '';
+
+// Enable/disable filtering (set to false to disable all filtering)
+$GLOBALS['ENABLE_RELEASE_FILTERS'] = true;
+
  
 ?>
