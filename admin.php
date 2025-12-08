@@ -157,6 +157,29 @@ if (isset($_GET['api'])) {
             }
             break;
             
+        case 'save-custom-providers':
+            $data = json_decode(file_get_contents('php://input'), true);
+            $providers = $data['providers'] ?? [];
+            $providersFile = __DIR__ . '/cache/custom_providers.json';
+            file_put_contents($providersFile, json_encode($providers, JSON_PRETTY_PRINT));
+            echo json_encode(['success' => true]);
+            break;
+            
+        case 'get-custom-providers':
+            $providersFile = __DIR__ . '/cache/custom_providers.json';
+            if (file_exists($providersFile)) {
+                echo file_get_contents($providersFile);
+            } else {
+                echo json_encode([]);
+            }
+            break;
+            
+        case 'test-custom-provider':
+            $data = json_decode(file_get_contents('php://input'), true);
+            $result = testCustomProviderEndpoint($data['url'] ?? '');
+            echo json_encode($result);
+            break;
+            
         default:
             echo json_encode(['error' => 'Unknown action']);
     }
@@ -444,6 +467,67 @@ function testProvider($provider) {
         'streams' => $streamCount,
         'response_time' => $responseTime . 'ms'
     ];
+}
+
+/**
+ * Test a custom Stremio provider
+ */
+function testCustomProviderEndpoint($baseUrl) {
+    global $PRIVATE_TOKEN;
+    
+    if (empty($baseUrl)) {
+        return ['success' => false, 'error' => 'No URL provided'];
+    }
+    
+    $testImdb = 'tt0137523'; // Fight Club
+    $rdKey = $PRIVATE_TOKEN;
+    
+    // Try to build a stream URL with RD config
+    // Most Stremio addons follow the pattern: {base}/{config}/stream/movie/{imdb}.json
+    $config = base64_encode(json_encode([
+        'debridService' => 'realdebrid',
+        'debridApiKey' => $rdKey,
+        'streaming_provider' => ['token' => $rdKey, 'service' => 'realdebrid']
+    ]));
+    
+    // Try multiple URL patterns
+    $urlPatterns = [
+        "$baseUrl/$config/stream/movie/$testImdb.json",
+        "$baseUrl/stream/movie/$testImdb.json",
+        "$baseUrl/$testImdb.json"
+    ];
+    
+    foreach ($urlPatterns as $url) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        ]);
+        
+        $startTime = microtime(true);
+        $response = curl_exec($ch);
+        $responseTime = round((microtime(true) - $startTime) * 1000);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode === 200) {
+            $data = json_decode($response, true);
+            $streamCount = isset($data['streams']) ? count($data['streams']) : 0;
+            
+            if ($streamCount > 0) {
+                return [
+                    'success' => true,
+                    'streams' => $streamCount,
+                    'time' => $responseTime,
+                    'url_pattern' => $url
+                ];
+            }
+        }
+    }
+    
+    return ['success' => false, 'error' => 'No streams found with any URL pattern', 'time' => $responseTime ?? 0];
 }
 
 function updateConfigFile($settings) {
@@ -1925,13 +2009,31 @@ function formatBytes($bytes) {
             
             <div class="settings-form">
                 <div class="form-group">
-                    <label>Stream Provider</label>
+                    <label>Default Provider</label>
                     <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
                         <label style="display: flex; align-items: center; gap: 0.5rem; background: var(--bg-tertiary); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;">
                             <input type="checkbox" id="provider-comet" checked disabled> Comet (Active)
                         </label>
                     </div>
-                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Comet is the only reliable provider for datacenter IPs. MediaFusion has rate limits, Torrentio is blocked by Cloudflare.</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Comet is the default provider. You can add custom Stremio addons below.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Custom Providers</label>
+                    <div id="custom-providers-list" style="margin-bottom: 0.5rem;"></div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <input type="text" id="new-provider-name" placeholder="Provider Name (e.g., MyAddon)" style="flex: 1; min-width: 150px;">
+                        <input type="text" id="new-provider-url" placeholder="Stremio Manifest URL (e.g., https://addon.example.com/manifest.json)" style="flex: 2; min-width: 300px;">
+                        <button class="btn btn-primary" onclick="addCustomProvider()">Add</button>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Add custom Stremio addons. Use the manifest.json URL. Provider must support Real-Debrid.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Provider Priority</label>
+                    <div id="provider-priority-list" style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 6px; min-height: 40px;">
+                        <span style="color: var(--text-secondary); font-size: 0.85rem;">Drag providers to reorder. First working provider is used.</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2450,10 +2552,167 @@ async function pollStreamPopulationStatus() {
     }, 30 * 60 * 1000);
 }
 
-function getSelectedProviders() {
-    // Only Comet is supported - MediaFusion has rate limits, Torrentio is blocked
-    return ['comet'];
+// Custom Providers Management
+let customProviders = [];
+
+function loadCustomProviders() {
+    const saved = localStorage.getItem('customProviders');
+    if (saved) {
+        try {
+            customProviders = JSON.parse(saved);
+        } catch (e) {
+            customProviders = [];
+        }
+    }
+    renderCustomProviders();
+    renderProviderPriority();
 }
+
+function saveCustomProviders() {
+    localStorage.setItem('customProviders', JSON.stringify(customProviders));
+    // Also save to server config
+    saveProvidersToServer();
+}
+
+async function saveProvidersToServer() {
+    try {
+        await fetch('?api=save-custom-providers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ providers: customProviders })
+        });
+    } catch (e) {
+        console.error('Failed to save providers to server:', e);
+    }
+}
+
+function renderCustomProviders() {
+    const container = document.getElementById('custom-providers-list');
+    if (!container) return;
+    
+    if (customProviders.length === 0) {
+        container.innerHTML = '<span style="color: var(--text-secondary); font-size: 0.85rem;">No custom providers added yet.</span>';
+        return;
+    }
+    
+    container.innerHTML = customProviders.map((p, idx) => `
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 6px; margin-bottom: 0.5rem;">
+            <span style="flex: 1;">
+                <strong>${escapeHtml(p.name)}</strong>
+                <span style="color: var(--text-secondary); font-size: 0.8rem; margin-left: 0.5rem;">${escapeHtml(p.url.substring(0, 50))}...</span>
+            </span>
+            <button class="btn btn-secondary" onclick="testCustomProvider(${idx})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Test</button>
+            <button class="btn btn-secondary" onclick="removeCustomProvider(${idx})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; color: #ef4444;">Remove</button>
+        </div>
+    `).join('');
+}
+
+function renderProviderPriority() {
+    const container = document.getElementById('provider-priority-list');
+    if (!container) return;
+    
+    const allProviders = [
+        { id: 'comet', name: 'Comet (Default)', isDefault: true },
+        ...customProviders.map((p, idx) => ({ id: `custom_${idx}`, name: p.name, isDefault: false }))
+    ];
+    
+    container.innerHTML = allProviders.map((p, idx) => `
+        <div draggable="true" data-provider-idx="${idx}" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: ${p.isDefault ? 'var(--accent)' : 'var(--bg-secondary)'}; color: ${p.isDefault ? 'white' : 'var(--text-primary)'}; border-radius: 6px; margin: 0.25rem; cursor: move;">
+            <span style="cursor: grab;">☰</span>
+            <span>${escapeHtml(p.name)}</span>
+        </div>
+    `).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function addCustomProvider() {
+    const nameInput = document.getElementById('new-provider-name');
+    const urlInput = document.getElementById('new-provider-url');
+    
+    const name = nameInput.value.trim();
+    let url = urlInput.value.trim();
+    
+    if (!name || !url) {
+        showToast('Please enter both provider name and URL', 'error');
+        return;
+    }
+    
+    // Normalize URL - extract base URL from manifest.json
+    if (url.endsWith('/manifest.json')) {
+        url = url.replace('/manifest.json', '');
+    }
+    
+    // Validate URL format
+    try {
+        new URL(url);
+    } catch (e) {
+        showToast('Invalid URL format', 'error');
+        return;
+    }
+    
+    customProviders.push({ name, url, enabled: true });
+    saveCustomProviders();
+    renderCustomProviders();
+    renderProviderPriority();
+    
+    nameInput.value = '';
+    urlInput.value = '';
+    
+    showToast(`Provider "${name}" added!`, 'success');
+}
+
+function removeCustomProvider(idx) {
+    if (confirm(`Remove provider "${customProviders[idx].name}"?`)) {
+        customProviders.splice(idx, 1);
+        saveCustomProviders();
+        renderCustomProviders();
+        renderProviderPriority();
+        showToast('Provider removed', 'success');
+    }
+}
+
+async function testCustomProvider(idx) {
+    const provider = customProviders[idx];
+    showToast(`Testing ${provider.name}...`, 'success');
+    
+    try {
+        const response = await fetch('?api=test-custom-provider', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: provider.url })
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`${provider.name}: OK (${result.streams} streams, ${result.time}ms)`, 'success');
+        } else {
+            showToast(`${provider.name}: Failed - ${result.error}`, 'error');
+        }
+    } catch (e) {
+        showToast(`${provider.name}: Error - ${e.message}`, 'error');
+    }
+}
+
+function getSelectedProviders() {
+    // Return comet + any enabled custom providers
+    const providers = ['comet'];
+    customProviders.forEach((p, idx) => {
+        if (p.enabled) {
+            providers.push(`custom_${idx}`);
+        }
+    });
+    return providers;
+}
+
+// Load custom providers on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadCustomProviders();
+});
 
 // Keep old function name for backward compatibility
 async function saveSettings() {
