@@ -62,7 +62,7 @@ Generate dynamic playlists for Live TV, Movies and TV Series using a mock versio
       </a>
     </td>
     <td style="border: none; padding-left: 10px;"> <!-- Adjust padding as needed -->
-      <a href="https://ko-fi.com/gogetta69">
+      <a href="https://ko-fi.com/zeroq">
         <img src="https://www.ko-fi.com/img/githubbutton_sm.svg" alt="Ko-fi">
       </a>
     </td>
