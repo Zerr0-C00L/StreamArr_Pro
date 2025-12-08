@@ -494,7 +494,7 @@ function regenerateM3U8($movies, $tvSeries) {
     logMsg("Generated M3U8 with $totalEntries entries");
 }
 
-// Fetch Live TV from GitHub
+// Fetch Live TV from GitHub and save as JSON for XC API
 function fetchLiveTV() {
     global $GITHUB_LIVE_TV;
     
@@ -514,8 +514,71 @@ function fetchLiveTV() {
         return '';
     }
     
-    // Remove the #EXTM3U header (we already have one)
+    // Parse M3U8 and create JSON for XC API
     $lines = explode("\n", $response);
+    $liveChannels = [];
+    $categories = [];
+    $categoryMap = [];
+    $streamId = 1;
+    $catId = 1;
+    
+    $currentInfo = null;
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if (strpos($line, '#EXTINF') === 0) {
+            // Parse channel info
+            preg_match('/tvg-id="([^"]*)"/', $line, $tvgId);
+            preg_match('/tvg-logo="([^"]*)"/', $line, $logo);
+            preg_match('/group-title="([^"]*)"/', $line, $group);
+            preg_match('/,(.*)$/', $line, $name);
+            
+            $categoryName = $group[1] ?? 'Live TV';
+            if (!isset($categoryMap[$categoryName])) {
+                $categoryMap[$categoryName] = $catId;
+                $categories[] = [
+                    'category_id' => (string)$catId,
+                    'category_name' => $categoryName,
+                    'parent_id' => 0
+                ];
+                $catId++;
+            }
+            
+            $currentInfo = [
+                'num' => $streamId,
+                'name' => $name[1] ?? 'Unknown',
+                'stream_type' => 'live',
+                'stream_id' => $streamId,
+                'stream_icon' => $logo[1] ?? '',
+                'epg_channel_id' => $tvgId[1] ?? '',
+                'added' => time(),
+                'category_id' => (string)$categoryMap[$categoryName],
+                'custom_sid' => '',
+                'tv_archive' => 0,
+                'direct_source' => '',
+                'tv_archive_duration' => 0
+            ];
+            $streamId++;
+        } elseif ($currentInfo && strpos($line, 'http') === 0) {
+            $currentInfo['_stream_url'] = $line;
+            $liveChannels[] = $currentInfo;
+            $currentInfo = null;
+        }
+    }
+    
+    // Save JSON files for XC API
+    $channelsDir = __DIR__ . '/channels';
+    if (!is_dir($channelsDir)) {
+        mkdir($channelsDir, 0755, true);
+    }
+    
+    file_put_contents($channelsDir . '/live_playlist.json', json_encode($liveChannels, JSON_PRETTY_PRINT));
+    file_put_contents($channelsDir . '/get_live_categories.json', json_encode($categories, JSON_PRETTY_PRINT));
+    logMsg("Saved " . count($liveChannels) . " live channels and " . count($categories) . " categories for XC API");
+    
+    // Also fetch EPG for live channels
+    fetchLiveEPG();
+    
+    // Return M3U8 format (without header)
     $output = '';
     foreach ($lines as $line) {
         if (strpos($line, '#EXTM3U') === 0) continue;
@@ -523,6 +586,58 @@ function fetchLiveTV() {
     }
     
     return $output;
+}
+
+// Fetch Live TV EPG from GitHub
+function fetchLiveEPG() {
+    global $GITHUB_LIVE_EPG;
+    
+    $channelsDir = __DIR__ . '/channels';
+    if (!is_dir($channelsDir)) {
+        mkdir($channelsDir, 0755, true);
+    }
+    
+    logMsg("Fetching Live TV EPG from GitHub...");
+    
+    $ch = curl_init($GITHUB_LIVE_EPG);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_USERAGENT => 'Mozilla/5.0'
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200 || !$response) {
+        logMsg("Failed to fetch Live TV EPG (HTTP $httpCode)");
+        return false;
+    }
+    
+    // Validate it's XML
+    if (strpos($response, '<?xml') === false && strpos($response, '<tv') === false) {
+        logMsg("EPG response is not valid XML");
+        return false;
+    }
+    
+    // Save as plain XML
+    $xmlFile = $channelsDir . '/epg.xml';
+    file_put_contents($xmlFile, $response);
+    
+    // Also create gzipped version
+    $gzFile = $channelsDir . '/epg.xml.gz';
+    $gz = gzopen($gzFile, 'w9');
+    gzwrite($gz, $response);
+    gzclose($gz);
+    
+    // Update last updated timestamp
+    file_put_contents($channelsDir . '/last_updated_epg.txt', time());
+    
+    $size = strlen($response);
+    logMsg("Saved Live TV EPG: " . number_format($size) . " bytes");
+    
+    return true;
 }
 
 // Get base URL
