@@ -1,5 +1,42 @@
 # TMDB to VOD: Free Live TV, Movies & Series Playlist \[Xtream Codes & M3U8\]
 
+## Update 12/08/2025 - Multi-Provider & Cloud Deployment
+
+### 🚀 Major New Features
+
+- **Multi-Provider Stream Support**: Added fallback system with Comet, MediaFusion, and Torrentio providers. If one provider is blocked or down, automatically tries the next.
+- **Cloud Deployment Ready**: Optimized for Hetzner Cloud and other datacenter hosting. Comet and MediaFusion work perfectly on datacenter IPs where Torrentio may be blocked.
+- **Background Sync Daemon**: New `background_sync_daemon.php` automatically syncs with GitHub's large playlist (~51K movies, ~17K series) while running your own smaller playlist initially.
+- **SQLite Episode Cache**: Migrated episode lookups to SQLite database for faster performance and reliability.
+- **Systemd Service**: Auto-start daemon on server boot with `streaming-sync.service`.
+
+### 🔧 Technical Improvements
+
+- **Provider Configuration**: Configure providers in `config.php` with `$GLOBALS['STREAM_PROVIDERS']`
+- **Comet Integration**: Works with Real-Debrid on datacenter IPs (Hetzner, DigitalOcean, etc.)
+- **MediaFusion Integration**: ElfHosted instance as backup provider
+- **Improved Error Handling**: Better fallback logic when providers fail
+- **Cleaned Codebase**: Removed unnecessary files, reduced project size by 73%
+
+### 📦 Quick Cloud Setup (Hetzner)
+
+```bash
+# 1. Create Ubuntu 24.04 server on Hetzner (~$4/month)
+# 2. Install dependencies
+apt update && apt install -y php8.3-fpm php8.3-curl php8.3-sqlite3 nginx
+
+# 3. Clone and configure
+git clone https://github.com/Zerr0-C00L/tmdb-to-vod-playlist.git /var/www/streaming
+cp /var/www/streaming/config.example.php /var/www/streaming/config.php
+# Edit config.php with your TMDB and Real-Debrid API keys
+
+# 4. Enable background sync
+cp /var/www/streaming/streaming-sync.service /etc/systemd/system/
+systemctl enable --now streaming-sync
+```
+
+---
+
 ## Update 09/28/2025
 
 - <strong>Live TV:</strong> Fixed the Live TV section and added DrewLive, a massive all in one source of 7,000+ channels.
@@ -20,7 +57,7 @@ Generate dynamic playlists for Live TV, Movies and TV Series using a mock versio
 <table style="border-collapse: collapse; border: none;">
   <tr>
     <td style="border: none;">
-      <a href="https://github.com/gogetta69/TMDB-To-VOD-Playlist/archive/refs/heads/main.zip">
+      <a href="https://github.com/Zerr0-C00L/tmdb-to-vod-playlist/archive/refs/heads/main.zip">
         <img src="https://img.shields.io/badge/Download%20ZIP-latest-blue?style=for-the-badge&logo=github" alt="Download ZIP">
       </a>
     </td>
