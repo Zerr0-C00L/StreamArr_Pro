@@ -727,7 +727,9 @@ function populateStreamsFromLists() {
         $log("Fetching $listName list...");
         $response = @file_get_contents($url);
         if ($response) {
-            $movies = json_decode($response, true) ?? [];
+            $data = json_decode($response, true) ?? [];
+            // Handle both formats: direct array or {movies: [...]}
+            $movies = isset($data['movies']) ? $data['movies'] : $data;
             $totalMovies += count($movies);
         }
     }
@@ -744,13 +746,16 @@ function populateStreamsFromLists() {
             continue;
         }
         
-        $movies = json_decode($response, true) ?? [];
+        $data = json_decode($response, true) ?? [];
+        // Handle both formats: direct array or {movies: [...]}
+        $movies = isset($data['movies']) ? $data['movies'] : $data;
         $log("Found " . count($movies) . " movies in $listName");
         
         foreach ($movies as $movie) {
             $processed++;
-            $tmdbId = $movie['stream_id'] ?? $movie['tmdb_id'] ?? null;
-            $name = $movie['name'] ?? 'Unknown';
+            // Handle both formats: id (from GitHub lists) or stream_id (from playlist.json)
+            $tmdbId = $movie['id'] ?? $movie['stream_id'] ?? $movie['tmdb_id'] ?? null;
+            $name = $movie['title'] ?? $movie['name'] ?? 'Unknown';
             
             if (!$tmdbId) {
                 $skipped++;
