@@ -123,9 +123,8 @@ $seriesCount = 1903;
         
         <div class="quick-links">
             <a href="?view=browse" class="btn">🔍 Browse Media</a>
-            <a href="dashboard.php?section=movies" class="btn" target="_blank">🎬 View Movies</a>
-            <a href="dashboard.php?section=series" class="btn" target="_blank">📺 View Series</a>
-            <a href="admin.php" class="btn" target="_blank">⚙️ Admin Panel</a>
+            <a href="media_browser.php" class="btn">🎬 Media Browser</a>
+            <a href="admin.php" class="btn">⚙️ Admin Panel</a>
         </div>
     </div>
 </body>
