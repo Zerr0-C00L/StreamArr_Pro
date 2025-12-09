@@ -600,12 +600,18 @@ if (isset($_GET['api'])) {
             $movies = file_exists($playlistFile) ? json_decode(file_get_contents($playlistFile), true) : [];
             $series = file_exists($tvPlaylistFile) ? json_decode(file_get_contents($tvPlaylistFile), true) : [];
             
+            // Live TV count from channels JSON
+            $liveChannelsFile = __DIR__ . '/channels/live_playlist.json';
+            $liveTvCount = 0;
+            if (file_exists($liveChannelsFile)) {
+                $liveChannels = json_decode(file_get_contents($liveChannelsFile), true);
+                $liveTvCount = is_array($liveChannels) ? count($liveChannels) : 0;
+            }
+            
             // M3U8 status
             $m3u8File = __DIR__ . '/playlist.m3u8';
             $m3u8Exists = file_exists($m3u8File);
             $m3u8Modified = $m3u8Exists ? date('Y-m-d H:i:s', filemtime($m3u8File)) : null;
-            $m3u8Content = $m3u8Exists ? file_get_contents($m3u8File) : '';
-            $liveTvCount = substr_count($m3u8Content, 'pluto.tv');
             
             // Sync status
             $syncStatusFile = __DIR__ . '/cache/sync_status.json';
@@ -683,6 +689,29 @@ function regenerateM3U8Playlist($movies = null, $series = null) {
     $baseUrl = $protocol . '://' . $host;
     
     $m3u = "#EXTM3U\n";
+    $liveTvCount = 0;
+    
+    // Add Live TV first (if enabled)
+    if ($GLOBALS['INCLUDE_LIVE_TV'] ?? true) {
+        $liveChannelsFile = __DIR__ . '/channels/live_playlist.json';
+        if (file_exists($liveChannelsFile)) {
+            $liveChannels = json_decode(file_get_contents($liveChannelsFile), true) ?? [];
+            foreach ($liveChannels as $channel) {
+                $name = htmlspecialchars($channel['name'] ?? 'Unknown', ENT_QUOTES);
+                $streamId = $channel['stream_id'] ?? '';
+                $logo = $channel['stream_icon'] ?? '';
+                $epgId = $channel['epg_channel_id'] ?? '';
+                $category = $channel['category_name'] ?? 'Live TV';
+                $streamUrl = $channel['_stream_url'] ?? '';
+                
+                if ($streamUrl) {
+                    $m3u .= "#EXTINF:-1 tvg-id=\"$epgId\" tvg-logo=\"$logo\" group-title=\"$category\",$name\n";
+                    $m3u .= "$streamUrl\n";
+                    $liveTvCount++;
+                }
+            }
+        }
+    }
     
     // Add movies
     foreach ($movies as $movie) {
