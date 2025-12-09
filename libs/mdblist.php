@@ -267,14 +267,19 @@ class MDBListProvider {
      * Fetch all configured MDBList lists and merge results
      */
     public function fetchAllConfiguredLists() {
-        $lists = $GLOBALS['MDBLIST_URLS'] ?? [];
-        if (empty($lists)) {
+        // Get lists from saved config (mdblist_config.json), not from GLOBALS
+        $savedLists = self::getSavedLists();
+        $enabledLists = array_filter($savedLists, function($list) {
+            return $list['enabled'] ?? true;
+        });
+        
+        if (empty($enabledLists)) {
             return [
                 'success' => true,
                 'movies' => [],
                 'series' => [],
                 'total' => 0,
-                'message' => 'No MDBList URLs configured'
+                'message' => 'No MDBList URLs configured or enabled'
             ];
         }
         
@@ -284,7 +289,8 @@ class MDBListProvider {
         $seenMovieIds = [];
         $seenSeriesIds = [];
         
-        foreach ($lists as $listUrl) {
+        foreach ($enabledLists as $listConfig) {
+            $listUrl = $listConfig['url'];
             $result = $this->fetchListByUrl($listUrl);
             
             if (!$result['success']) {
@@ -316,7 +322,7 @@ class MDBListProvider {
             'total' => count($allMovies) + count($allSeries),
             'movie_count' => count($allMovies),
             'series_count' => count($allSeries),
-            'lists_processed' => count($lists),
+            'lists_processed' => count($enabledLists),
             'errors' => $errors,
             'fetched_at' => date('Y-m-d H:i:s')
         ];

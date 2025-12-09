@@ -16,6 +16,18 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $search = $_GET['search'] ?? '';
 $perPage = 24;
 
+// Build quick lookup of items in playlists (for "in library" indicator)
+$playlistIds = [];
+if ($section === 'movies' && file_exists(__DIR__ . '/playlist.json')) {
+    $content = file_get_contents(__DIR__ . '/playlist.json');
+    preg_match_all('/"stream_id":(\d+)/', $content, $matches);
+    $playlistIds = array_flip($matches[1]);
+} elseif ($section === 'series' && file_exists(__DIR__ . '/tv_playlist.json')) {
+    $content = file_get_contents(__DIR__ . '/tv_playlist.json');
+    preg_match_all('/"series_id":(\d+)/', $content, $matches);
+    $playlistIds = array_flip($matches[1]);
+}
+
 // Load data based on section
 $items = [];
 $totalItems = 0;
@@ -299,6 +311,20 @@ $totalPages = ceil($totalItems / $perPage);
             50% { opacity: 0.5; }
         }
         
+        .in-library-badge {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            z-index: 2;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+        }
+        
         .pagination {
             display: flex;
             justify-content: center;
@@ -553,6 +579,9 @@ $totalPages = ceil($totalItems / $perPage);
             <?php foreach ($items as $item): ?>
             <div class="card" onclick="showDetail(<?= $item['id'] ?>, '<?= $section ?>')">
                 <div class="availability checking" data-id="<?= $item['id'] ?>" data-type="<?= $section ?>"></div>
+                <?php if (isset($playlistIds[$item['id']])): ?>
+                <div class="in-library-badge" title="In Your Playlist">✓ Library</div>
+                <?php endif; ?>
                 <img class="card-poster" 
                      src="<?= htmlspecialchars($item['poster']) ?>" 
                      alt="<?= htmlspecialchars($item['name']) ?>"

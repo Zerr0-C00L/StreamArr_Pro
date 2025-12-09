@@ -15,29 +15,14 @@ $startIndex = isset($argv[1]) ? (int)$argv[1] : 0;
 
 echo "=== Syncing Episode Cache ===\n";
 
-// Check config setting for which playlist to use
-$useGithubForCache = isset($GLOBALS['useGithubForCache']) ? $GLOBALS['useGithubForCache'] : 
-                     (isset($useGithubForCache) ? $useGithubForCache : true);
-
 $localPlaylist = __DIR__ . "/tv_playlist.json";
-$githubPlaylist = "https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/tv_playlist.json";
 
-// If useGithubForCache is true, prefer GitHub's larger playlist
-if ($useGithubForCache) {
-    echo "Using GitHub playlist (larger catalog)...\n";
-    $tvData = @file_get_contents($githubPlaylist);
-    if (!$tvData && file_exists($localPlaylist)) {
-        echo "GitHub fetch failed, falling back to local...\n";
-        $tvData = file_get_contents($localPlaylist);
-    }
+// Use local playlist (populated by MDBList)
+if (file_exists($localPlaylist)) {
+    echo "Using local playlist: $localPlaylist\n";
+    $tvData = file_get_contents($localPlaylist);
 } else {
-    // Only use local playlist
-    if (file_exists($localPlaylist)) {
-        echo "Using local playlist: $localPlaylist\n";
-        $tvData = file_get_contents($localPlaylist);
-    } else {
-        die("ERROR: Local playlist not found and useGithubForCache is false\n");
-    }
+    die("ERROR: Local playlist not found. Sync MDBList first.\n");
 }
 
 if (!$tvData) {

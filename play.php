@@ -227,6 +227,125 @@ function fetchStreamsFromProvider($provider, $imdbId, $type, $season, $episode, 
             }
             break;
             
+        case 'zilean':
+            // Zilean - searches debrid cached content, then matches against YOUR RD library
+            $zileanUrl = $GLOBALS['ZILEAN_URL'] ?? 'https://zilean.elfhosted.com';
+            
+            // Search by IMDB ID
+            if ($type === 'series' && $season !== null && $episode !== null) {
+                $searchUrl = "$zileanUrl/dmm/filtered?imdbId=$imdbId&season=$season&episode=$episode";
+            } else {
+                $searchUrl = "$zileanUrl/dmm/filtered?imdbId=$imdbId";
+            }
+            
+            if ($debug) echo "Zilean search: $searchUrl</br>";
+            
+            $ch = curl_init($searchUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 10,
+                CURLOPT_USERAGENT => 'Mozilla/5.0'
+            ]);
+            $searchResponse = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode !== 200) {
+                if ($debug) echo "Zilean search failed (HTTP $httpCode)</br>";
+                return [];
+            }
+            
+            $results = json_decode($searchResponse, true) ?? [];
+            if (empty($results)) {
+                if ($debug) echo "No results from Zilean</br>";
+                return [];
+            }
+            
+            if ($debug) echo "Found " . count($results) . " results from Zilean</br>";
+            
+            // Extract hashes from Zilean results
+            $zileanHashes = [];
+            $hashToResult = [];
+            foreach ($results as $r) {
+                $hash = strtolower($r['info_hash'] ?? '');
+                if (strlen($hash) > 10) {
+                    $zileanHashes[$hash] = $r;
+                    $hashToResult[$hash] = $r;
+                }
+            }
+            
+            if (empty($zileanHashes)) {
+                if ($debug) echo "No hashes found in Zilean results</br>";
+                return [];
+            }
+            
+            if ($debug) echo "Found " . count($zileanHashes) . " hashes from Zilean</br>";
+            
+            // Get YOUR RD torrents library
+            $ch = curl_init("https://api.real-debrid.com/rest/1.0/torrents");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 15,
+                CURLOPT_HTTPHEADER => ["Authorization: Bearer $rdKey"]
+            ]);
+            $rdTorrentsResponse = curl_exec($ch);
+            curl_close($ch);
+            
+            $rdTorrents = json_decode($rdTorrentsResponse, true) ?? [];
+            
+            if ($debug) echo "Your RD library has " . count($rdTorrents) . " torrents</br>";
+            
+            // Build a map of your RD torrents by hash
+            $myRdHashes = [];
+            foreach ($rdTorrents as $t) {
+                $hash = strtolower($t['hash'] ?? '');
+                if (strlen($hash) > 10 && ($t['status'] === 'downloaded' || $t['status'] === 'seeding')) {
+                    $myRdHashes[$hash] = $t;
+                }
+            }
+            
+            // Find matches: Zilean hashes that are in YOUR RD library
+            $matchedHashes = array_intersect_key($zileanHashes, $myRdHashes);
+            
+            if ($debug) echo "Matched " . count($matchedHashes) . " hashes in your RD library</br>";
+            
+            if (empty($matchedHashes)) {
+                if ($debug) echo "None of the Zilean hashes are in your RD library</br>";
+                return [];
+            }
+            
+            // Build streams from matched hashes
+            $streams = [];
+            foreach ($matchedHashes as $hash => $zileanResult) {
+                $rdTorrent = $myRdHashes[$hash];
+                
+                $filename = $zileanResult['raw_title'] ?? $rdTorrent['filename'] ?? 'Unknown';
+                $size = $zileanResult['size'] ?? 0;
+                $sizeStr = $size > 0 ? round($size / 1024 / 1024 / 1024, 2) . ' GB' : '';
+                
+                // Determine quality from filename
+                $quality = $zileanResult['resolution'] ?? 'unknown';
+                if (empty($quality) || $quality === 'unknown') {
+                    if (preg_match('/\b(4K|2160p|UHD)\b/i', $filename)) $quality = '2160p';
+                    elseif (preg_match('/\b1080p\b/i', $filename)) $quality = '1080p';
+                    elseif (preg_match('/\b720p\b/i', $filename)) $quality = '720p';
+                    elseif (preg_match('/\b480p\b/i', $filename)) $quality = '480p';
+                }
+                
+                // Get the RD torrent ID for direct playback
+                $rdTorrentId = $rdTorrent['id'] ?? '';
+                
+                $streams[] = [
+                    'name' => "[RD+] Zilean $quality",
+                    'title' => "$filename\n💾 $sizeStr",
+                    'infoHash' => $hash,
+                    'rdTorrentId' => $rdTorrentId,
+                    'url' => "rd_torrent:$rdTorrentId"
+                ];
+            }
+            
+            if ($debug) echo "Built " . count($streams) . " streams from your RD library</br>";
+            return $streams;
         case 'torrentio':
         default:
             // Torrentio - may be blocked by Cloudflare on datacenter IPs
@@ -579,6 +698,75 @@ function torrentioFastPlayDirect($imdbId, $type, $season = null, $episode = null
         }
         
         if ($debug) echo "Resolving: $resolveUrl</br>";
+        // Handle rd_torrent: URLs (direct RD torrent ID from Zilean)
+        if (strpos($resolveUrl, 'rd_torrent:') === 0) {
+            $rdTorrentId = substr($resolveUrl, 11); // Remove 'rd_torrent:' prefix
+            if ($debug) echo "Resolving RD torrent ID: $rdTorrentId</br>";
+            
+            // Get torrent info to find download links
+            $ch = curl_init("https://api.real-debrid.com/rest/1.0/torrents/info/$rdTorrentId");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => ["Authorization: Bearer $rdKey"],
+                CURLOPT_TIMEOUT => 10
+            ]);
+            $infoResponse = curl_exec($ch);
+            curl_close($ch);
+            
+            $infoData = json_decode($infoResponse, true);
+            $links = $infoData['links'] ?? [];
+            $files = $infoData['files'] ?? [];
+            
+            if (empty($links)) {
+                if ($debug) echo "No links in RD torrent</br>";
+                continue;
+            }
+            
+            // For series, find the correct episode file
+            $targetLink = $links[0]; // Default to first
+            if ($type === 'series' && $season !== null && $episode !== null) {
+                $sNum = str_pad($season, 2, '0', STR_PAD_LEFT);
+                $eNum = str_pad($episode, 2, '0', STR_PAD_LEFT);
+                $pattern = '/S' . $sNum . 'E' . $eNum . '/i';
+                
+                foreach ($files as $idx => $file) {
+                    $fn = $file['path'] ?? '';
+                    if (preg_match($pattern, $fn) && ($file['selected'] ?? 0) == 1) {
+                        if (isset($links[$idx])) {
+                            $targetLink = $links[$idx];
+                            if ($debug) echo "Found episode file: $fn</br>";
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Unrestrict the link to get direct download URL
+            $ch = curl_init('https://api.real-debrid.com/rest/1.0/unrestrict/link');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => http_build_query(['link' => $targetLink]),
+                CURLOPT_HTTPHEADER => ["Authorization: Bearer $rdKey"],
+                CURLOPT_TIMEOUT => 10
+            ]);
+            $unrestrictResponse = curl_exec($ch);
+            curl_close($ch);
+            
+            $unrestrictData = json_decode($unrestrictResponse, true);
+            $rdUrl = $unrestrictData['download'] ?? null;
+            
+            if ($rdUrl) {
+                if ($debug) echo "Got RD URL: $rdUrl</br>";
+                $logFile = __DIR__ . '/logs/requests.log';
+                @file_put_contents($logFile, date('H:i:s') . " RESOLVED via Zilean/RD: " . substr($rdUrl, 0, 100) . "...\n", FILE_APPEND);
+                redirectOrProxy($rdUrl);
+                exit();
+            }
+            if ($debug) echo "Failed to unrestrict RD link</br>";
+            continue;
+        }
+        
         
         // Follow resolve to get RD download URL
         $ch = curl_init($resolveUrl);

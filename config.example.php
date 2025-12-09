@@ -53,11 +53,6 @@ $INCLUDE_ADULT_VOD = false; // Set to true to include adult content.
 // Adjust this for a bigger or smaller playlist.
 $totalPages = 5; // Adjust this if needed
 
-// Use GitHub's larger playlist (~17k series) for episode cache instead of local playlist.
-// This means even with $totalPages = 5, the background sync will cache episodes for all
-// 17,000+ series from GitHub, so any series a user searches for will likely work.
-$useGithubForCache = true; // Set to false to only cache episodes for your local playlist
-
 // Auto-cache refresh interval in hours. Set to 0 to disable auto-refresh.
 // The server will check for new series and episodes periodically.
 $autoCacheIntervalHours = 6; // Check every 6 hours for new content

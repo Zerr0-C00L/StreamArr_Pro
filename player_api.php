@@ -289,7 +289,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_vod_streams') {
 	}
 	
 	if ($GLOBALS['INCLUDE_ADULT_VOD']) {
-		$jsonUrl = "https://raw.githubusercontent.com/gogetta69/public-files/main/adult-movies.json";
+		$jsonUrl = "https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/adult-movies.json";
 		$jsonContent = file_get_contents($jsonUrl);
 
 		if ($jsonContent !== false) {
@@ -309,7 +309,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_vod_streams') {
 	}
 	
 	if (!$GLOBALS['userCreatePlaylist']) {
-		$jsonUrl = "https://raw.githubusercontent.com/gogetta69/public-files/main/playlist.json";
+		$jsonUrl = "https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/playlist.json";
 		$jsonContent = file_get_contents($jsonUrl);
 
 		if ($jsonContent !== false) {
@@ -325,7 +325,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_vod_streams') {
 			exit;
 		}
 
-		$m3u8Url = "https://raw.githubusercontent.com/gogetta69/public-files/main/playlist.m3u8";
+		$m3u8Url = "https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/playlist.m3u8";
 		$m3u8Content = file_get_contents($m3u8Url);
 		$m3u8Content = str_replace('[[SERVER_URL]]', $BasePath, $m3u8Content);
 
@@ -406,7 +406,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_series') {
 	
 	if(!$GLOBALS['userCreatePlaylist']){
 		
-		$jsonUrl = "https://raw.githubusercontent.com/gogetta69/public-files/main/tv_playlist.json";
+		$jsonUrl = "https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/tv_playlist.json";
 		$jsonContent = file_get_contents($jsonUrl);
 
 		if ($jsonContent !== false) {

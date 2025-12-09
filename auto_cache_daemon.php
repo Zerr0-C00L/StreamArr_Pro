@@ -15,7 +15,6 @@ require_once __DIR__ . '/config.php';
 
 $isDaemon = in_array('--daemon', $argv);
 $checkInterval = 6 * 60 * 60; // 6 hours between full checks
-$githubPlaylist = "https://raw.githubusercontent.com/gogetta69/public-files/main/tv_playlist.json";
 $localPlaylist = __DIR__ . '/tv_playlist.json';
 $episodeLookupFile = __DIR__ . '/cache/episode_lookup.json';
 $lastCheckFile = __DIR__ . '/cache/last_cache_check.json';
@@ -25,12 +24,7 @@ function logMsg($msg) {
 }
 
 function loadPlaylist() {
-    global $useGithubForCache, $githubPlaylist, $localPlaylist;
-    
-    if ($useGithubForCache) {
-        $data = @file_get_contents($githubPlaylist);
-        if ($data) return json_decode($data, true);
-    }
+    global $localPlaylist;
     
     if (file_exists($localPlaylist)) {
         return json_decode(file_get_contents($localPlaylist), true);

@@ -9,22 +9,15 @@ set_time_limit(0);
 
 require_once __DIR__ . '/config.php';
 
-$useGithubForCache = $useGithubForCache ?? true;
-$githubPlaylist = "https://raw.githubusercontent.com/gogetta69/public-files/main/tv_playlist.json";
 $localPlaylist = __DIR__ . '/tv_playlist.json';
 $episodeLookupFile = __DIR__ . '/cache/episode_lookup.json';
 $progressFile = __DIR__ . '/cache/cache_progress.json';
 
 // Load playlist
 echo "Loading playlist...\n";
-if ($useGithubForCache) {
-    $tvData = @file_get_contents($githubPlaylist);
-    if (!$tvData) $tvData = file_exists($localPlaylist) ? file_get_contents($localPlaylist) : null;
-} else {
-    $tvData = file_exists($localPlaylist) ? file_get_contents($localPlaylist) : null;
-}
+$tvData = file_exists($localPlaylist) ? file_get_contents($localPlaylist) : null;
 
-if (!$tvData) die("Error: Could not load TV playlist\n");
+if (!$tvData) die("Error: Could not load TV playlist. Sync MDBList first.\n");
 
 $tvPlaylist = json_decode($tvData, true);
 unset($tvData);

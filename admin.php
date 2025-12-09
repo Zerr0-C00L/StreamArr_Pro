@@ -5,14 +5,6 @@
  * Monitor services, start/stop daemons, modify settings
  */
 
-// Handle CLI stream population mode
-if (php_sapi_name() === 'cli' && in_array('--populate-streams', $argv ?? [])) {
-    require_once __DIR__ . '/config.php';
-    require_once __DIR__ . '/libs/episode_cache_db.php';
-    populateStreamsFromLists();
-    exit;
-}
-
 session_start();
 require_once __DIR__ . '/config.php';
 
@@ -151,12 +143,6 @@ if (isset($_GET['api'])) {
             $data = json_decode(file_get_contents('php://input'), true);
             $result = addCollectionToPlaylist($data['movies'] ?? []);
             echo json_encode($result);
-            break;
-            
-        case 'sync-github':
-            // Sync playlists from GitHub (force to bypass time check)
-            $syncResult = shell_exec('php ' . __DIR__ . '/background_sync_daemon.php --force 2>&1');
-            echo json_encode(['success' => true, 'message' => 'GitHub sync completed']);
             break;
             
         case 'populate-streams-status':
@@ -372,6 +358,71 @@ if (isset($_GET['api'])) {
             $result = updateMDBListConfig($data);
             echo json_encode(['success' => $result]);
             break;
+        
+        case 'mdblist-merge':
+            // Merge MDBList items into main playlists
+            $mdblistFile = __DIR__ . '/cache/mdblist_items.json';
+            $playlistFile = __DIR__ . '/playlist.json';
+            $tvPlaylistFile = __DIR__ . '/tv_playlist.json';
+            
+            if (!file_exists($mdblistFile)) {
+                echo json_encode(['success' => false, 'error' => 'No MDBList items to merge. Sync first.']);
+                break;
+            }
+            
+            $mdblistData = json_decode(file_get_contents($mdblistFile), true);
+            $mdbMovies = $mdblistData['movies'] ?? [];
+            $mdbSeries = $mdblistData['series'] ?? [];
+            
+            // Load existing playlists
+            $existingMovies = file_exists($playlistFile) ? (json_decode(file_get_contents($playlistFile), true) ?: []) : [];
+            $existingSeries = file_exists($tvPlaylistFile) ? (json_decode(file_get_contents($tvPlaylistFile), true) ?: []) : [];
+            
+            // Create ID maps for deduplication
+            $existingMovieIds = array_column($existingMovies, 'tmdb_id');
+            $existingMovieIds = array_merge($existingMovieIds, array_column($existingMovies, 'id'));
+            $existingSeriesIds = array_column($existingSeries, 'tmdb_id');
+            $existingSeriesIds = array_merge($existingSeriesIds, array_column($existingSeries, 'id'));
+            
+            $addedMovies = 0;
+            $addedSeries = 0;
+            
+            // Merge movies
+            foreach ($mdbMovies as $movie) {
+                $id = $movie['tmdb_id'] ?? $movie['id'] ?? null;
+                if ($id && !in_array($id, $existingMovieIds)) {
+                    $existingMovies[] = $movie;
+                    $existingMovieIds[] = $id;
+                    $addedMovies++;
+                }
+            }
+            
+            // Merge series
+            foreach ($mdbSeries as $series) {
+                $id = $series['tmdb_id'] ?? $series['id'] ?? null;
+                if ($id && !in_array($id, $existingSeriesIds)) {
+                    $existingSeries[] = $series;
+                    $existingSeriesIds[] = $id;
+                    $addedSeries++;
+                }
+            }
+            
+            // Save merged playlists
+            file_put_contents($playlistFile, json_encode($existingMovies, JSON_PRETTY_PRINT));
+            file_put_contents($tvPlaylistFile, json_encode($existingSeries, JSON_PRETTY_PRINT));
+            
+            // Mark as merged
+            $mdblistData['merged'] = date('Y-m-d H:i:s');
+            file_put_contents($mdblistFile, json_encode($mdblistData, JSON_PRETTY_PRINT));
+            
+            echo json_encode([
+                'success' => true, 
+                'added_movies' => $addedMovies,
+                'added_series' => $addedSeries,
+                'total_movies' => count($existingMovies),
+                'total_series' => count($existingSeries)
+            ]);
+            break;
             
         default:
             echo json_encode(['error' => 'Unknown action']);
@@ -528,6 +579,25 @@ function getSystemStatus() {
         $db->close();
     }
     
+    // MDBList stats
+    $mdblistFile = __DIR__ . '/cache/mdblist_items.json';
+    if (file_exists($mdblistFile)) {
+        $mdblistData = json_decode(file_get_contents($mdblistFile), true);
+        $status['mdblist'] = [
+            'movies' => is_array($mdblistData['movies'] ?? null) ? count($mdblistData['movies']) : 0,
+            'series' => is_array($mdblistData['series'] ?? null) ? count($mdblistData['series']) : 0,
+            'updated' => date('Y-m-d H:i:s', filemtime($mdblistFile)),
+            'merged' => $mdblistData['merged'] ?? false
+        ];
+    } else {
+        $status['mdblist'] = [
+            'movies' => 0,
+            'series' => 0,
+            'updated' => 'Never',
+            'merged' => false
+        ];
+    }
+    
     // Provider status
     $providers = $GLOBALS['STREAM_PROVIDERS'] ?? ['comet']; if (is_string($providers)) $providers = [$providers];
     foreach ($providers as $provider) {
@@ -561,28 +631,11 @@ function getSystemStatus() {
         'maxResolution' => $GLOBALS['maxResolution'] ?? 1080,
         'm3u8Limit' => $GLOBALS['M3U8_LIMIT'] ?? 0,
         'autoCacheInterval' => $GLOBALS['autoCacheIntervalHours'] ?? 6,
-        'useGithubForCache' => $GLOBALS['useGithubForCache'] ?? true,
         'userCreatePlaylist' => $GLOBALS['userCreatePlaylist'] ?? true,
         
         // Content options
-        'includeLiveTV' => $GLOBALS['INCLUDE_LIVE_TV'] ?? true,
-        'includeCollections' => $GLOBALS['INCLUDE_COLLECTIONS'] ?? true,
         'includeAdult' => $GLOBALS['INCLUDE_ADULT_VOD'] ?? false,
         'debugMode' => $GLOBALS['DEBUG'] ?? false,
-        
-        // Movie lists from TMDB
-        'includeNowPlaying' => $GLOBALS['INCLUDE_NOW_PLAYING'] ?? false,
-        'includePopularMovies' => $GLOBALS['INCLUDE_POPULAR_MOVIES'] ?? false,
-        'includeTopRatedMovies' => $GLOBALS['INCLUDE_TOP_RATED_MOVIES'] ?? false,
-        'includeUpcoming' => $GLOBALS['INCLUDE_UPCOMING'] ?? false,
-        'includeLatestReleasesMovies' => $GLOBALS['INCLUDE_LATEST_RELEASES_MOVIES'] ?? false,
-        
-        // Series lists from TMDB
-        'includeAiringToday' => $GLOBALS['INCLUDE_AIRING_TODAY'] ?? false,
-        'includeOnTheAir' => $GLOBALS['INCLUDE_ON_THE_AIR'] ?? false,
-        'includePopularSeries' => $GLOBALS['INCLUDE_POPULAR_SERIES'] ?? false,
-        'includeTopRatedSeries' => $GLOBALS['INCLUDE_TOP_RATED_SERIES'] ?? false,
-        'includeLatestReleasesSeries' => $GLOBALS['INCLUDE_LATEST_RELEASES_SERIES'] ?? false,
         
         // Regional settings
         'language' => $GLOBALS['language'] ?? 'en-US',
@@ -719,7 +772,6 @@ function updateConfigFile($settings) {
     
     // Boolean mappings
     $boolMappings = [
-        'useGithubForCache' => '/\$useGithubForCache\s*=\s*(true|false)/',
         'useRealDebrid' => '/\$useRealDebrid\s*=\s*(true|false)/',
         'usePremiumize' => '/\$usePremiumize\s*=\s*(true|false)/',
         'userCreatePlaylist' => '/\$userCreatePlaylist\s*=\s*(true|false)/',
@@ -790,66 +842,6 @@ function updateConfigFile($settings) {
             "\$GLOBALS['M3U8_LIMIT'] = $limit",
             $content
         );
-    }
-    
-    // Handle Include Live TV (GLOBALS)
-    if (isset($settings['includeLiveTV'])) {
-        $value = $settings['includeLiveTV'] ? 'true' : 'false';
-        $content = preg_replace(
-            "/\\\$GLOBALS\['INCLUDE_LIVE_TV'\]\s*=\s*(true|false)/",
-            "\$GLOBALS['INCLUDE_LIVE_TV'] = $value",
-            $content
-        );
-    }
-    
-    // Handle Include Collections (GLOBALS)
-    if (isset($settings['includeCollections'])) {
-        $value = $settings['includeCollections'] ? 'true' : 'false';
-        $content = preg_replace(
-            "/\\\$GLOBALS\['INCLUDE_COLLECTIONS'\]\s*=\s*(true|false)/",
-            "\$GLOBALS['INCLUDE_COLLECTIONS'] = $value",
-            $content
-        );
-    }
-    
-    // Handle Movie Lists (GLOBALS)
-    $movieListSettings = [
-        'includeNowPlaying' => 'INCLUDE_NOW_PLAYING',
-        'includePopularMovies' => 'INCLUDE_POPULAR_MOVIES',
-        'includeTopRatedMovies' => 'INCLUDE_TOP_RATED_MOVIES',
-        'includeUpcoming' => 'INCLUDE_UPCOMING',
-        'includeLatestReleasesMovies' => 'INCLUDE_LATEST_RELEASES_MOVIES'
-    ];
-    
-    foreach ($movieListSettings as $key => $globalKey) {
-        if (isset($settings[$key])) {
-            $value = $settings[$key] ? 'true' : 'false';
-            $content = preg_replace(
-                "/\\\$GLOBALS\['$globalKey'\]\s*=\s*(true|false)/",
-                "\$GLOBALS['$globalKey'] = $value",
-                $content
-            );
-        }
-    }
-    
-    // Handle Series Lists (GLOBALS)
-    $seriesListSettings = [
-        'includeAiringToday' => 'INCLUDE_AIRING_TODAY',
-        'includeOnTheAir' => 'INCLUDE_ON_THE_AIR',
-        'includePopularSeries' => 'INCLUDE_POPULAR_SERIES',
-        'includeTopRatedSeries' => 'INCLUDE_TOP_RATED_SERIES',
-        'includeLatestReleasesSeries' => 'INCLUDE_LATEST_RELEASES_SERIES'
-    ];
-    
-    foreach ($seriesListSettings as $key => $globalKey) {
-        if (isset($settings[$key])) {
-            $value = $settings[$key] ? 'true' : 'false';
-            $content = preg_replace(
-                "/\\\$GLOBALS\['$globalKey'\]\s*=\s*(true|false)/",
-                "\$GLOBALS['$globalKey'] = $value",
-                $content
-            );
-        }
     }
     
     // Handle Stream Providers array
@@ -980,270 +972,6 @@ function updateMDBListConfig($settings) {
     }
     
     return file_put_contents($configFile, $content) !== false;
-}
-
-/**
- * Populate streams from GitHub lists using Comet/MediaFusion providers
- * This runs in CLI mode after saving settings
- */
-function populateStreamsFromLists() {
-    global $PRIVATE_TOKEN, $apiKey;
-    
-    $statusFile = __DIR__ . '/cache/stream_populate_status.json';
-    $logFile = __DIR__ . '/logs/stream_populate.log';
-    
-    $log = function($msg) use ($logFile) {
-        $timestamp = date('Y-m-d H:i:s');
-        echo "[$timestamp] $msg\n";
-        @file_put_contents($logFile, "[$timestamp] $msg\n", FILE_APPEND);
-    };
-    
-    $updateStatus = function($status, $progress, $details = '') use ($statusFile) {
-        file_put_contents($statusFile, json_encode([
-            'status' => $status,
-            'progress' => $progress,
-            'details' => $details,
-            'updated' => date('Y-m-d H:i:s')
-        ], JSON_PRETTY_PRINT));
-    };
-    
-    $log("=== STARTING STREAM POPULATION ===");
-    $updateStatus('running', 0, 'Starting stream population...');
-    
-    // GitHub list URLs
-    $movieLists = [
-        'now_playing' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/now_playing_movies.json',
-        'popular' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/popular_movies.json',
-        'top_rated' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/top_rated_movies.json',
-        'upcoming' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/upcoming_movies.json',
-        'latest_releases' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/latest_releases_movies.json'
-    ];
-    
-    // Check which lists are enabled in config
-    $enabledLists = [];
-    if ($GLOBALS['INCLUDE_NOW_PLAYING'] ?? false) $enabledLists['now_playing'] = $movieLists['now_playing'];
-    if ($GLOBALS['INCLUDE_POPULAR_MOVIES'] ?? false) $enabledLists['popular'] = $movieLists['popular'];
-    if ($GLOBALS['INCLUDE_TOP_RATED_MOVIES'] ?? false) $enabledLists['top_rated'] = $movieLists['top_rated'];
-    if ($GLOBALS['INCLUDE_UPCOMING'] ?? false) $enabledLists['upcoming'] = $movieLists['upcoming'];
-    if ($GLOBALS['INCLUDE_LATEST_RELEASES_MOVIES'] ?? false) $enabledLists['latest_releases'] = $movieLists['latest_releases'];
-    
-    if (empty($enabledLists)) {
-        $log("No movie lists enabled, nothing to populate");
-        $updateStatus('complete', 100, 'No lists enabled');
-        return;
-    }
-    
-    $log("Enabled lists: " . implode(', ', array_keys($enabledLists)));
-    
-    $db = new EpisodeCacheDB();
-    $rdKey = $PRIVATE_TOKEN;
-    $processed = 0;
-    $cached = 0;
-    $skipped = 0;
-    $errors = 0;
-    $totalMovies = 0;
-    
-    // First pass: count total movies
-    foreach ($enabledLists as $listName => $url) {
-        $log("Fetching $listName list...");
-        $response = @file_get_contents($url);
-        if ($response) {
-            $data = json_decode($response, true) ?? [];
-            // Handle both formats: direct array or {movies: [...]}
-            $movies = isset($data['movies']) ? $data['movies'] : $data;
-            $totalMovies += count($movies);
-        }
-    }
-    $log("Total movies to process: $totalMovies");
-    
-    // Second pass: process each list
-    foreach ($enabledLists as $listName => $url) {
-        $log("Processing $listName list...");
-        $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processing $listName...");
-        
-        $response = @file_get_contents($url);
-        if (!$response) {
-            $log("Failed to fetch $listName");
-            continue;
-        }
-        
-        $data = json_decode($response, true) ?? [];
-        // Handle both formats: direct array or {movies: [...]}
-        $movies = isset($data['movies']) ? $data['movies'] : $data;
-        $log("Found " . count($movies) . " movies in $listName");
-        
-        foreach ($movies as $movie) {
-            $processed++;
-            // Handle both formats: id (from GitHub lists) or stream_id (from playlist.json)
-            $tmdbId = $movie['id'] ?? $movie['stream_id'] ?? $movie['tmdb_id'] ?? null;
-            $name = $movie['title'] ?? $movie['name'] ?? 'Unknown';
-            
-            if (!$tmdbId) {
-                $skipped++;
-                // Update status every 10 items
-                if ($processed % 10 === 0) {
-                    $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processed: $processed / $totalMovies (cached: $cached, skipped: $skipped)");
-                }
-                continue;
-            }
-            
-            // Get IMDB ID from cache or TMDB API
-            $imdbId = null;
-            $movieData = $db->getMovie($tmdbId);
-            if ($movieData && !empty($movieData['imdb_id'])) {
-                $imdbId = $movieData['imdb_id'];
-            } else {
-                // Fetch from TMDB
-                $tmdbUrl = "https://api.themoviedb.org/3/movie/{$tmdbId}/external_ids?api_key={$apiKey}";
-                $extIds = @file_get_contents($tmdbUrl);
-                if ($extIds) {
-                    $ids = json_decode($extIds, true);
-                    $imdbId = $ids['imdb_id'] ?? null;
-                    if ($imdbId) {
-                        $db->setMovie($tmdbId, $name, $imdbId, 0);
-                    }
-                }
-                usleep(100000); // 100ms rate limit for TMDB
-            }
-            
-            if (!$imdbId) {
-                $skipped++;
-                // Update status every 10 items
-                if ($processed % 10 === 0) {
-                    $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processed: $processed / $totalMovies (cached: $cached, skipped: $skipped)");
-                }
-                continue;
-            }
-            
-            // Check if we already have streams cached
-            if ($db->hasValidStreams($imdbId, 'movie', null, null, 168)) { // 7 days TTL
-                $skipped++;
-                // Update status every 10 items
-                if ($processed % 10 === 0) {
-                    $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processed: $processed / $totalMovies (cached: $cached, skipped: $skipped)");
-                }
-                continue;
-            }
-            
-            // Fetch streams from Comet only (MediaFusion has strict rate limits)
-            $streams = fetchStreamsFromProviderForPopulate('comet', $imdbId, 'movie', null, null, $rdKey);
-            
-            if (empty($streams)) {
-                $log("No streams found for: $name ($imdbId)");
-                $errors++;
-                // Add delay even on error to avoid hammering API
-                usleep(1000000); // 1 second
-                continue;
-            }
-            
-            // Process and cache streams
-            $streamsToCache = [];
-            foreach ($streams as $s) {
-                $sName = $s['name'] ?? '';
-                if (strpos($sName, '[RD+]') !== false || strpos($sName, 'RD') !== false || strpos($sName, '⚡') !== false) {
-                    $sTitle = $s['title'] ?? $s['description'] ?? '';
-                    $sQuality = 'unknown';
-                    if (preg_match('/\b(4K|2160p|UHD)\b/i', $sTitle)) $sQuality = '2160P';
-                    elseif (preg_match('/\b1080p\b/i', $sTitle)) $sQuality = '1080P';
-                    elseif (preg_match('/\b720p\b/i', $sTitle)) $sQuality = '720P';
-                    elseif (preg_match('/\b480p\b/i', $sTitle)) $sQuality = '480P';
-                    
-                    $hash = $s['infoHash'] ?? '';
-                    if (empty($hash) && !empty($s['url'])) {
-                        if (preg_match('/\/([a-f0-9]{40})\//i', $s['url'], $hMatch)) {
-                            $hash = $hMatch[1];
-                        }
-                    }
-                    
-                    $streamsToCache[] = [
-                        'quality' => $sQuality,
-                        'title' => $sTitle,
-                        'hash' => $hash,
-                        'file_idx' => $s['fileIdx'] ?? 0,
-                        'resolve_url' => $s['url'] ?? ''
-                    ];
-                }
-            }
-            
-            if (!empty($streamsToCache)) {
-                $db->saveStreams($imdbId, 'movie', $streamsToCache);
-                $cached++;
-                $log("Cached " . count($streamsToCache) . " streams for: $name ($imdbId)");
-            }
-            
-            $updateStatus('running', round(($processed / max($totalMovies, 1)) * 100), "Processed: $processed / $totalMovies");
-            usleep(2000000); // 2 seconds between requests to avoid rate limiting
-        }
-    }
-    
-    $log("=== STREAM POPULATION COMPLETE ===");
-    $log("Processed: $processed, Cached: $cached, Skipped: $skipped, Errors: $errors");
-    $updateStatus('complete', 100, "Cached $cached movies, skipped $skipped, errors $errors");
-}
-
-/**
- * Fetch streams from a provider for population (standalone function for CLI)
- */
-function fetchStreamsFromProviderForPopulate($provider, $imdbId, $type, $season, $episode, $rdKey) {
-    $url = '';
-    
-    switch ($provider) {
-        case 'comet':
-            $cometConfig = [
-                'indexers' => $GLOBALS['COMET_INDEXERS'] ?? ['bktorrent', 'thepiratebay', 'yts', 'eztv'],
-                'debridService' => 'realdebrid',
-                'debridApiKey' => $rdKey
-            ];
-            $configBase64 = base64_encode(json_encode($cometConfig));
-            $url = "https://comet.elfhosted.com/{$configBase64}/stream/movie/{$imdbId}.json";
-            break;
-            
-        case 'mediafusion':
-            $mfConfig = [
-                'streaming_provider' => [
-                    'token' => $rdKey,
-                    'service' => 'realdebrid'
-                ],
-                'selected_catalogs' => ['torrentio_streams'],
-                'enable_catalogs' => false
-            ];
-            $configBase64 = base64_encode(json_encode($mfConfig));
-            $url = "https://mediafusion.elfhosted.com/{$configBase64}/stream/movie/{$imdbId}.json";
-            break;
-    }
-    
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 15,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        CURLOPT_FOLLOWLOCATION => true
-    ]);
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($httpCode !== 200 || !$response) {
-        return [];
-    }
-    
-    $data = json_decode($response, true);
-    $streams = $data['streams'] ?? [];
-    
-    // Normalize stream names
-    foreach ($streams as &$stream) {
-        $name = $stream['name'] ?? '';
-        if ($provider === 'comet' && strpos($name, '[RD⚡]') !== false) {
-            $stream['name'] = str_replace('[RD⚡]', '[RD+]', $name);
-        }
-        if ($provider === 'mediafusion') {
-            if ((strpos($name, '⚡') !== false || strpos($name, 'RD') !== false) && strpos($name, '[RD+]') === false) {
-                $stream['name'] = '[RD+] ' . $name;
-            }
-        }
-    }
-    
-    return $streams;
 }
 
 function formatBytes($bytes) {
@@ -1652,6 +1380,67 @@ function formatBytes($bytes) {
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+            max-height: calc(90vh - 60px);
+        }
     </style>
 </head>
 <body>
@@ -1699,6 +1488,11 @@ function formatBytes($bytes) {
         Filters
     </a>
     
+    <a class="nav-item" data-page="lists">
+        <svg fill="currentColor" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"></path></svg>
+        Lists
+    </a>
+    
     <a class="nav-item" data-page="settings">
         <svg fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"></path></svg>
         Settings
@@ -1730,10 +1524,12 @@ function formatBytes($bytes) {
             <div class="stat-card">
                 <div class="stat-value" id="stat-movies">-</div>
                 <div class="stat-label">Movies</div>
+                <div class="stat-sub" id="stat-mdb-movies" style="font-size: 0.7rem; color: var(--accent-primary); margin-top: 0.25rem;"></div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-series">-</div>
                 <div class="stat-label">TV Series</div>
+                <div class="stat-sub" id="stat-mdb-series" style="font-size: 0.7rem; color: var(--accent-primary); margin-top: 0.25rem;"></div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="stat-episodes">-</div>
@@ -1928,38 +1724,11 @@ function formatBytes($bytes) {
             </div>
             
             <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
-                💡 <strong>Full Library Mode:</strong> Enable "Use GitHub Cache" for 50k+ movies & 17k+ series.<br>
-                💡 <strong>Curated Mode:</strong> Disable "Use GitHub Cache" and enable specific TMDB lists below for a smaller, focused library.
+                💡 Use <strong>MDBList Integration</strong> (Lists page) to build your movie and TV series library from curated lists.
             </div>
             
             <div class="settings-form">
                 <div class="form-row">
-                    <div class="form-group">
-                        <label>Use GitHub Cache (Full Library)</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-useGithubForCache">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">📚 Pull ~50k movies + ~17k series from GitHub</span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Create Own Playlist (TMDB API)</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-userCreatePlaylist">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">🔄 Fetch directly from TMDB API (uses API quota)</span>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Total Pages (for Create Own)</label>
-                        <input type="number" id="setting-totalPages" min="1" max="50" value="5">
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Only used when "Create Own Playlist" is ON</span>
-                    </div>
-                    
                     <div class="form-group">
                         <label>Max Resolution</label>
                         <select id="setting-maxResolution">
@@ -1970,9 +1739,7 @@ function formatBytes($bytes) {
                         </select>
                         <span style="font-size: 0.75rem; color: var(--text-secondary);">Preferred stream quality</span>
                     </div>
-                </div>
-                
-                <div class="form-row">
+                    
                     <div class="form-group">
                         <label>M3U8 Playlist Limit</label>
                         <select id="setting-m3u8Limit">
@@ -1984,26 +1751,31 @@ function formatBytes($bytes) {
                             <option value="25000">25,000 items</option>
                             <option value="50000">50,000 items</option>
                         </select>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Limit M3U8 size for IPTV apps (use lower for initial scan)</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Limit M3U8 size for IPTV apps</span>
                     </div>
-                    
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
-                        <label>Auto Sync Interval (hours)</label>
-                        <input type="number" id="setting-autoCacheInterval" min="0" max="72" value="6">
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Sync all enabled content sources (0 = manual only)</span>
+                        <label>Auto-Sync Interval</label>
+                        <select id="setting-autoCacheInterval">
+                            <option value="0">Disabled</option>
+                            <option value="1">Every 1 Hour</option>
+                            <option value="3">Every 3 Hours</option>
+                            <option value="6" selected>Every 6 Hours</option>
+                            <option value="12">Every 12 Hours</option>
+                            <option value="24">Every 24 Hours</option>
+                        </select>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">How often to sync episode cache</span>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Content Options Section -->
+        <!-- Additional Content Section -->
         <div class="card">
             <div class="card-header">
                 <span class="card-title">📦 Additional Content</span>
-            </div>
-            
-            <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
-                💡 These options add extra content on top of your main playlist (works with both Full Library and Curated modes).
             </div>
             
             <div class="settings-form">
@@ -2018,25 +1790,16 @@ function formatBytes($bytes) {
                     </div>
                     
                     <div class="form-group">
-                        <label>Include Collections</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeCollections">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">🎬 ~5,000 movies (Marvel, Star Wars, Harry Potter, etc.)</span>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
                         <label>Include Adult Content</label>
                         <label class="toggle-switch">
                             <input type="checkbox" id="setting-includeAdult">
                             <span class="toggle-slider"></span>
                         </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">⚠️ Adds ~10,000 adult movies</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">🔞 ~10,000 adult VOD movies</span>
                     </div>
-                    
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
                         <label>Debug Mode</label>
                         <label class="toggle-switch">
@@ -2044,134 +1807,6 @@ function formatBytes($bytes) {
                             <span class="toggle-slider"></span>
                         </label>
                         <span style="font-size: 0.75rem; color: var(--text-secondary);">🐛 Show detailed errors in logs</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Movie Lists Section -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">🎬 TMDB Movie Lists</span>
-            </div>
-            
-            <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
-                💡 Curated movie lists from TMDB (~500 movies each). Updated daily via GitHub Actions. Great for smaller, focused libraries!
-            </div>
-            
-            <div class="settings-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Latest Releases Movies</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeLatestReleasesMovies">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">📀 Digital, Physical & TV releases (last 6 weeks)</span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Now Playing</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeNowPlaying">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">🎭 Movies currently in theaters</span>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Popular Movies</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includePopularMovies">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">🔥 Currently trending movies</span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Top Rated Movies</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeTopRatedMovies">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">⭐ Highest rated movies of all time</span>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Upcoming Movies</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeUpcoming">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">🎬 Coming soon to theaters</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Series Lists Section -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">📺 TMDB Series Lists</span>
-            </div>
-            
-            <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
-                💡 Curated TV series lists from TMDB (~500 series each). Updated daily via GitHub Actions. Great for smaller, focused libraries!
-            </div>
-            
-            <div class="settings-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Latest Releases Series</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeLatestReleasesSeries">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">📀 New series premieres (last 6 weeks)</span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Airing Today</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeAiringToday">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">📅 TV series with episodes airing today</span>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>On The Air</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeOnTheAir">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">📆 Episodes airing in next 7 days</span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Popular Series</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includePopularSeries">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">🔥 Currently trending TV series</span>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Top Rated Series</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="setting-includeTopRatedSeries">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">⭐ Highest rated series of all time</span>
                     </div>
                 </div>
             </div>
@@ -2302,134 +1937,6 @@ function formatBytes($bytes) {
             </div>
         </div>
         
-        <!-- MDBList Integration Section -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">📋 MDBList Integration</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="mdblist-enabled">
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-            
-            <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
-                📋 Import curated movie/TV lists from <a href="https://mdblist.com" target="_blank" style="color: var(--primary);">MDBList.com</a>. 
-                Add popular lists like "Top Watched Movies of the Week" or create your own custom lists.
-                <a href="https://mdblist.com/preferences/" target="_blank" style="color: var(--primary);">Get your API key here</a> (optional - only needed for private lists).
-            </div>
-            
-            <div class="settings-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>MDBList API Key (Optional)</label>
-                        <div style="position: relative;">
-                            <input type="password" id="mdblist-apiKey" placeholder="Your MDBList API key">
-                            <button type="button" onclick="togglePassword('mdblist-apiKey')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer;">👁</button>
-                        </div>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Only required for private lists and user-specific lists</span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Auto-Sync Interval</label>
-                        <select id="mdblist-syncInterval">
-                            <option value="0">Manual Only</option>
-                            <option value="1">Every 1 Hour</option>
-                            <option value="3">Every 3 Hours</option>
-                            <option value="6">Every 6 Hours</option>
-                            <option value="12">Every 12 Hours</option>
-                            <option value="24">Every 24 Hours</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Merge with Main Playlist</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="mdblist-mergePlaylist" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Add MDBList items to your main movie/series playlists</span>
-                    </div>
-                    
-                    <div class="form-group">
-                        <button class="btn btn-secondary" onclick="testMDBListConnection()">
-                            🔌 Test Connection
-                        </button>
-                        <span id="mdblist-connection-status" style="margin-left: 0.5rem; font-size: 0.85rem;"></span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Add New List -->
-            <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem;">
-                <h4 style="margin-bottom: 0.75rem; color: var(--text-primary);">Add MDBList URL</h4>
-                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                    <input type="text" id="mdblist-new-url" placeholder="https://mdblist.com/lists/username/list-name" style="flex: 1;">
-                    <button class="btn btn-primary" onclick="addMDBList()">
-                        ➕ Add List
-                    </button>
-                </div>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">
-                    Paste any public MDBList URL. Examples: 
-                    <code>mdblist.com/lists/linaspuransen/top-watched-movies-of-the-week</code>
-                </span>
-                
-                <!-- Popular Lists Quick Add -->
-                <div style="margin-top: 1rem;">
-                    <label style="font-size: 0.85rem; color: var(--text-secondary);">Popular Lists:</label>
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
-                        <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="quickAddMDBList('https://mdblist.com/lists/linaspuransen/top-watched-movies-of-the-week', 'Top Watched Movies')">
-                            🎬 Top Watched Movies
-                        </button>
-                        <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="quickAddMDBList('https://mdblist.com/lists/hdlists/top-ten-pirated-movies-of-the-week', 'Top Pirated Movies')">
-                            🏴‍☠️ Top Pirated
-                        </button>
-                        <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="quickAddMDBList('https://mdblist.com/lists/linaspuransen/top-watched-tv-shows-of-the-week', 'Top Watched TV')">
-                            📺 Top Watched TV
-                        </button>
-                        <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="searchMDBLists()">
-                            🔍 Search Lists...
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Configured Lists -->
-            <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                    <h4 style="margin: 0; color: var(--text-primary);">Your MDBList Sources</h4>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn btn-secondary" style="font-size: 0.75rem;" onclick="syncMDBLists()">
-                            🔄 Sync Now
-                        </button>
-                        <button class="btn btn-secondary" style="font-size: 0.75rem;" onclick="clearMDBListCache()">
-                            🗑️ Clear Cache
-                        </button>
-                    </div>
-                </div>
-                
-                <div id="mdblist-sources" style="max-height: 300px; overflow-y: auto;">
-                    <!-- Lists will be populated by JavaScript -->
-                    <div class="loading" style="text-align: center; padding: 1rem; color: var(--text-secondary);">Loading lists...</div>
-                </div>
-                
-                <!-- Sync Status -->
-                <div id="mdblist-sync-status" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.85rem; display: none;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Last Sync: <span id="mdblist-last-sync">Never</span></span>
-                        <span>Movies: <span id="mdblist-movie-count">0</span> | Series: <span id="mdblist-series-count">0</span></span>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="margin-top: 1rem;">
-                <button class="btn btn-primary" onclick="saveMDBListSettings()">
-                    💾 Save MDBList Settings
-                </button>
-            </div>
-        </div>
-        
         <!-- Connection Info Section -->
         <div class="card">
             <div class="card-header">
@@ -2467,6 +1974,148 @@ function formatBytes($bytes) {
                     <p style="text-align: center; color: var(--text-secondary);">Enter a search term to find MDBLists</p>
                 </div>
             </div>
+        </div>
+    </div>
+    
+    <!-- Lists Page -->
+    <div id="page-lists" class="page hidden">
+        <div class="page-header">
+            <h2>MDBList Integration</h2>
+            <button class="btn btn-primary" onclick="saveMDBListSettings()">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293z"></path></svg>
+                Save Settings
+            </button>
+        </div>
+        
+        <!-- MDBList Content -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">📋 MDBList Integration</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="mdblist-enabled">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            
+            <div style="background: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+                📋 Import curated movie/TV lists from <a href="https://mdblist.com" target="_blank" style="color: var(--accent);">MDBList.com</a>. 
+                Add popular lists like "Top Watched Movies of the Week" or create your own custom lists.
+                <a href="https://mdblist.com/preferences/" target="_blank" style="color: var(--accent);">Get your API key here</a> (optional - only needed for private lists).
+                </div>
+                
+                <div class="settings-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>MDBList API Key (Optional)</label>
+                            <div style="position: relative;">
+                                <input type="password" id="mdblist-apiKey" placeholder="Your MDBList API key">
+                                <button type="button" onclick="togglePassword('mdblist-apiKey')" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer;">👁</button>
+                            </div>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">Only required for private lists and user-specific lists</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Auto-Sync Interval</label>
+                            <select id="mdblist-syncInterval">
+                                <option value="0">Manual Only</option>
+                                <option value="1">Every 1 Hour</option>
+                                <option value="3">Every 3 Hours</option>
+                                <option value="6">Every 6 Hours</option>
+                                <option value="12">Every 12 Hours</option>
+                                <option value="24">Every 24 Hours</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Merge with Main Playlist</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="mdblist-mergePlaylist" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">Add MDBList items to your main movie/series playlists</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <button class="btn btn-secondary" onclick="testMDBListConnection()">
+                                🔌 Test Connection
+                            </button>
+                            <span id="mdblist-connection-status" style="margin-left: 0.5rem; font-size: 0.85rem;"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Add New List -->
+                <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem;">
+                    <h4 style="margin-bottom: 0.75rem; color: var(--text-primary);">Add MDBList URL</h4>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <input type="text" id="mdblist-new-url" placeholder="https://mdblist.com/lists/username/list-name" style="flex: 1;">
+                        <button class="btn btn-primary" onclick="addMDBList()">
+                            ➕ Add List
+                        </button>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">
+                        Paste any public MDBList URL. Examples: 
+                        <code>mdblist.com/lists/linaspuransen/top-watched-movies-of-the-week</code>
+                    </span>
+                    
+                    <!-- Popular Lists Quick Add -->
+                    <div style="margin-top: 1rem;">
+                        <label style="font-size: 0.85rem; color: var(--text-secondary);">Popular Lists:</label>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                            <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="quickAddMDBList('https://mdblist.com/lists/linaspuransen/top-watched-movies-of-the-week', 'Top Watched Movies')">
+                                🎬 Top Watched Movies
+                            </button>
+                            <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="quickAddMDBList('https://mdblist.com/lists/hdlists/top-ten-pirated-movies-of-the-week', 'Top Pirated Movies')">
+                                🏴‍☠️ Top Pirated
+                            </button>
+                            <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="quickAddMDBList('https://mdblist.com/lists/linaspuransen/top-watched-tv-shows-of-the-week', 'Top Watched TV')">
+                                📺 Top Watched TV
+                            </button>
+                            <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" onclick="searchMDBLists()">
+                                🔍 Search Lists...
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Configured Lists -->
+                <div style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <h4 style="margin: 0; color: var(--text-primary);">Your MDBList Sources</h4>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-secondary" style="font-size: 0.75rem;" onclick="syncMDBLists()">
+                                🔄 Sync Now
+                            </button>
+                            <button class="btn btn-success" style="font-size: 0.75rem;" onclick="mergeMDBListsToPlaylist()">
+                                📥 Merge to Playlists
+                            </button>
+                            <button class="btn btn-secondary" style="font-size: 0.75rem;" onclick="clearMDBListCache()">
+                                🗑️ Clear Cache
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="mdblist-sources" style="max-height: 300px; overflow-y: auto;">
+                        <!-- Lists will be populated by JavaScript -->
+                        <div class="loading" style="text-align: center; padding: 1rem; color: var(--text-secondary);">Loading lists...</div>
+                    </div>
+                    
+                    <!-- Sync Status -->
+                    <div id="mdblist-sync-status" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 6px; font-size: 0.85rem; display: none;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Last Sync: <span id="mdblist-last-sync">Never</span></span>
+                            <span>Movies: <span id="mdblist-movie-count">0</span> | Series: <span id="mdblist-series-count">0</span></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 1rem;">
+                    <button class="btn btn-primary" onclick="saveMDBListSettings()">
+                        💾 Save MDBList Settings
+                    </button>
+                </div>
         </div>
     </div>
     
@@ -2573,6 +2222,7 @@ document.querySelectorAll('.nav-item[data-page]').forEach(item => {
         document.getElementById('page-' + item.dataset.page).classList.remove('hidden');
         
         if (item.dataset.page === 'logs') loadLogs();
+        if (item.dataset.page === 'lists') loadMDBLists();
     });
 });
 
@@ -2598,6 +2248,26 @@ function updateDashboard(status) {
     document.getElementById('stat-series').textContent = status.playlists?.series?.count?.toLocaleString() || '0';
     document.getElementById('stat-episodes').textContent = status.cache?.episodes?.count?.toLocaleString() || '0';
     document.getElementById('stat-m3u').textContent = status.playlists?.m3u8?.entries?.toLocaleString() || '0';
+    
+    // MDBList stats
+    const mdbMovies = status.mdblist?.movies || 0;
+    const mdbSeries = status.mdblist?.series || 0;
+    const mdbMerged = status.mdblist?.merged;
+    
+    const mdbMoviesEl = document.getElementById('stat-mdb-movies');
+    const mdbSeriesEl = document.getElementById('stat-mdb-series');
+    
+    if (mdbMoviesEl && mdbMovies > 0) {
+        mdbMoviesEl.textContent = `+${mdbMovies.toLocaleString()} MDBList` + (mdbMerged ? ' ✓' : '');
+    } else if (mdbMoviesEl) {
+        mdbMoviesEl.textContent = '';
+    }
+    
+    if (mdbSeriesEl && mdbSeries > 0) {
+        mdbSeriesEl.textContent = `+${mdbSeries.toLocaleString()} MDBList` + (mdbMerged ? ' ✓' : '');
+    } else if (mdbSeriesEl) {
+        mdbSeriesEl.textContent = '';
+    }
     
     // System info
     document.getElementById('stat-last-sync').textContent = status.daemons?.background_sync?.last_sync || 'Never';
@@ -2652,56 +2322,15 @@ function updateDashboard(status) {
         const autoCacheEl = document.getElementById('setting-autoCacheInterval');
         if (autoCacheEl) autoCacheEl.value = status.config.autoCacheInterval || 6;
         
-        const useGithubEl = document.getElementById('setting-useGithubForCache');
-        if (useGithubEl) useGithubEl.checked = status.config.useGithubForCache === true;
-        
         const createPlaylistEl = document.getElementById('setting-userCreatePlaylist');
         if (createPlaylistEl) createPlaylistEl.checked = status.config.userCreatePlaylist === true;
         
         // Content options
-        const liveTVEl = document.getElementById('setting-includeLiveTV');
-        if (liveTVEl) liveTVEl.checked = status.config.includeLiveTV !== false;
-        
-        const collectionsEl = document.getElementById('setting-includeCollections');
-        if (collectionsEl) collectionsEl.checked = status.config.includeCollections !== false;
-        
         const adultEl = document.getElementById('setting-includeAdult');
         if (adultEl) adultEl.checked = status.config.includeAdult === true;
         
         const debugEl = document.getElementById('setting-debugMode');
         if (debugEl) debugEl.checked = status.config.debugMode === true;
-        
-        // Movie lists
-        const nowPlayingEl = document.getElementById('setting-includeNowPlaying');
-        if (nowPlayingEl) nowPlayingEl.checked = status.config.includeNowPlaying === true;
-        
-        const popularMoviesEl = document.getElementById('setting-includePopularMovies');
-        if (popularMoviesEl) popularMoviesEl.checked = status.config.includePopularMovies === true;
-        
-        const topRatedMoviesEl = document.getElementById('setting-includeTopRatedMovies');
-        if (topRatedMoviesEl) topRatedMoviesEl.checked = status.config.includeTopRatedMovies === true;
-        
-        const upcomingEl = document.getElementById('setting-includeUpcoming');
-        if (upcomingEl) upcomingEl.checked = status.config.includeUpcoming === true;
-        
-        const latestReleasesMoviesEl = document.getElementById('setting-includeLatestReleasesMovies');
-        if (latestReleasesMoviesEl) latestReleasesMoviesEl.checked = status.config.includeLatestReleasesMovies === true;
-        
-        // Series lists
-        const airingTodayEl = document.getElementById('setting-includeAiringToday');
-        if (airingTodayEl) airingTodayEl.checked = status.config.includeAiringToday === true;
-        
-        const onTheAirEl = document.getElementById('setting-includeOnTheAir');
-        if (onTheAirEl) onTheAirEl.checked = status.config.includeOnTheAir === true;
-        
-        const popularSeriesEl = document.getElementById('setting-includePopularSeries');
-        if (popularSeriesEl) popularSeriesEl.checked = status.config.includePopularSeries === true;
-        
-        const topRatedSeriesEl = document.getElementById('setting-includeTopRatedSeries');
-        if (topRatedSeriesEl) topRatedSeriesEl.checked = status.config.includeTopRatedSeries === true;
-        
-        const latestReleasesSeriesEl = document.getElementById('setting-includeLatestReleasesSeries');
-        if (latestReleasesSeriesEl) latestReleasesSeriesEl.checked = status.config.includeLatestReleasesSeries === true;
         
         // Regional settings
         const langEl = document.getElementById('setting-language');
@@ -2898,28 +2527,11 @@ async function saveAllSettings() {
         maxResolution: parseInt(document.getElementById('setting-maxResolution')?.value) || 1080,
         m3u8Limit: parseInt(document.getElementById('setting-m3u8Limit')?.value) || 0,
         autoCacheInterval: parseInt(document.getElementById('setting-autoCacheInterval')?.value) || 6,
-        useGithubForCache: document.getElementById('setting-useGithubForCache')?.checked || false,
         userCreatePlaylist: document.getElementById('setting-userCreatePlaylist')?.checked || false,
         
         // Content options
-        includeLiveTV: document.getElementById('setting-includeLiveTV')?.checked || false,
-        includeCollections: document.getElementById('setting-includeCollections')?.checked || false,
         includeAdult: document.getElementById('setting-includeAdult')?.checked || false,
         debugMode: document.getElementById('setting-debugMode')?.checked || false,
-        
-        // Movie lists
-        includeNowPlaying: document.getElementById('setting-includeNowPlaying')?.checked || false,
-        includePopularMovies: document.getElementById('setting-includePopularMovies')?.checked || false,
-        includeTopRatedMovies: document.getElementById('setting-includeTopRatedMovies')?.checked || false,
-        includeUpcoming: document.getElementById('setting-includeUpcoming')?.checked || false,
-        includeLatestReleasesMovies: document.getElementById('setting-includeLatestReleasesMovies')?.checked || false,
-        
-        // Series lists
-        includeAiringToday: document.getElementById('setting-includeAiringToday')?.checked || false,
-        includeOnTheAir: document.getElementById('setting-includeOnTheAir')?.checked || false,
-        includePopularSeries: document.getElementById('setting-includePopularSeries')?.checked || false,
-        includeTopRatedSeries: document.getElementById('setting-includeTopRatedSeries')?.checked || false,
-        includeLatestReleasesSeries: document.getElementById('setting-includeLatestReleasesSeries')?.checked || false,
         
         // Regional settings
         language: document.getElementById('setting-language')?.value || 'en-US',
@@ -3426,6 +3038,25 @@ async function syncMDBLists() {
             refreshStatus();
         } else {
             showToast('Sync failed: ' + (result.error || 'Unknown'), 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Merge MDBList items to main playlists
+async function mergeMDBListsToPlaylist() {
+    showToast('Merging MDBList items to playlists...', 'success');
+    
+    try {
+        const response = await fetch('?api=mdblist-merge');
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`Merged! Added ${result.added_movies} movies, ${result.added_series} series. Total: ${result.total_movies} movies, ${result.total_series} series`, 'success');
+            refreshStatus();
+        } else {
+            showToast('Merge failed: ' + (result.error || 'Unknown'), 'error');
         }
     } catch (e) {
         showToast('Error: ' + e.message, 'error');

@@ -2,8 +2,8 @@
 /**
  * Background Sync Daemon
  * 
- * Merges GitHub's large playlists (~45K movies, ~17K series) with your local playlist
- * Runs on startup, after restarts, and periodically
+ * Syncs Live TV channels from GitHub and regenerates M3U8 playlist from local files
+ * Movies and TV series are managed via MDBList integration
  * 
  * Usage:
  *   php background_sync_daemon.php          # Run once
@@ -12,32 +12,11 @@
 
 require_once __DIR__ . '/config.php';
 
-// Configuration - Using your forked public-files repo
-$GITHUB_MOVIE_PLAYLIST = 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/playlist.json';
-$GITHUB_TV_PLAYLIST = 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/tv_playlist.json';
-$GITHUB_COLLECTIONS = 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/collections_playlist.json';
+// Configuration - Live TV from public-files repo
 $GITHUB_LIVE_TV = 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/Pluto-TV/us.m3u8';
 $GITHUB_LIVE_EPG = 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/Pluto-TV/us.xml';
 
-// TMDB Movie Lists URLs
-$GITHUB_MOVIE_LISTS = [
-    'now_playing' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/now_playing_movies.json',
-    'popular' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/popular_movies.json',
-    'top_rated' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/top_rated_movies.json',
-    'upcoming' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/upcoming_movies.json',
-    'latest_releases' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/movie_lists/latest_releases_movies.json'
-];
-
-// TMDB Series Lists URLs
-$GITHUB_SERIES_LISTS = [
-    'airing_today' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/series_lists/airing_today_series.json',
-    'on_the_air' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/series_lists/on_the_air_series.json',
-    'popular' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/series_lists/popular_series.json',
-    'top_rated' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/series_lists/top_rated_series.json',
-    'latest_releases' => 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/series_lists/latest_releases_series.json'
-];
-
-$SYNC_INTERVAL_HOURS = 6; // How often to sync with GitHub
+$SYNC_INTERVAL_HOURS = 6; // How often to sync Live TV
 $LOCK_FILE = __DIR__ . '/cache/sync_daemon.lock';
 $STATUS_FILE = __DIR__ . '/cache/sync_status.json';
 
@@ -182,238 +161,37 @@ function mergePlaylists($local, $github, $filterUnreleased = true) {
     return $merged;
 }
 
-// Main sync function
+// Main sync function - Now only syncs Live TV from GitHub
+// Movies and TV series are managed via MDBList integration
 function syncWithGithub() {
-    global $GITHUB_MOVIE_PLAYLIST, $GITHUB_TV_PLAYLIST, $GITHUB_COLLECTIONS;
-    global $GITHUB_MOVIE_LISTS, $GITHUB_SERIES_LISTS;
-    global $useGithubForCache; // Regular variable from config.php
+    logMsg("========== STARTING SYNC ==========");
+    updateStatus('syncing', 0, 'Starting sync...');
     
-    logMsg("========== STARTING GITHUB SYNC ==========");
-    updateStatus('syncing', 0, 'Starting sync with GitHub...');
-    
-    // Check if we're using the full GitHub playlists or just curated lists
-    // Note: $useGithubForCache is a regular variable, not a GLOBAL
-    $useGithubCache = $useGithubForCache ?? ($GLOBALS['useGithubForCache'] ?? true);
-    logMsg("Use GitHub Cache (Full Library): " . ($useGithubCache ? 'YES' : 'NO'));
-    
-    $mergedMovies = [];
-    $mergedTV = [];
-    
-    // ========== FULL GITHUB PLAYLISTS (if enabled) ==========
-    if ($useGithubCache) {
-        // ========== MOVIES ==========
-        logMsg("Fetching GitHub movie playlist...");
-        updateStatus('syncing', 10, 'Fetching GitHub movies...');
-        
-        $githubMovies = fetchJson($GITHUB_MOVIE_PLAYLIST);
-        if (!$githubMovies) {
-            logMsg("ERROR: Failed to fetch GitHub movie playlist");
-            updateStatus('error', null, 'Failed to fetch GitHub movies');
-            return false;
-        }
-        logMsg("GitHub movies: " . count($githubMovies) . " items");
-        
-        // Load local playlist
-        $localMoviesFile = __DIR__ . '/playlist.json';
-        $localMovies = [];
-        if (file_exists($localMoviesFile)) {
-            $localMovies = json_decode(file_get_contents($localMoviesFile), true) ?? [];
-        }
-        logMsg("Local movies: " . count($localMovies) . " items");
-        
-        // Merge
-        updateStatus('syncing', 30, 'Merging movie playlists...');
-        $mergedMovies = mergePlaylists($localMovies, $githubMovies);
-        logMsg("Merged movies: " . count($mergedMovies) . " items");
-        
-        // ========== TV SERIES ==========
-        logMsg("Fetching GitHub TV playlist...");
-        updateStatus('syncing', 50, 'Fetching GitHub TV series...');
-        
-        $githubTV = fetchJson($GITHUB_TV_PLAYLIST);
-        if (!$githubTV) {
-            logMsg("ERROR: Failed to fetch GitHub TV playlist");
-            updateStatus('error', null, 'Failed to fetch GitHub TV series');
-            return false;
-        }
-        logMsg("GitHub TV series: " . count($githubTV) . " items");
-        
-        // Load local TV playlist
-        $localTVFile = __DIR__ . '/tv_playlist.json';
-        $localTV = [];
-        if (file_exists($localTVFile)) {
-            $localTV = json_decode(file_get_contents($localTVFile), true) ?? [];
-        }
-        logMsg("Local TV series: " . count($localTV) . " items");
-        
-        // Merge
-        updateStatus('syncing', 70, 'Merging TV playlists...');
-        $mergedTV = mergePlaylists($localTV, $githubTV);
-        logMsg("Merged TV series: " . count($mergedTV) . " items");
-    } else {
-        logMsg("GitHub full playlists disabled - using curated lists only");
-    }
-    
-    // ========== TMDB MOVIE LISTS (if any enabled) ==========
-    $movieListSettings = [
-        'now_playing' => $GLOBALS['INCLUDE_NOW_PLAYING'] ?? false,
-        'popular' => $GLOBALS['INCLUDE_POPULAR_MOVIES'] ?? false,
-        'top_rated' => $GLOBALS['INCLUDE_TOP_RATED_MOVIES'] ?? false,
-        'upcoming' => $GLOBALS['INCLUDE_UPCOMING'] ?? false,
-        'latest_releases' => $GLOBALS['INCLUDE_LATEST_RELEASES_MOVIES'] ?? false
-    ];
-    
-    $anyMovieListEnabled = array_filter($movieListSettings);
-    if (!empty($anyMovieListEnabled)) {
-        logMsg("Fetching TMDB movie lists...");
-        updateStatus('syncing', 72, 'Fetching TMDB movie lists...');
-        
-        $existingIds = [];
-        foreach ($mergedMovies as $movie) {
-            if (isset($movie['stream_id'])) {
-                $existingIds[$movie['stream_id']] = true;
-            }
-        }
-        
-        foreach ($movieListSettings as $listName => $enabled) {
-            if (!$enabled) continue;
-            
-            $url = $GITHUB_MOVIE_LISTS[$listName] ?? null;
-            if (!$url) continue;
-            
-            $listData = fetchJson($url);
-            if ($listData && isset($listData['movies'])) {
-                $addedCount = 0;
-                foreach ($listData['movies'] as $movie) {
-                    $streamId = $movie['id'] ?? null;
-                    if ($streamId && !isset($existingIds[$streamId])) {
-                        // Convert TMDB format to our playlist format
-                        $mergedMovies[] = [
-                            'stream_id' => $streamId,
-                            'name' => ($movie['title'] ?? 'Unknown') . ' (' . substr($movie['release_date'] ?? '', 0, 4) . ')',
-                            'stream_icon' => $movie['poster_path'] ? 'https://image.tmdb.org/t/p/w500' . $movie['poster_path'] : '',
-                            'category_id' => 'TMDB ' . ucwords(str_replace('_', ' ', $listName)),
-                            'tmdb_id' => $streamId,
-                            'release_date' => $movie['release_date'] ?? '',
-                            'vote_average' => $movie['vote_average'] ?? 0
-                        ];
-                        $existingIds[$streamId] = true;
-                        $addedCount++;
-                    }
-                }
-                logMsg("Added $addedCount movies from '$listName' list");
-            } else {
-                logMsg("Could not fetch '$listName' movie list (run GitHub workflow first)");
-            }
-        }
-    }
-    
-    // ========== TMDB SERIES LISTS (if any enabled) ==========
-    $seriesListSettings = [
-        'airing_today' => $GLOBALS['INCLUDE_AIRING_TODAY'] ?? false,
-        'on_the_air' => $GLOBALS['INCLUDE_ON_THE_AIR'] ?? false,
-        'popular' => $GLOBALS['INCLUDE_POPULAR_SERIES'] ?? false,
-        'top_rated' => $GLOBALS['INCLUDE_TOP_RATED_SERIES'] ?? false,
-        'latest_releases' => $GLOBALS['INCLUDE_LATEST_RELEASES_SERIES'] ?? false
-    ];
-    
-    $anySeriesListEnabled = array_filter($seriesListSettings);
-    if (!empty($anySeriesListEnabled)) {
-        logMsg("Fetching TMDB series lists...");
-        updateStatus('syncing', 74, 'Fetching TMDB series lists...');
-        
-        $existingIds = [];
-        foreach ($mergedTV as $series) {
-            if (isset($series['series_id'])) {
-                $existingIds[$series['series_id']] = true;
-            }
-        }
-        
-        foreach ($seriesListSettings as $listName => $enabled) {
-            if (!$enabled) continue;
-            
-            $url = $GITHUB_SERIES_LISTS[$listName] ?? null;
-            if (!$url) continue;
-            
-            $listData = fetchJson($url);
-            if ($listData && isset($listData['series'])) {
-                $addedCount = 0;
-                foreach ($listData['series'] as $series) {
-                    $seriesId = $series['id'] ?? null;
-                    if ($seriesId && !isset($existingIds[$seriesId])) {
-                        // Convert TMDB format to our playlist format
-                        $mergedTV[] = [
-                            'series_id' => $seriesId,
-                            'name' => ($series['name'] ?? 'Unknown') . ' (' . substr($series['first_air_date'] ?? '', 0, 4) . ')',
-                            'cover' => $series['poster_path'] ? 'https://image.tmdb.org/t/p/w500' . $series['poster_path'] : '',
-                            'category_id' => 'TMDB ' . ucwords(str_replace('_', ' ', $listName)),
-                            'tmdb_id' => $seriesId,
-                            'first_air_date' => $series['first_air_date'] ?? '',
-                            'vote_average' => $series['vote_average'] ?? 0
-                        ];
-                        $existingIds[$seriesId] = true;
-                        $addedCount++;
-                    }
-                }
-                logMsg("Added $addedCount series from '$listName' list");
-            } else {
-                logMsg("Could not fetch '$listName' series list (run GitHub workflow first)");
-            }
-        }
-    }
-    
-    // ========== COLLECTIONS ==========
+    // Load local playlists (populated by MDBList integration)
     $localMoviesFile = __DIR__ . '/playlist.json';
     $localTVFile = __DIR__ . '/tv_playlist.json';
     
-    $collectionMovies = [];
-    if ($GLOBALS['INCLUDE_COLLECTIONS'] ?? true) {
-        logMsg("Fetching GitHub collections playlist...");
-        updateStatus('syncing', 75, 'Fetching TMDB collections...');
-        
-        $collections = fetchJson($GITHUB_COLLECTIONS);
-        if ($collections && is_array($collections)) {
-            // Add collection movies to the movie list (avoiding duplicates)
-            $existingIds = [];
-            foreach ($mergedMovies as $movie) {
-                if (isset($movie['stream_id'])) {
-                    $existingIds[$movie['stream_id']] = true;
-                }
-            }
-            
-            $addedCount = 0;
-            foreach ($collections as $movie) {
-                if (isset($movie['stream_id']) && !isset($existingIds[$movie['stream_id']])) {
-                    $mergedMovies[] = $movie;
-                    $existingIds[$movie['stream_id']] = true;
-                    $addedCount++;
-                }
-            }
-            
-            if ($addedCount > 0) {
-                logMsg("Added $addedCount unique collection movies");
-            }
-            $collectionMovies = $collections;
-            logMsg("Collections: " . count($collections) . " movies from TMDB collections");
-        } else {
-            logMsg("Collections playlist not available yet (run GitHub workflow first)");
-        }
+    $movies = [];
+    $tvSeries = [];
+    
+    // Load local movies
+    if (file_exists($localMoviesFile)) {
+        $movies = json_decode(file_get_contents($localMoviesFile), true) ?? [];
     }
+    logMsg("Local movies: " . count($movies) . " items");
     
-    // ========== SAVE PLAYLISTS ==========
-    logMsg("Saving playlists...");
-    file_put_contents($localMoviesFile, json_encode($mergedMovies, JSON_PRETTY_PRINT));
-    logMsg("Saved movie playlist: " . count($mergedMovies) . " movies");
-    
-    file_put_contents($localTVFile, json_encode($mergedTV, JSON_PRETTY_PRINT));
-    logMsg("Saved TV playlist: " . count($mergedTV) . " series");
+    // Load local TV series
+    if (file_exists($localTVFile)) {
+        $tvSeries = json_decode(file_get_contents($localTVFile), true) ?? [];
+    }
+    logMsg("Local TV series: " . count($tvSeries) . " items");
     
     // ========== REGENERATE M3U8 ==========
-    updateStatus('syncing', 85, 'Regenerating M3U8 playlist...');
+    updateStatus('syncing', 50, 'Regenerating M3U8 playlist...');
     logMsg("Regenerating M3U8 playlist...");
     
-    // Generate M3U8 from merged JSON
-    regenerateM3U8($mergedMovies, $mergedTV);
+    // Generate M3U8 from local JSON playlists
+    regenerateM3U8($movies, $tvSeries);
     
     // Calculate next sync time
     global $SYNC_INTERVAL_HOURS;
@@ -421,14 +199,14 @@ function syncWithGithub() {
     
     // ========== DONE ==========
     updateStatus('complete', 100, [
-        'movies' => count($mergedMovies),
-        'series' => count($mergedTV),
+        'movies' => count($movies),
+        'series' => count($tvSeries),
         'last_sync' => date('Y-m-d H:i:s'),
         'next_sync' => $nextSync
     ]);
     
     logMsg("========== SYNC COMPLETE ==========");
-    logMsg("Total: " . count($mergedMovies) . " movies, " . count($mergedTV) . " series");
+    logMsg("Total: " . count($movies) . " movies, " . count($tvSeries) . " series");
     logMsg("Next sync: " . $nextSync);
     
     return true;
