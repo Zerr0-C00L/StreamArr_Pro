@@ -318,6 +318,61 @@ if (isset($_GET['api'])) {
             if ($result['success']) {
                 $cacheFile = __DIR__ . '/cache/mdblist_items.json';
                 file_put_contents($cacheFile, json_encode($result, JSON_PRETTY_PRINT));
+                
+                // Auto-merge if MDBLIST_MERGE_PLAYLIST is enabled
+                if ($GLOBALS['MDBLIST_MERGE_PLAYLIST'] ?? true) {
+                    $playlistFile = __DIR__ . '/playlist.json';
+                    $tvPlaylistFile = __DIR__ . '/tv_playlist.json';
+                    
+                    $mdbMovies = $result['movies'] ?? [];
+                    $mdbSeries = $result['series'] ?? [];
+                    
+                    // Load existing playlists
+                    $existingMovies = file_exists($playlistFile) ? (json_decode(file_get_contents($playlistFile), true) ?: []) : [];
+                    $existingSeries = file_exists($tvPlaylistFile) ? (json_decode(file_get_contents($tvPlaylistFile), true) ?: []) : [];
+                    
+                    // Create ID maps for deduplication
+                    $existingMovieIds = array_column($existingMovies, 'tmdb_id');
+                    $existingMovieIds = array_merge($existingMovieIds, array_column($existingMovies, 'id'));
+                    $existingSeriesIds = array_column($existingSeries, 'tmdb_id');
+                    $existingSeriesIds = array_merge($existingSeriesIds, array_column($existingSeries, 'id'));
+                    
+                    $addedMovies = 0;
+                    $addedSeries = 0;
+                    
+                    // Merge movies
+                    foreach ($mdbMovies as $movie) {
+                        $id = $movie['tmdb_id'] ?? $movie['id'] ?? null;
+                        if ($id && !in_array($id, $existingMovieIds)) {
+                            $existingMovies[] = $movie;
+                            $existingMovieIds[] = $id;
+                            $addedMovies++;
+                        }
+                    }
+                    
+                    // Merge series
+                    foreach ($mdbSeries as $series) {
+                        $id = $series['tmdb_id'] ?? $series['id'] ?? null;
+                        if ($id && !in_array($id, $existingSeriesIds)) {
+                            $existingSeries[] = $series;
+                            $existingSeriesIds[] = $id;
+                            $addedSeries++;
+                        }
+                    }
+                    
+                    // Save merged playlists
+                    file_put_contents($playlistFile, json_encode($existingMovies, JSON_PRETTY_PRINT));
+                    file_put_contents($tvPlaylistFile, json_encode($existingSeries, JSON_PRETTY_PRINT));
+                    
+                    // Regenerate M3U8
+                    regenerateM3U8Playlist($existingMovies, $existingSeries);
+                    
+                    $result['auto_merged'] = true;
+                    $result['added_movies'] = $addedMovies;
+                    $result['added_series'] = $addedSeries;
+                    $result['total_movies'] = count($existingMovies);
+                    $result['total_series'] = count($existingSeries);
+                }
             }
             
             echo json_encode($result);
@@ -415,12 +470,188 @@ if (isset($_GET['api'])) {
             $mdblistData['merged'] = date('Y-m-d H:i:s');
             file_put_contents($mdblistFile, json_encode($mdblistData, JSON_PRETTY_PRINT));
             
+            // Auto-regenerate M3U8 playlist
+            $m3u8Regenerated = regenerateM3U8Playlist($existingMovies, $existingSeries);
+            
             echo json_encode([
                 'success' => true, 
                 'added_movies' => $addedMovies,
                 'added_series' => $addedSeries,
                 'total_movies' => count($existingMovies),
-                'total_series' => count($existingSeries)
+                'total_series' => count($existingSeries),
+                'm3u8_regenerated' => $m3u8Regenerated
+            ]);
+            break;
+        
+        // ========== SERVICE MANAGEMENT API ==========
+        case 'regenerate-m3u8':
+            $result = regenerateM3U8Playlist();
+            echo json_encode([
+                'success' => $result,
+                'message' => $result ? 'M3U8 playlist regenerated successfully' : 'Failed to regenerate M3U8'
+            ]);
+            break;
+            
+        case 'regenerate-livetv':
+            // Run background sync daemon to refresh Live TV
+            $output = [];
+            $returnCode = 0;
+            exec('cd ' . __DIR__ . ' && php daemons/background_sync_daemon.php --force 2>&1', $output, $returnCode);
+            echo json_encode([
+                'success' => $returnCode === 0,
+                'output' => implode("\n", array_slice($output, -10)),
+                'message' => $returnCode === 0 ? 'Live TV refreshed successfully' : 'Failed to refresh Live TV'
+            ]);
+            break;
+            
+        case 'run-episode-cache':
+            $output = [];
+            $returnCode = 0;
+            exec('cd ' . __DIR__ . ' && php daemons/auto_cache_daemon.php 2>&1', $output, $returnCode);
+            echo json_encode([
+                'success' => $returnCode === 0,
+                'output' => implode("\n", array_slice($output, -15)),
+                'message' => $returnCode === 0 ? 'Episode cache updated' : 'Episode cache failed'
+            ]);
+            break;
+            
+        case 'mdblist-sync-and-merge':
+            require_once __DIR__ . '/libs/mdblist.php';
+            $mdblist = new MDBListProvider();
+            $syncResult = $mdblist->fetchAllConfiguredLists();
+            
+            if (!$syncResult['success']) {
+                echo json_encode(['success' => false, 'error' => 'Sync failed: ' . ($syncResult['error'] ?? 'Unknown')]);
+                break;
+            }
+            
+            // Save to cache
+            $cacheFile = __DIR__ . '/cache/mdblist_items.json';
+            file_put_contents($cacheFile, json_encode($syncResult, JSON_PRETTY_PRINT));
+            
+            // Merge into playlists
+            $playlistFile = __DIR__ . '/playlist.json';
+            $tvPlaylistFile = __DIR__ . '/tv_playlist.json';
+            
+            $mdbMovies = $syncResult['movies'] ?? [];
+            $mdbSeries = $syncResult['series'] ?? [];
+            
+            $existingMovies = file_exists($playlistFile) ? (json_decode(file_get_contents($playlistFile), true) ?: []) : [];
+            $existingSeries = file_exists($tvPlaylistFile) ? (json_decode(file_get_contents($tvPlaylistFile), true) ?: []) : [];
+            
+            $existingMovieIds = array_column($existingMovies, 'tmdb_id');
+            $existingMovieIds = array_merge($existingMovieIds, array_column($existingMovies, 'id'));
+            $existingSeriesIds = array_column($existingSeries, 'tmdb_id');
+            $existingSeriesIds = array_merge($existingSeriesIds, array_column($existingSeries, 'id'));
+            
+            $addedMovies = 0;
+            $addedSeries = 0;
+            
+            foreach ($mdbMovies as $movie) {
+                $id = $movie['tmdb_id'] ?? $movie['id'] ?? null;
+                if ($id && !in_array($id, $existingMovieIds)) {
+                    $existingMovies[] = $movie;
+                    $existingMovieIds[] = $id;
+                    $addedMovies++;
+                }
+            }
+            
+            foreach ($mdbSeries as $series) {
+                $id = $series['tmdb_id'] ?? $series['id'] ?? null;
+                if ($id && !in_array($id, $existingSeriesIds)) {
+                    $existingSeries[] = $series;
+                    $existingSeriesIds[] = $id;
+                    $addedSeries++;
+                }
+            }
+            
+            file_put_contents($playlistFile, json_encode($existingMovies, JSON_PRETTY_PRINT));
+            file_put_contents($tvPlaylistFile, json_encode($existingSeries, JSON_PRETTY_PRINT));
+            
+            // Regenerate M3U8
+            $m3u8Result = regenerateM3U8Playlist($existingMovies, $existingSeries);
+            
+            echo json_encode([
+                'success' => true,
+                'synced_movies' => $syncResult['movie_count'] ?? 0,
+                'synced_series' => $syncResult['series_count'] ?? 0,
+                'added_movies' => $addedMovies,
+                'added_series' => $addedSeries,
+                'total_movies' => count($existingMovies),
+                'total_series' => count($existingSeries),
+                'm3u8_regenerated' => $m3u8Result,
+                'message' => "Synced & merged! Added $addedMovies movies, $addedSeries series"
+            ]);
+            break;
+            
+        case 'service-status':
+            // Get comprehensive service status
+            require_once __DIR__ . '/libs/mdblist.php';
+            
+            // MDBList status
+            $mdblistFile = __DIR__ . '/cache/mdblist_items.json';
+            $mdblistData = file_exists($mdblistFile) ? json_decode(file_get_contents($mdblistFile), true) : null;
+            $savedLists = MDBListProvider::getSavedLists();
+            $enabledLists = array_filter($savedLists, fn($l) => $l['enabled'] ?? true);
+            
+            // Playlist status
+            $playlistFile = __DIR__ . '/playlist.json';
+            $tvPlaylistFile = __DIR__ . '/tv_playlist.json';
+            $movies = file_exists($playlistFile) ? json_decode(file_get_contents($playlistFile), true) : [];
+            $series = file_exists($tvPlaylistFile) ? json_decode(file_get_contents($tvPlaylistFile), true) : [];
+            
+            // M3U8 status
+            $m3u8File = __DIR__ . '/playlist.m3u8';
+            $m3u8Exists = file_exists($m3u8File);
+            $m3u8Modified = $m3u8Exists ? date('Y-m-d H:i:s', filemtime($m3u8File)) : null;
+            $m3u8Content = $m3u8Exists ? file_get_contents($m3u8File) : '';
+            $liveTvCount = substr_count($m3u8Content, 'pluto.tv');
+            
+            // Sync status
+            $syncStatusFile = __DIR__ . '/cache/sync_status.json';
+            $syncStatus = file_exists($syncStatusFile) ? json_decode(file_get_contents($syncStatusFile), true) : null;
+            
+            echo json_encode([
+                'success' => true,
+                'mdblist' => [
+                    'movies' => $mdblistData['movie_count'] ?? 0,
+                    'series' => $mdblistData['series_count'] ?? 0,
+                    'lists' => count($enabledLists),
+                    'last_sync' => $mdblistData['fetched_at'] ?? null
+                ],
+                'library' => [
+                    'movies' => count($movies),
+                    'series' => count($series)
+                ],
+                'm3u8' => [
+                    'movies' => count($movies),
+                    'series' => count($series),
+                    'livetv' => $liveTvCount,
+                    'last_generated' => $m3u8Modified
+                ],
+                'sync' => [
+                    'last_sync' => $syncStatus['details']['last_sync'] ?? null,
+                    'status' => $syncStatus['status'] ?? 'unknown'
+                ]
+            ]);
+            break;
+            
+        case 'check-cron':
+            $output = [];
+            exec('crontab -l 2>&1', $output);
+            $cronContent = implode("\n", $output);
+            
+            // Check for our cron jobs
+            $hasSync = strpos($cronContent, 'background_sync_daemon') !== false;
+            $hasCache = strpos($cronContent, 'auto_cache_daemon') !== false;
+            $hasMdblist = strpos($cronContent, 'mdblist') !== false;
+            
+            echo json_encode([
+                'success' => true,
+                'crontab' => $cronContent,
+                'has_sync' => $hasSync,
+                'has_cache' => $hasCache,
+                'has_mdblist' => $hasMdblist
             ]);
             break;
             
@@ -428,6 +659,63 @@ if (isset($_GET['api'])) {
             echo json_encode(['error' => 'Unknown action']);
     }
     exit;
+}
+
+/**
+ * Regenerate M3U8 playlist from movies and series JSON
+ */
+function regenerateM3U8Playlist($movies = null, $series = null) {
+    $playlistFile = __DIR__ . '/playlist.json';
+    $tvPlaylistFile = __DIR__ . '/tv_playlist.json';
+    $m3u8File = __DIR__ . '/playlist.m3u8';
+    
+    // Load from files if not passed
+    if ($movies === null) {
+        $movies = file_exists($playlistFile) ? (json_decode(file_get_contents($playlistFile), true) ?: []) : [];
+    }
+    if ($series === null) {
+        $series = file_exists($tvPlaylistFile) ? (json_decode(file_get_contents($tvPlaylistFile), true) ?: []) : [];
+    }
+    
+    // Get base URL for playlist links
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $baseUrl = $protocol . '://' . $host;
+    
+    $m3u = "#EXTM3U\n";
+    
+    // Add movies
+    foreach ($movies as $movie) {
+        $name = htmlspecialchars($movie['name'] ?? $movie['title'] ?? 'Unknown', ENT_QUOTES);
+        $streamId = $movie['stream_id'] ?? $movie['tmdb_id'] ?? $movie['id'] ?? '';
+        $logo = $movie['stream_icon'] ?? $movie['poster_path'] ?? '';
+        if ($logo && strpos($logo, '/') === 0) {
+            $logo = 'https://image.tmdb.org/t/p/w500' . $logo;
+        }
+        $year = $movie['year'] ?? '';
+        $category = 'Movies';
+        
+        $m3u .= "#EXTINF:-1 tvg-id=\"$streamId\" tvg-logo=\"$logo\" group-title=\"$category\",$name" . ($year ? " ($year)" : "") . "\n";
+        $m3u .= "{$baseUrl}/play.php?type=movie&id={$streamId}\n";
+    }
+    
+    // Add TV series
+    foreach ($series as $show) {
+        $name = htmlspecialchars($show['name'] ?? $show['title'] ?? 'Unknown', ENT_QUOTES);
+        $seriesId = $show['series_id'] ?? $show['tmdb_id'] ?? $show['id'] ?? '';
+        $logo = $show['cover'] ?? $show['stream_icon'] ?? $show['poster_path'] ?? '';
+        if ($logo && strpos($logo, '/') === 0) {
+            $logo = 'https://image.tmdb.org/t/p/w500' . $logo;
+        }
+        $category = 'TV Shows';
+        
+        $m3u .= "#EXTINF:-1 tvg-id=\"$seriesId\" tvg-logo=\"$logo\" group-title=\"$category\",$name\n";
+        $m3u .= "{$baseUrl}/play.php?type=series&id={$seriesId}\n";
+    }
+    
+    // Save M3U8 file
+    $result = file_put_contents($m3u8File, $m3u);
+    return $result !== false;
 }
 
 function getSystemStatus() {
@@ -1584,17 +1872,92 @@ function formatBytes($bytes) {
     <div id="page-services" class="page hidden">
         <div class="page-header">
             <h2>Services</h2>
+            <button class="btn btn-secondary" onclick="refreshServiceStatus()">🔄 Refresh Status</button>
         </div>
         
+        <!-- MDBList Sync Service -->
         <div class="card">
             <div class="card-header">
-                <span class="card-title">Background Daemons</span>
+                <span class="card-title">📋 MDBList Sync Service</span>
+            </div>
+            
+            <div class="daemon-row">
+                <div class="daemon-info">
+                    <h4>MDBList Content Sync</h4>
+                    <p>Fetches movies & TV series from your configured MDBList sources and merges them into your library</p>
+                    <div style="margin-top: 0.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem;">
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 1.25rem; font-weight: bold; color: var(--primary);" id="svc-mdblist-movies">-</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Movies</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 1.25rem; font-weight: bold; color: var(--success);" id="svc-mdblist-series">-</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">TV Series</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 1.25rem; font-weight: bold; color: var(--warning);" id="svc-mdblist-lists">-</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Active Lists</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 0.85rem; color: var(--text-primary);" id="svc-mdblist-lastsync">Never</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Last Sync</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="daemon-actions" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn btn-primary" onclick="runMDBListSync()">🔄 Sync Now</button>
+                    <button class="btn btn-success" onclick="runMDBListMerge()">📥 Merge to Library</button>
+                    <button class="btn btn-secondary" onclick="runMDBListSyncAndMerge()">⚡ Sync + Merge</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Playlist Regeneration -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">📺 Playlist Regeneration</span>
+            </div>
+            
+            <div class="daemon-row">
+                <div class="daemon-info">
+                    <h4>M3U8 Playlist Generator</h4>
+                    <p>Regenerates the M3U8 playlist file from your movie/TV library. Run after adding new content.</p>
+                    <div style="margin-top: 0.75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem;">
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 1.25rem; font-weight: bold; color: var(--primary);" id="svc-m3u8-movies">-</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Movies</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 1.25rem; font-weight: bold; color: var(--success);" id="svc-m3u8-series">-</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">TV Series</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 1.25rem; font-weight: bold; color: var(--warning);" id="svc-m3u8-livetv">-</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Live TV</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: 0.5rem; border-radius: 4px; text-align: center;">
+                            <div style="font-size: 0.85rem; color: var(--text-primary);" id="svc-m3u8-lastgen">Unknown</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Last Generated</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="daemon-actions" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button class="btn btn-primary" onclick="regenerateM3U8()">🔄 Regenerate M3U8</button>
+                    <button class="btn btn-secondary" onclick="regenerateLiveTV()">📡 Refresh Live TV</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Background Daemons -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">⚙️ Background Daemons</span>
             </div>
             
             <div class="daemon-row">
                 <div class="daemon-info">
                     <h4>Background Sync Daemon</h4>
-                    <p>Syncs playlists from GitHub every 6 hours</p>
+                    <p>Syncs Live TV and regenerates M3U8 playlist periodically</p>
                     <p style="margin-top: 0.5rem;">
                         Status: <span id="daemon-sync-status" class="status-badge status-stopped">Stopped</span>
                         <span id="daemon-sync-pid" style="margin-left: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);"></span>
@@ -1608,15 +1971,69 @@ function formatBytes($bytes) {
             
             <div class="daemon-row">
                 <div class="daemon-info">
-                    <h4>Auto Playlist Generator</h4>
-                    <p>Runs daily at 3 AM via cron job</p>
+                    <h4>Episode Cache Daemon</h4>
+                    <p>Pre-caches episode information for TV series</p>
                     <p style="margin-top: 0.5rem;">
-                        Status: <span class="status-badge status-warning">Scheduled (Cron)</span>
+                        Status: <span id="daemon-cache-status" class="status-badge status-stopped">Stopped</span>
                     </p>
                 </div>
                 <div class="daemon-actions">
-                    <button class="btn btn-primary" onclick="runAction('generate-playlist')">Run Now</button>
+                    <button class="btn btn-primary" onclick="runEpisodeCache()">▶️ Run Now</button>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Cron Jobs Setup -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">⏰ Automated Tasks (Cron Jobs)</span>
+            </div>
+            
+            <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size: 0.9rem;">
+                    Set up these cron jobs on your server for automatic syncing. SSH into your server and run <code>crontab -e</code> to add them:
+                </p>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">📋 MDBList Sync (Every 6 hours)</label>
+                    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; font-family: monospace; font-size: 0.8rem; overflow-x: auto; position: relative;">
+                        <code id="cron-mdblist">0 */6 * * * cd /var/www/streaming && php -r "require 'config.php'; require 'libs/mdblist.php'; \$m = new MDBListProvider(); \$r = \$m->fetchAllConfiguredLists(); if(\$r['success']) { file_put_contents('cache/mdblist_items.json', json_encode(\$r)); }" >> logs/mdblist_sync.log 2>&1</code>
+                        <button onclick="copyCronCommand('cron-mdblist')" style="position: absolute; right: 8px; top: 8px; background: var(--primary); color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Copy</button>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">🔄 Background Sync Daemon (Every 6 hours)</label>
+                    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; font-family: monospace; font-size: 0.8rem; overflow-x: auto; position: relative;">
+                        <code id="cron-sync">0 */6 * * * cd /var/www/streaming && php daemons/background_sync_daemon.php >> logs/sync_daemon.log 2>&1</code>
+                        <button onclick="copyCronCommand('cron-sync')" style="position: absolute; right: 8px; top: 8px; background: var(--primary); color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Copy</button>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">📺 Episode Cache (Daily at 4 AM)</label>
+                    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; font-family: monospace; font-size: 0.8rem; overflow-x: auto; position: relative;">
+                        <code id="cron-cache">0 4 * * * cd /var/www/streaming && php daemons/auto_cache_daemon.php >> logs/auto_cache.log 2>&1</code>
+                        <button onclick="copyCronCommand('cron-cache')" style="position: absolute; right: 8px; top: 8px; background: var(--primary); color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Copy</button>
+                    </div>
+                </div>
+                
+                <div>
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">⚡ Full Auto-Sync (MDBList + Merge + M3U8 - Every 6 hours)</label>
+                    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; font-family: monospace; font-size: 0.8rem; overflow-x: auto; position: relative;">
+                        <code id="cron-full">0 */6 * * * cd /var/www/streaming && php -r "require 'admin.php';" "api=mdblist-sync-and-merge" >> logs/auto_sync.log 2>&1</code>
+                        <button onclick="copyCronCommand('cron-full')" style="position: absolute; right: 8px; top: 8px; background: var(--primary); color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Copy</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="checkCronStatus()">🔍 Check Cron Status</button>
+                <button class="btn btn-secondary" onclick="showCronInstructions()">📖 Setup Instructions</button>
+            </div>
+            
+            <div id="cron-status-output" style="margin-top: 1rem; display: none;">
+                <pre style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; font-size: 0.8rem; overflow-x: auto; max-height: 200px;"></pre>
             </div>
         </div>
     </div>
@@ -3034,7 +3451,12 @@ async function syncMDBLists() {
         const result = await response.json();
         
         if (result.success) {
-            showToast(`Synced! Movies: ${result.movie_count}, Series: ${result.series_count}`, 'success');
+            let msg = `Synced! From MDBList: ${result.movie_count} movies, ${result.series_count} series`;
+            if (result.auto_merged) {
+                msg += `\nAuto-merged: +${result.added_movies} movies, +${result.added_series} series`;
+                msg += `\nLibrary total: ${result.total_movies} movies, ${result.total_series} series`;
+            }
+            showToast(msg, 'success');
             refreshStatus();
         } else {
             showToast('Sync failed: ' + (result.error || 'Unknown'), 'error');
@@ -3180,6 +3602,213 @@ async function addSearchResultList(url) {
     } catch (e) {
         showToast('Error: ' + e.message, 'error');
     }
+}
+
+// ========== SERVICES TAB FUNCTIONS ==========
+
+// Refresh service status
+async function refreshServiceStatus() {
+    try {
+        const response = await fetch('?api=service-status');
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update MDBList stats
+            document.getElementById('svc-mdblist-movies').textContent = result.mdblist.movies || '0';
+            document.getElementById('svc-mdblist-series').textContent = result.mdblist.series || '0';
+            document.getElementById('svc-mdblist-lists').textContent = result.mdblist.lists || '0';
+            document.getElementById('svc-mdblist-lastsync').textContent = result.mdblist.last_sync || 'Never';
+            
+            // Update M3U8 stats
+            document.getElementById('svc-m3u8-movies').textContent = result.m3u8.movies || '0';
+            document.getElementById('svc-m3u8-series').textContent = result.m3u8.series || '0';
+            document.getElementById('svc-m3u8-livetv').textContent = result.m3u8.livetv || '0';
+            document.getElementById('svc-m3u8-lastgen').textContent = result.m3u8.last_generated || 'Unknown';
+            
+            showToast('Service status updated', 'success');
+        }
+    } catch (e) {
+        showToast('Error refreshing status: ' + e.message, 'error');
+    }
+}
+
+// Run MDBList sync only
+async function runMDBListSync() {
+    showToast('Syncing MDBLists...', 'success');
+    try {
+        const response = await fetch('?api=mdblist-sync');
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`Synced! ${result.movie_count} movies, ${result.series_count} series from MDBList`, 'success');
+            refreshServiceStatus();
+        } else {
+            showToast('Sync failed: ' + (result.error || 'Unknown'), 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Run MDBList merge only
+async function runMDBListMerge() {
+    showToast('Merging to library...', 'success');
+    try {
+        const response = await fetch('?api=mdblist-merge');
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`Merged! Added ${result.added_movies} movies, ${result.added_series} series. Total: ${result.total_movies} movies, ${result.total_series} series`, 'success');
+            refreshServiceStatus();
+        } else {
+            showToast('Merge failed: ' + (result.error || 'Unknown'), 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Run MDBList sync + merge + regenerate
+async function runMDBListSyncAndMerge() {
+    showToast('Running full sync + merge...', 'success');
+    try {
+        const response = await fetch('?api=mdblist-sync-and-merge');
+        const result = await response.json();
+        
+        if (result.success) {
+            let msg = `✅ ${result.message}\n`;
+            msg += `From MDBList: ${result.synced_movies} movies, ${result.synced_series} series\n`;
+            msg += `Library total: ${result.total_movies} movies, ${result.total_series} series`;
+            showToast(msg, 'success');
+            refreshServiceStatus();
+            refreshStatus(); // Also refresh main dashboard
+        } else {
+            showToast('Sync failed: ' + (result.error || 'Unknown'), 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Regenerate M3U8 playlist
+async function regenerateM3U8() {
+    showToast('Regenerating M3U8 playlist...', 'success');
+    try {
+        const response = await fetch('?api=regenerate-m3u8');
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('M3U8 playlist regenerated!', 'success');
+            refreshServiceStatus();
+        } else {
+            showToast('Failed: ' + (result.message || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Regenerate Live TV
+async function regenerateLiveTV() {
+    showToast('Refreshing Live TV channels...', 'success');
+    try {
+        const response = await fetch('?api=regenerate-livetv');
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Live TV refreshed!', 'success');
+            refreshServiceStatus();
+        } else {
+            showToast('Failed: ' + (result.message || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Run episode cache
+async function runEpisodeCache() {
+    showToast('Running episode cache...', 'success');
+    try {
+        const response = await fetch('?api=run-episode-cache');
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Episode cache completed!', 'success');
+        } else {
+            showToast('Failed: ' + (result.message || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Copy cron command
+function copyCronCommand(elementId) {
+    const code = document.getElementById(elementId);
+    if (code) {
+        navigator.clipboard.writeText(code.textContent).then(() => {
+            showToast('Copied to clipboard!', 'success');
+        }).catch(() => {
+            // Fallback for older browsers
+            const range = document.createRange();
+            range.selectNode(code);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            document.execCommand('copy');
+            window.getSelection().removeAllRanges();
+            showToast('Copied to clipboard!', 'success');
+        });
+    }
+}
+
+// Check cron status
+async function checkCronStatus() {
+    showToast('Checking cron jobs...', 'success');
+    try {
+        const response = await fetch('?api=check-cron');
+        const result = await response.json();
+        
+        const outputDiv = document.getElementById('cron-status-output');
+        const pre = outputDiv.querySelector('pre');
+        
+        if (result.success) {
+            let status = '=== Current Crontab ===\n\n';
+            status += result.crontab || '(empty or no access)\n';
+            status += '\n\n=== Detection ===\n';
+            status += `Background Sync: ${result.has_sync ? '✅ Found' : '❌ Not found'}\n`;
+            status += `Episode Cache: ${result.has_cache ? '✅ Found' : '❌ Not found'}\n`;
+            status += `MDBList Sync: ${result.has_mdblist ? '✅ Found' : '❌ Not found'}\n`;
+            
+            pre.textContent = status;
+            outputDiv.style.display = 'block';
+        } else {
+            pre.textContent = 'Failed to check cron status';
+            outputDiv.style.display = 'block';
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+// Show cron setup instructions
+function showCronInstructions() {
+    alert(`Cron Setup Instructions:
+
+1. SSH into your server
+2. Run: crontab -e
+3. Add the cron commands shown above
+4. Save and exit
+
+For this server, use:
+cd /var/www/streaming
+
+Example full crontab entry for auto-sync every 6 hours:
+0 */6 * * * cd /var/www/streaming && php daemons/background_sync_daemon.php >> logs/sync_daemon.log 2>&1
+
+To verify cron is running:
+- Check logs in /var/www/streaming/logs/
+- Click "Check Cron Status" button`);
 }
 
 // Update updateDashboard to include MDBList settings
