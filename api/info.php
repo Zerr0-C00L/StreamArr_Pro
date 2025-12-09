@@ -3,7 +3,7 @@
 // Please leave this in this script.
 // https://github.com/Zerr0-C00L/tmdb-to-vod-playlist
 
-require_once 'config.php';
+require_once __DIR__ . '/../config.php';
 $baseUrl = locateBaseURL();
 
 // Function to check if an extension is loaded

@@ -21,7 +21,7 @@ if ($autoCacheIntervalHours > 0) {
     
     if ($shouldCheck) {
         // Run cache check in background (non-blocking)
-        $script = __DIR__ . '/auto_cache_daemon.php';
+        $script = __DIR__ . '/daemons/auto_cache_daemon.php';
         if (file_exists($script)) {
             exec("php \"$script\" >> logs/auto_cache.log 2>&1 &");
         }

@@ -3,7 +3,7 @@
 // Please leave this in this script.
 // https://github.com/Zerr0-C00L/tmdb-to-vod-playlist/
 
-require_once 'config.php';
+require_once __DIR__ . '/../config.php';
 set_time_limit(0); // Remove PHP's time restriction
 
 if ($GLOBALS['DEBUG'] !== true) {
@@ -140,7 +140,7 @@ function addMovieEntry($movie, $playVodUrl, $group, &$num, &$outputData, &$outpu
             
             // Try SQLite cache first
             if ($dbInstance === null) {
-                require_once __DIR__ . '/libs/episode_cache_db.php';
+                require_once __DIR__ . '/../libs/episode_cache_db.php';
                 $dbInstance = new EpisodeCacheDB();
             }
             

@@ -17,8 +17,8 @@
  *   0 3 * * * cd /path/to/tmdb-to-vod-playlist && php auto_playlist_daemon.php >> logs/auto_playlist.log 2>&1
  */
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/libs/episode_cache_db.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../libs/episode_cache_db.php';
 
 $isDaemon = in_array('--daemon', $argv);
 $playlistOnly = in_array('--playlist-only', $argv);
@@ -30,7 +30,7 @@ $maxStreamsPerRun = 100; // Limit API calls per run
 
 function logMsg($msg) {
     echo "[" . date('Y-m-d H:i:s') . "] $msg\n";
-    @file_put_contents(__DIR__ . '/logs/auto_playlist.log', "[" . date('Y-m-d H:i:s') . "] $msg\n", FILE_APPEND);
+    @file_put_contents(__DIR__ . '/../logs/auto_playlist.log', "[" . date('Y-m-d H:i:s') . "] $msg\n", FILE_APPEND);
 }
 
 /**
@@ -152,7 +152,7 @@ function refreshStreamCache() {
     $db = new EpisodeCacheDB();
     
     // Get movies from playlist that need stream cache refresh
-    $playlistFile = __DIR__ . '/playlist.json';
+    $playlistFile = __DIR__ . '/../playlist.json';
     if (!file_exists($playlistFile)) {
         logMsg("No movie playlist found");
         return;

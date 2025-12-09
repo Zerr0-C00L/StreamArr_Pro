@@ -3,7 +3,7 @@
 // Please leave this in this script.
 //https://github.com/Zerr0-C00L/tmdb-to-vod-playlist
 
-require_once 'config.php';
+require_once __DIR__ . '/../config.php';
 set_time_limit(0); // Remove PHP's time restriction
 
 if ($GLOBALS['DEBUG'] !== true) {
@@ -64,7 +64,7 @@ function fetchSeries($playVodUrl, $language, $apiKey, $totalPages)
     
     // Auto-sync episode cache in background after playlist generation
     // This ensures new series have their episodes cached for immediate playback
-    $syncScript = __DIR__ . '/sync_github_cache.php';
+    $syncScript = __DIR__ . '/../daemons/sync_github_cache.php';
     if (file_exists($syncScript)) {
         // Run sync in background (non-blocking)
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {

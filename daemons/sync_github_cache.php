@@ -9,13 +9,13 @@
 
 set_time_limit(0);
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config.php';
 
 $startIndex = isset($argv[1]) ? (int)$argv[1] : 0;
 
 echo "=== Syncing Episode Cache ===\n";
 
-$localPlaylist = __DIR__ . "/tv_playlist.json";
+$localPlaylist = __DIR__ . "/../tv_playlist.json";
 
 // Use local playlist (populated by MDBList)
 if (file_exists($localPlaylist)) {
@@ -38,7 +38,7 @@ $total = count($tvSeries);
 echo "Found $total series\n";
 
 // Load existing cache to skip already-cached series
-$cacheFile = __DIR__ . "/cache/episode_lookup.json";
+$cacheFile = __DIR__ . "/../cache/episode_lookup.json";
 $existingCache = [];
 if (file_exists($cacheFile)) {
     $existingCache = json_decode(file_get_contents($cacheFile), true) ?? [];

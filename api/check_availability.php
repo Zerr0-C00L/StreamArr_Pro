@@ -8,8 +8,8 @@
  *   /check_availability.php?type=series&imdb=tt0096697&season=1&episode=1
  */
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/libs/episode_cache_db.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../libs/episode_cache_db.php';
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');

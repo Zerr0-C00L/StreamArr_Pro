@@ -2,7 +2,7 @@
 error_reporting(0);
 set_time_limit(0);
 
-require_once 'config.php';
+require_once __DIR__ . '/../config.php';
 $proxyUrl = locateBaseURL() . "hls_proxy.php";
 
 if (empty($_GET['url']) && empty($_GET['url2'])) {

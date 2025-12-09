@@ -8,8 +8,8 @@
  * Usage: php bootstrap_hashlists.php [num_files_to_import]
  */
 
-require_once 'libs/dmm_hashlists.php';
-require_once 'libs/personal_hashlists.php';
+require_once __DIR__ . '/../libs/dmm_hashlists.php';
+require_once __DIR__ . '/../libs/personal_hashlists.php';
 
 $maxFiles = isset($argv[1]) ? intval($argv[1]) : 10;
 

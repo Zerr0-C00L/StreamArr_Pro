@@ -7,11 +7,11 @@
 ini_set('memory_limit', '512M');
 set_time_limit(0);
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config.php';
 
-$localPlaylist = __DIR__ . '/tv_playlist.json';
-$episodeLookupFile = __DIR__ . '/cache/episode_lookup.json';
-$progressFile = __DIR__ . '/cache/cache_progress.json';
+$localPlaylist = __DIR__ . '/../tv_playlist.json';
+$episodeLookupFile = __DIR__ . '/../cache/episode_lookup.json';
+$progressFile = __DIR__ . '/../cache/cache_progress.json';
 
 // Load playlist
 echo "Loading playlist...\n";
@@ -149,7 +149,7 @@ echo "Processed: $processed | New episodes: $newEpisodes\n";
  * Save episodes to sharded cache (fast lookups)
  */
 function saveToShards($episodes) {
-    $shardDir = __DIR__ . '/cache/episode_shards';
+    $shardDir = __DIR__ . '/../cache/episode_shards';
     if (!is_dir($shardDir)) mkdir($shardDir, 0755, true);
     
     $shards = [];

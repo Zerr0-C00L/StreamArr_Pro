@@ -8,16 +8,16 @@
  *   php auto_cache_daemon.php --daemon - Run continuously in background
  * 
  * For cron (check every 6 hours):
- *   0 */6 * * * cd /path/to/tmdb-to-vod-playlist && php auto_cache_daemon.php >> logs/auto_cache.log 2>&1
+ *   0 0,6,12,18 * * * cd /path/to/tmdb-to-vod-playlist && php auto_cache_daemon.php >> logs/auto_cache.log 2>&1
  */
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config.php';
 
 $isDaemon = in_array('--daemon', $argv);
 $checkInterval = 6 * 60 * 60; // 6 hours between full checks
-$localPlaylist = __DIR__ . '/tv_playlist.json';
-$episodeLookupFile = __DIR__ . '/cache/episode_lookup.json';
-$lastCheckFile = __DIR__ . '/cache/last_cache_check.json';
+$localPlaylist = __DIR__ . '/../tv_playlist.json';
+$episodeLookupFile = __DIR__ . '/../cache/episode_lookup.json';
+$lastCheckFile = __DIR__ . '/../cache/last_cache_check.json';
 
 function logMsg($msg) {
     echo "[" . date('Y-m-d H:i:s') . "] $msg\n";

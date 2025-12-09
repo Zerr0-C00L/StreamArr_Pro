@@ -53,7 +53,7 @@ if (isset($_GET['api'])) {
                 echo json_encode(['success' => true, 'pid' => $pid, 'method' => 'systemd']);
             } else {
                 // Fallback to nohup
-                $result = shell_exec('nohup php ' . __DIR__ . '/background_sync_daemon.php --daemon > /dev/null 2>&1 & echo $!');
+                $result = shell_exec('nohup php ' . __DIR__ . '/daemons/background_sync_daemon.php --daemon > /dev/null 2>&1 & echo $!');
                 echo json_encode(['success' => true, 'pid' => trim($result), 'method' => 'manual']);
             }
             break;
@@ -74,17 +74,17 @@ if (isset($_GET['api'])) {
             break;
             
         case 'sync-now':
-            $result = shell_exec('php ' . __DIR__ . '/background_sync_daemon.php 2>&1');
+            $result = shell_exec('php ' . __DIR__ . '/daemons/background_sync_daemon.php 2>&1');
             echo json_encode(['success' => true, 'output' => $result]);
             break;
             
         case 'generate-playlist':
-            $result = shell_exec('php ' . __DIR__ . '/auto_playlist_daemon.php 2>&1');
+            $result = shell_exec('php ' . __DIR__ . '/daemons/auto_playlist_daemon.php 2>&1');
             echo json_encode(['success' => true, 'output' => $result]);
             break;
             
         case 'cache-episodes':
-            $result = shell_exec('nohup php ' . __DIR__ . '/sync_github_cache.php > /dev/null 2>&1 & echo "Started"');
+            $result = shell_exec('nohup php ' . __DIR__ . '/daemons/sync_github_cache.php > /dev/null 2>&1 & echo "Started"');
             echo json_encode(['success' => true, 'message' => 'Episode cache sync started in background']);
             break;
             

@@ -13,8 +13,8 @@
  *   GET /hashlist_resolver.php?action=stats
  */
 
-require_once 'libs/personal_hashlists.php';
-require_once 'config.php';
+require_once __DIR__ . '/../libs/personal_hashlists.php';
+require_once __DIR__ . '/../config.php';
 
 header('Content-Type: application/json');
 

@@ -10,21 +10,21 @@
  *   php background_sync_daemon.php --daemon # Run continuously in background
  */
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/../config.php';
 
 // Configuration - Live TV from public-files repo
 $GITHUB_LIVE_TV = 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/Pluto-TV/us.m3u8';
 $GITHUB_LIVE_EPG = 'https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/Pluto-TV/us.xml';
 
 $SYNC_INTERVAL_HOURS = 6; // How often to sync Live TV
-$LOCK_FILE = __DIR__ . '/cache/sync_daemon.lock';
-$STATUS_FILE = __DIR__ . '/cache/sync_status.json';
+$LOCK_FILE = __DIR__ . '/../cache/sync_daemon.lock';
+$STATUS_FILE = __DIR__ . '/../cache/sync_status.json';
 
 // Logging
 function logMsg($msg) {
     $timestamp = date('Y-m-d H:i:s');
     echo "[$timestamp] $msg\n";
-    @file_put_contents(__DIR__ . '/logs/sync_daemon.log', "[$timestamp] $msg\n", FILE_APPEND);
+    @file_put_contents(__DIR__ . '/../logs/sync_daemon.log', "[$timestamp] $msg\n", FILE_APPEND);
 }
 
 // Check if already running
@@ -168,8 +168,8 @@ function syncWithGithub() {
     updateStatus('syncing', 0, 'Starting sync...');
     
     // Load local playlists (populated by MDBList integration)
-    $localMoviesFile = __DIR__ . '/playlist.json';
-    $localTVFile = __DIR__ . '/tv_playlist.json';
+    $localMoviesFile = __DIR__ . '/../playlist.json';
+    $localTVFile = __DIR__ . '/../tv_playlist.json';
     
     $movies = [];
     $tvSeries = [];
@@ -214,7 +214,7 @@ function syncWithGithub() {
 
 // Regenerate M3U8 playlist from JSON
 function regenerateM3U8($movies, $tvSeries) {
-    $m3u8File = __DIR__ . '/playlist.m3u8';
+    $m3u8File = __DIR__ . '/../playlist.m3u8';
     $baseUrl = getBaseUrl();
     
     // Check if there's a limit set
@@ -344,7 +344,7 @@ function fetchLiveTV() {
     }
     
     // Save JSON files for XC API
-    $channelsDir = __DIR__ . '/channels';
+    $channelsDir = __DIR__ . '/../channels';
     if (!is_dir($channelsDir)) {
         mkdir($channelsDir, 0755, true);
     }
@@ -370,7 +370,7 @@ function fetchLiveTV() {
 function fetchLiveEPG() {
     global $GITHUB_LIVE_EPG;
     
-    $channelsDir = __DIR__ . '/channels';
+    $channelsDir = __DIR__ . '/../channels';
     if (!is_dir($channelsDir)) {
         mkdir($channelsDir, 0755, true);
     }

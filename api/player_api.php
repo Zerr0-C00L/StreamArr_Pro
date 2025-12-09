@@ -1,15 +1,15 @@
 <?php
 
-require_once 'config.php';
-require_once 'generate_live_playlist.php';
-require_once 'libs/cached_sources.php';
-require_once 'libs/episode_cache_db.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../generators/generate_live_playlist.php';
+require_once __DIR__ . '/../libs/cached_sources.php';
+require_once __DIR__ . '/../libs/episode_cache_db.php';
 
 set_time_limit(0);
 accessLog();
 
 // Log all API requests for debugging
-$logFile = __DIR__ . '/logs/requests.log';
+$logFile = __DIR__ . '/../logs/requests.log';
 $action = $_GET['action'] ?? 'none';
 $streamId = $_GET['stream_id'] ?? $_GET['vod_id'] ?? $_GET['series_id'] ?? 'none';
 @file_put_contents($logFile, date('Y-m-d H:i:s') . " API: action=$action, id=$streamId, UA: " . ($_SERVER['HTTP_USER_AGENT'] ?? 'none') . "\n", FILE_APPEND);
@@ -129,7 +129,7 @@ header('Content-Type: application/json');
 
 //Get and setup Live playlist and return json.
 if (isset($_GET['action']) && $_GET['action'] == 'get_live_streams') {
-	$liveFile = __DIR__ . '/channels/live_playlist.json';
+	$liveFile = __DIR__ . '/../channels/live_playlist.json';
 	if (file_exists($liveFile)) {
 		$streams = json_decode(file_get_contents($liveFile), true) ?: [];
 		// Remove internal fields from output
@@ -147,7 +147,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_live_streams') {
 
 //Setup live categories and return json.
 if (isset($_GET['action']) && $_GET['action'] == 'get_live_categories') {
-	$catFile = __DIR__ . '/channels/get_live_categories.json';
+	$catFile = __DIR__ . '/../channels/get_live_categories.json';
 	if (file_exists($catFile)) {
 		$categories = json_decode(file_get_contents($catFile), true) ?: [];
 		header('Content-Type: application/json');
@@ -273,8 +273,8 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_vod_streams') {
 	if ($limit > 0 && !$GLOBALS['INCLUDE_ADULT_VOD']) {
 		// Return limited movie list
 		$playlist = [];
-		if (file_exists(__DIR__ . '/playlist.json')) {
-			$playlist = json_decode(file_get_contents(__DIR__ . '/playlist.json'), true) ?: [];
+		if (file_exists(__DIR__ . '/../playlist.json')) {
+			$playlist = json_decode(file_get_contents(__DIR__ . '/../playlist.json'), true) ?: [];
 		}
 		
 		// Calculate movie limit (70% of total limit)
@@ -389,8 +389,8 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_series') {
 	if ($limit > 0) {
 		// Return limited series list
 		$tvPlaylist = [];
-		if (file_exists(__DIR__ . '/tv_playlist.json')) {
-			$tvPlaylist = json_decode(file_get_contents(__DIR__ . '/tv_playlist.json'), true) ?: [];
+		if (file_exists(__DIR__ . '/../tv_playlist.json')) {
+			$tvPlaylist = json_decode(file_get_contents(__DIR__ . '/../tv_playlist.json'), true) ?: [];
 		}
 		
 		// Calculate TV limit (30% of total limit)
@@ -892,7 +892,7 @@ foreach ($seasonNumbers as $seasonNumber) {
 
 // Save all episodes to cache in one atomic operation with file locking
 if (!empty($episodesToCache)) {
-    $episodeLookupFile = __DIR__ . "/cache/episode_lookup.json";
+    $episodeLookupFile = __DIR__ . "/../cache/episode_lookup.json";
     $fp = fopen($episodeLookupFile, 'c+');
     if ($fp && flock($fp, LOCK_EX)) {
         $existingData = [];

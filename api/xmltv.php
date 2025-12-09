@@ -6,8 +6,8 @@
  * The EPG is fetched from Pluto TV during sync
  */
 
-$cacheXmlFile = __DIR__ . '/channels/epg.xml';
-$cacheGzFile  = __DIR__ . '/channels/epg.xml.gz';
+$cacheXmlFile = __DIR__ . '/../channels/epg.xml';
+$cacheGzFile  = __DIR__ . '/../channels/epg.xml.gz';
 
 // Check if client accepts gzip
 $acceptGzip = strpos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false;

@@ -1,6 +1,6 @@
 <?php
 
-require_once 'config.php';
+require_once __DIR__ . '/../config.php';
 
 function channelIdFromName($name) {
     // Deterministic hash for channel name
@@ -18,7 +18,7 @@ function runLivePlaylistGenerate() {
         ? 'http://drewlive24.duckdns.org:8081/DrewLive/MergedPlaylist.m3u8'
         : 'http://drewlive24.duckdns.org:8081/DrewLive/MergedCleanPlaylist.m3u8';
 
-    $categoriesFile = __DIR__ . "/channels/get_live_categories.json";
+    $categoriesFile = __DIR__ . "/../channels/get_live_categories.json";
 
     $playlist = @file_get_contents($playlistUrl);
     if ($playlist === false) {
