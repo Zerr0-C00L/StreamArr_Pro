@@ -1,4 +1,4 @@
-# TMDB to VOD: Free Live TV, Movies & Series Playlist \[Xtream Codes & M3U8\]
+# StreamArr - Free Live TV, Movies & Series Playlist \[Xtream Codes & M3U8\]
 
 ## Update 12/08/2025 - Multi-Provider & Cloud Deployment
 
@@ -6,33 +6,33 @@
 
 - **Multi-Provider Stream Support**: Added fallback system with Comet, MediaFusion, and Torrentio providers. If one provider is blocked or down, automatically tries the next.
 - **Cloud Deployment Ready**: Optimized for Hetzner Cloud and other datacenter hosting. Comet and MediaFusion work perfectly on datacenter IPs where Torrentio may be blocked.
-- **Background Sync Daemon**: New `background_sync_daemon.php` automatically syncs with GitHub's large playlist (~51K movies, ~17K series) while running your own smaller playlist initially.
+- **Background Sync Daemon**: New worker daemon automatically syncs with GitHub's large playlist (~51K movies, ~17K series) while running your own smaller playlist initially.
 - **SQLite Episode Cache**: Migrated episode lookups to SQLite database for faster performance and reliability.
-- **Systemd Service**: Auto-start daemon on server boot with `streaming-sync.service`.
+- **Systemd Service**: Auto-start daemon on server boot with `streamarr.service`.
 
 ### 🔧 Technical Improvements
 
-- **Provider Configuration**: Configure providers in `config.php` with `$GLOBALS['STREAM_PROVIDERS']`
+- **Provider Configuration**: Configure providers via web UI or environment variables
 - **Comet Integration**: Works with Real-Debrid on datacenter IPs (Hetzner, DigitalOcean, etc.)
 - **MediaFusion Integration**: ElfHosted instance as backup provider
 - **Improved Error Handling**: Better fallback logic when providers fail
-- **Cleaned Codebase**: Removed unnecessary files, reduced project size by 73%
+- **Cleaned Codebase**: Fully rewritten in Go for better performance
 
 ### 📦 Quick Cloud Setup (Hetzner)
 
 ```bash
 # 1. Create Ubuntu 24.04 server on Hetzner (~$4/month)
 # 2. Install dependencies
-apt update && apt install -y php8.3-fpm php8.3-curl php8.3-sqlite3 nginx
+apt update && apt install -y golang postgresql nginx
 
 # 3. Clone and configure
-git clone https://github.com/Zerr0-C00L/tmdb-to-vod-playlist.git /var/www/streaming
-cp /var/www/streaming/config.example.php /var/www/streaming/config.php
-# Edit config.php with your TMDB and Real-Debrid API keys
+git clone https://github.com/Zerr0-C00L/StreamArr.git /var/www/streamarr
+cd /var/www/streamarr
+cp .env.example .env
+# Edit .env with your TMDB and Real-Debrid API keys
 
-# 4. Enable background sync
-cp /var/www/streaming/streaming-sync.service /etc/systemd/system/
-systemctl enable --now streaming-sync
+# 4. Build and run
+./start.sh
 ```
 
 ---
@@ -57,7 +57,7 @@ Generate dynamic playlists for Live TV, Movies and TV Series using a mock versio
 <table style="border-collapse: collapse; border: none;">
   <tr>
     <td style="border: none;">
-      <a href="https://github.com/Zerr0-C00L/tmdb-to-vod-playlist/archive/refs/heads/main.zip">
+      <a href="https://github.com/Zerr0-C00L/StreamArr/archive/refs/heads/main.zip">
         <img src="https://img.shields.io/badge/Download%20ZIP-latest-blue?style=for-the-badge&logo=github" alt="Download ZIP">
       </a>
     </td>
@@ -156,7 +156,7 @@ Generate dynamic playlists for Live TV, Movies and TV Series using a mock versio
 
 # What is HeadlessVidX?​
 
-HeadlessVidX is a tool designed to simplify the development of video extractors for streaming websites. It provides an easy-to-use solution for users, regardless of their programming skills, to quickly add video streaming sites to tools such as 'TMDB TO VOD'.
+HeadlessVidX is a tool designed to simplify the development of video extractors for streaming websites. It provides an easy-to-use solution for users, regardless of their programming skills, to quickly add video streaming sites to tools such as 'StreamArr'.
 <table>
   <tr>
 <td align="center">

@@ -1,5 +1,6 @@
 # API Keys and secrets
 config.php
+.env
 
 # Cache and generated files
 cache/
@@ -9,6 +10,15 @@ sessions/
 *.json
 !package.json
 playlist.m3u8
+*.pid
+
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
 # OS files
 .DS_Store
@@ -36,3 +46,6 @@ hashlist_shards/
 # IDE
 .vscode/
 .idea/
+
+# Archived legacy files
+archive/
