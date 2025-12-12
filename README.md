@@ -109,6 +109,105 @@ Access the Web UI at http://localhost:8080
 
 </details>
 
+### Option 3: VPS Deployment (Hetzner, DigitalOcean, etc.)
+
+<details>
+<summary>Click to expand VPS installation guide</summary>
+
+#### Step 1: Create a VPS
+
+Create a VPS with any provider (Hetzner, DigitalOcean, Vultr, Linode, etc.):
+- **OS**: Ubuntu 22.04 or 24.04 LTS
+- **RAM**: 2GB minimum (4GB recommended)
+- **Storage**: 20GB minimum
+
+#### Step 2: Connect and Update
+
+```bash
+# SSH into your server
+ssh root@YOUR-SERVER-IP
+
+# Update system
+apt update && apt upgrade -y
+```
+
+#### Step 3: Install Docker
+
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+
+# Start Docker
+systemctl enable docker
+systemctl start docker
+```
+
+#### Step 4: Install StreamArr
+
+```bash
+# Clone repository
+git clone https://github.com/Zerr0-C00L/StreamArr.git
+cd StreamArr
+
+# Start with Docker Compose
+docker compose up -d
+
+# Check if running
+docker compose ps
+```
+
+#### Step 5: Configure Firewall
+
+```bash
+# Allow port 8080
+ufw allow 8080/tcp
+ufw enable
+```
+
+#### Step 6: Access StreamArr
+
+Open in your browser: `http://YOUR-SERVER-IP:8080`
+
+#### Optional: Setup Domain with HTTPS (Recommended)
+
+```bash
+# Install Caddy (automatic HTTPS)
+apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+apt update && apt install caddy
+
+# Create Caddyfile
+cat > /etc/caddy/Caddyfile << 'EOF'
+your-domain.com {
+    reverse_proxy localhost:8080
+}
+EOF
+
+# Restart Caddy
+systemctl restart caddy
+```
+
+Now access via `https://your-domain.com`
+
+#### Useful Commands
+
+```bash
+# View logs
+docker compose logs -f
+
+# Restart services
+docker compose restart
+
+# Update to latest version
+cd StreamArr
+git pull
+docker compose build
+docker compose up -d
+```
+
+</details>
+
 ---
 
 ## ⚙️ First-Time Setup
