@@ -88,6 +88,10 @@ func SetupRoutes(handler *Handler) http.Handler {
 	api.HandleFunc("/version/check", handler.CheckForUpdates).Methods("GET")
 	api.HandleFunc("/update/install", handler.InstallUpdate).Methods("POST")
 
+	// Adult VOD Import
+	api.HandleFunc("/adult-vod/import", handler.ImportAdultVOD).Methods("POST")
+	api.HandleFunc("/adult-vod/stats", handler.GetAdultVODStats).Methods("GET")
+
 	// Serve static UI files (SPA)
 	uiPath := getUIPath()
 	if uiPath != "" {
@@ -266,6 +270,10 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	api.HandleFunc("/version", handler.GetVersion).Methods("GET")
 	api.HandleFunc("/version/check", handler.CheckForUpdates).Methods("GET")
 	api.HandleFunc("/update/install", handler.InstallUpdate).Methods("POST")
+
+	// Adult VOD Import
+	api.HandleFunc("/adult-vod/import", handler.ImportAdultVOD).Methods("POST")
+	api.HandleFunc("/adult-vod/stats", handler.GetAdultVODStats).Methods("GET")
 
 	// Serve static UI files (SPA)
 	uiPath := getUIPath()

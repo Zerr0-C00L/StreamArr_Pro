@@ -25,6 +25,7 @@ interface SettingsData {
   auto_add_collections: boolean;
   include_live_tv: boolean;
   include_adult_vod: boolean;
+  import_adult_vod_from_github: boolean;
   min_year: number;
   min_runtime: number;
   enable_notifications: boolean;
@@ -1354,12 +1355,58 @@ export default function Settings() {
                     className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
                   />
                   <label htmlFor="include_adult" className="text-sm font-medium text-gray-300">
-                    Include Adult Content
+                    Include Adult Content (TMDB)
                   </label>
                 </div>
                 <p className="text-xs text-gray-500 mt-1 ml-6">
                   Include adult-rated content (18+) in TMDB discovery and playlists.
                 </p>
+              </div>
+
+              {/* Adult VOD Import Section */}
+              <div className="pt-4 border-t border-gray-700 bg-red-900/10 p-4 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="checkbox"
+                    id="import_adult_vod"
+                    checked={settings.import_adult_vod_from_github || false}
+                    onChange={(e) => updateSetting('import_adult_vod_from_github', e.target.checked)}
+                    className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
+                  />
+                  <label htmlFor="import_adult_vod" className="text-sm font-medium text-gray-300">
+                    Import Adult VOD from GitHub (18+)
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-1 ml-6 mb-3">
+                  Enable importing adult VOD content from public-files GitHub repository. This is separate from TMDB adult content.
+                </p>
+                {settings.import_adult_vod_from_github && (
+                  <button
+                    onClick={async () => {
+                      setMessage('⏳ Importing adult VOD from GitHub...');
+                      try {
+                        const response = await fetch(`${API_BASE_URL}/adult-vod/import`, {
+                          method: 'POST',
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                          setMessage(`✅ ${data.message} - Imported: ${data.imported}, Skipped: ${data.skipped}, Errors: ${data.errors}`);
+                          setTimeout(() => setMessage(''), 8000);
+                        } else {
+                          setMessage(`❌ Failed: ${data.error}`);
+                          setTimeout(() => setMessage(''), 5000);
+                        }
+                      } catch (error) {
+                        setMessage(`❌ Failed to import: ${error}`);
+                        setTimeout(() => setMessage(''), 5000);
+                      }
+                    }}
+                    className="ml-6 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 text-sm"
+                  >
+                    <Download className="w-4 h-4" />
+                    Import Adult VOD Now
+                  </button>
+                )}
               </div>
 
               <div className="pt-4 border-t border-gray-700">

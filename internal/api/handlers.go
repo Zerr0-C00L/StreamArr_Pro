@@ -2254,3 +2254,152 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 		"message": "Update started. The server will restart shortly. Check logs/update.log for progress.",
 	})
 }
+// ImportAdultVOD handles POST /api/v1/adult-vod/import
+func (h *Handler) ImportAdultVOD(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// Check if feature is enabled in settings
+	if h.settingsManager != nil {
+		settings := h.settingsManager.Get()
+		if !settings.ImportAdultVODFromGitHub {
+			respondError(w, http.StatusForbidden, "Adult VOD import from GitHub is disabled in settings")
+			return
+		}
+	}
+	
+	log.Println("[Adult VOD Import] Starting import from GitHub...")
+	
+	// Fetch adult-movies.json from GitHub
+	adultMoviesURL := "https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/adult-movies.json"
+	
+	resp, err := http.Get(adultMoviesURL)
+	if err != nil {
+		log.Printf("[Adult VOD Import] Failed to fetch: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to fetch adult movies: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Adult VOD Import] HTTP %d from GitHub", resp.StatusCode)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("GitHub returned status %d", resp.StatusCode))
+		return
+	}
+	
+	// Parse JSON response
+	var adultMovies []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&adultMovies); err != nil {
+		log.Printf("[Adult VOD Import] Failed to parse JSON: %v", err)
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to parse adult movies: %v", err))
+		return
+	}
+	
+	log.Printf("[Adult VOD Import] Fetched %d adult movies from GitHub", len(adultMovies))
+	
+	// Import movies into database
+	imported := 0
+	skipped := 0
+	errors := 0
+	
+	for _, movieData := range adultMovies {
+		// Extract movie data
+		tmdbID, _ := movieData["num"].(float64)
+		if tmdbID == 0 {
+			continue
+		}
+		
+		title, _ := movieData["name"].(string)
+		posterPath, _ := movieData["stream_icon"].(string)
+		plot, _ := movieData["plot"].(string)
+		genresStr, _ := movieData["genres"].(string)
+		director, _ := movieData["director"].(string)
+		cast, _ := movieData["cast"].(string)
+		rating, _ := movieData["rating"].(float64)
+		addedTimestamp, _ := movieData["added"].(float64)
+		
+		// Parse genres
+		genres := []string{}
+		if genresStr != "" {
+			genres = strings.Split(genresStr, ",")
+			for i := range genres {
+				genres[i] = strings.TrimSpace(genres[i])
+			}
+		}
+		
+		// Create movie object
+		movie := &models.Movie{
+			TMDBID:         int(tmdbID),
+			Title:          title,
+			OriginalTitle:  title,
+			Overview:       plot,
+			PosterPath:     posterPath,
+			Genres:         genres,
+			Monitored:      true,
+			Available:      true,
+			QualityProfile: "1080p",
+			Metadata: models.Metadata{
+				"stream_type":  "adult",
+				"category_id":  "999993",
+				"director":     director,
+				"cast":         cast,
+				"rating":       rating,
+				"source":       "github_public_files",
+				"imported_at":  time.Now().Format(time.RFC3339),
+			},
+		}
+		
+		// Set added_at from timestamp if available
+		if addedTimestamp > 0 {
+			addedTime := time.Unix(int64(addedTimestamp), 0)
+			movie.AddedAt = addedTime
+		}
+		
+		// Try to add to database
+		if err := h.movieStore.Add(ctx, movie); err != nil {
+			if strings.Contains(err.Error(), "already exists") {
+				skipped++
+			} else {
+				errors++
+				log.Printf("[Adult VOD Import] Error adding movie %s: %v", title, err)
+			}
+		} else {
+			imported++
+		}
+	}
+	
+	log.Printf("[Adult VOD Import] Complete: %d imported, %d skipped, %d errors", imported, skipped, errors)
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"imported": imported,
+		"skipped":  skipped,
+		"errors":   errors,
+		"total":    len(adultMovies),
+		"message":  fmt.Sprintf("Imported %d adult movies from GitHub", imported),
+	})
+}
+
+// GetAdultVODStats handles GET /api/v1/adult-vod/stats
+func (h *Handler) GetAdultVODStats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// Count adult movies in database (by metadata stream_type = adult)
+	query := `
+		SELECT COUNT(*) 
+		FROM library_movies 
+		WHERE metadata->>'stream_type' = 'adult'
+	`
+	
+	var count int
+	err := h.movieStore.GetDB().QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		log.Printf("[Adult VOD Stats] Error: %v", err)
+		respondError(w, http.StatusInternalServerError, "Failed to get adult VOD stats")
+		return
+	}
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"total_adult_movies": count,
+		"source":             "github_public_files",
+	})
+}
