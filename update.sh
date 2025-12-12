@@ -1,6 +1,6 @@
 #!/bin/bash
 # StreamArr Auto-Update Script
-# This script pulls the latest code, builds, and restarts the server
+# This script pulls the latest code and updates the deployment
 
 set -e
 
@@ -15,6 +15,44 @@ log() {
 }
 
 log "Starting StreamArr update..."
+
+# Pull latest changes
+log "Pulling latest changes from GitHub..."
+git fetch origin main 2>&1 | tee -a "$LOG_FILE"
+
+# Get the branch parameter (default: main)
+BRANCH="${1:-main}"
+log "Checking out branch: $BRANCH"
+git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
+
+# Check if running in Docker
+if [ -f /.dockerenv ]; then
+    log "Running in Docker container"
+    
+    # Check if docker socket is mounted
+    if [ -S /var/run/docker.sock ]; then
+        log "Docker socket available, rebuilding containers..."
+        
+        # Use docker-compose from mounted location
+        if [ -f /app/host/docker-compose.yml ]; then
+            cd /app/host
+            docker-compose down 2>&1 | tee -a "$LOG_FILE"
+            docker-compose up -d --build 2>&1 | tee -a "$LOG_FILE"
+            log "Container rebuild complete!"
+        else
+            log "ERROR: docker-compose.yml not found at /app/host"
+            log "Please rebuild manually: cd /opt/StreamArr && docker-compose down && docker-compose up -d --build"
+        fi
+    else
+        log "Docker socket not mounted, please rebuild manually"
+        log "From host, run: cd /opt/StreamArr && docker-compose down && docker-compose up -d --build"
+    fi
+    
+    exit 0
+fi
+
+# Non-Docker update path
+log "Running in non-Docker environment"
 
 # Check if Go is installed
 if ! command -v go &> /dev/null; then

@@ -2218,7 +2218,7 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 	// Check if update script exists
 	updateScript := "./update.sh"
 	if _, err := os.Stat(updateScript); os.IsNotExist(err) {
-		respondError(w, http.StatusNotImplemented, "Update script not found. Please update manually.")
+		respondError(w, http.StatusNotImplemented, "Update script not found. Please update manually with: git pull && docker-compose down && docker-compose up -d --build")
 		return
 	}
 
@@ -2233,11 +2233,27 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("[Update] Starting update process...")
 	
+	// Check if running in Docker
+	isDocker := false
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		isDocker = true
+		log.Println("[Update] Detected Docker environment")
+	}
+	
 	// Run update script completely detached using nohup + setsid
 	// This ensures the script survives even when the server process dies
-	cmd := exec.Command("/bin/bash", "-c", 
-		fmt.Sprintf("nohup setsid /bin/bash %s %s > /opt/StreamArr/logs/update.log 2>&1 &", updateScript, branch))
-	cmd.Dir = "."
+	var cmd *exec.Cmd
+	if isDocker {
+		// In Docker, run with full path and ensure it can access docker socket
+		cmd = exec.Command("/bin/bash", "-c", 
+			fmt.Sprintf("nohup setsid /bin/bash /app/update.sh %s > /app/logs/update.log 2>&1 &", branch))
+		cmd.Dir = "/app"
+	} else {
+		// Non-Docker environment
+		cmd = exec.Command("/bin/bash", "-c", 
+			fmt.Sprintf("nohup setsid /bin/bash %s %s > logs/update.log 2>&1 &", updateScript, branch))
+		cmd.Dir = "."
+	}
 	
 	// Start the command but don't wait for it
 	if err := cmd.Start(); err != nil {

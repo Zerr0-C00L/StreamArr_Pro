@@ -55,6 +55,13 @@ COPY --from=frontend-builder /app/streamarr-ui/dist /app/streamarr-ui/dist
 # Copy channel files and configs
 COPY channels/ /app/channels/
 
+# Copy update and build scripts for in-app updates
+COPY update.sh build.sh start.sh stop.sh docker-compose.yml ./
+RUN chmod +x update.sh build.sh start.sh stop.sh
+
+# Install git, docker-cli, and docker-compose for container updates
+RUN apk add --no-cache git bash docker-cli docker-cli-compose
+
 # Create directories
 RUN mkdir -p /app/logs /app/cache /app/sessions
 
