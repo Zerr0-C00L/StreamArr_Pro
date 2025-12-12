@@ -1,6 +1,11 @@
 # Build stage for Go backend
 FROM golang:1.23-alpine AS backend-builder
 
+# Build arguments for version info
+ARG VERSION=main
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+
 WORKDIR /app
 
 # Install build dependencies
@@ -13,10 +18,11 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build binaries
-RUN CGO_ENABLED=0 GOOS=linux go build -o bin/server cmd/server/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -o bin/worker cmd/worker/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -o bin/migrate cmd/migrate/main.go
+# Build binaries with version info
+RUN LDFLAGS="-X 'github.com/Zerr0-C00L/StreamArr/internal/api.Version=${VERSION}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.Commit=${COMMIT}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.BuildDate=${BUILD_DATE}'" && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/server cmd/server/main.go && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/worker cmd/worker/main.go && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/migrate cmd/migrate/main.go
 
 # Build stage for React frontend
 FROM node:20-alpine AS frontend-builder

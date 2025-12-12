@@ -1,6 +1,11 @@
 services:
   streamarr:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-main}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     container_name: streamarr
     restart: unless-stopped
     ports:
