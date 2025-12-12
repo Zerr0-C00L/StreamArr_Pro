@@ -83,6 +83,7 @@ func SetupRoutes(handler *Handler) http.Handler {
 	// Version / Updates
 	api.HandleFunc("/version", handler.GetVersion).Methods("GET")
 	api.HandleFunc("/version/check", handler.CheckForUpdates).Methods("GET")
+	api.HandleFunc("/update/install", handler.InstallUpdate).Methods("POST")
 
 	// Serve static UI files (SPA)
 	uiPath := getUIPath()
@@ -258,6 +259,7 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	// Version / Updates
 	api.HandleFunc("/version", handler.GetVersion).Methods("GET")
 	api.HandleFunc("/version/check", handler.CheckForUpdates).Methods("GET")
+	api.HandleFunc("/update/install", handler.InstallUpdate).Methods("POST")
 
 	// Serve static UI files (SPA)
 	uiPath := getUIPath()

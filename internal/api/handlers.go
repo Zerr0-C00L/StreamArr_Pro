@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -1732,5 +1735,33 @@ func (h *Handler) CheckForUpdates(w http.ResponseWriter, r *http.Request) {
 		"latest_date":      commitData.Commit.Author.Date,
 		"update_available": updateAvailable,
 		"changelog":        changelog,
+	})
+}
+
+// InstallUpdate triggers the update process
+func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
+	// Check if update script exists
+	updateScript := "./update.sh"
+	if _, err := os.Stat(updateScript); os.IsNotExist(err) {
+		respondError(w, http.StatusNotImplemented, "Update script not found. Please update manually.")
+		return
+	}
+
+	// Run update script in background
+	go func() {
+		log.Println("[Update] Starting update process...")
+		cmd := exec.Command("/bin/bash", updateScript)
+		cmd.Dir = "."
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("[Update] Failed: %v\nOutput: %s", err, string(output))
+		} else {
+			log.Printf("[Update] Success: %s", string(output))
+		}
+	}()
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Update started. The server will restart shortly.",
 	})
 }

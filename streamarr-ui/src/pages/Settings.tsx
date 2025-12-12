@@ -129,6 +129,7 @@ export default function Settings() {
   const [dbStats, setDbStats] = useState<{ movies: number; series: number; episodes: number; streams: number; collections: number } | null>(null);
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -248,6 +249,31 @@ export default function Settings() {
       setTimeout(() => setMessage(''), 5000);
     }
     setCheckingUpdate(false);
+  };
+
+  const installUpdate = async () => {
+    if (!confirm('Are you sure you want to install the update? The server will restart.')) {
+      return;
+    }
+    setInstallingUpdate(true);
+    setMessage('🔄 Installing update... Server will restart shortly.');
+    try {
+      const response = await fetch(`${API_BASE_URL}/update/install`, { method: 'POST' });
+      if (response.ok) {
+        setMessage('✅ Update started! The page will reload in 30 seconds...');
+        // Wait for server to restart and reload
+        setTimeout(() => {
+          window.location.reload();
+        }, 30000);
+      } else {
+        const data = await response.json();
+        setMessage(`❌ Update failed: ${data.error || 'Unknown error'}`);
+        setInstallingUpdate(false);
+      }
+    } catch (error) {
+      setMessage(`❌ Failed to start update: ${error}`);
+      setInstallingUpdate(false);
+    }
   };
 
   const showConfirmDialog = (action: string, title: string, message: string) => {
@@ -2593,7 +2619,7 @@ export default function Settings() {
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={checkForUpdates}
-                    disabled={checkingUpdate}
+                    disabled={checkingUpdate || installingUpdate}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                   >
                     {checkingUpdate ? (
@@ -2607,18 +2633,37 @@ export default function Settings() {
                     )}
                   </button>
                   {versionInfo?.update_available && (
-                    <a
-                      href="https://github.com/Zerr0-C00L/StreamArr/releases"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                    >
-                      <Download className="h-4 w-4" /> View Release
-                    </a>
+                    <>
+                      <button
+                        onClick={installUpdate}
+                        disabled={installingUpdate}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {installingUpdate ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 animate-spin" /> Installing...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4" /> Install Update
+                          </>
+                        )}
+                      </button>
+                      <a
+                        href="https://github.com/Zerr0-C00L/StreamArr/releases"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+                      >
+                        <ExternalLink className="h-4 w-4" /> View on GitHub
+                      </a>
+                    </>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-3">
-                  To update, pull the latest changes and rebuild the application.
+                  {installingUpdate 
+                    ? 'Update in progress. The server will restart automatically...'
+                    : 'Install Update will pull latest code, rebuild, and restart the server.'}
                 </p>
               </div>
 
