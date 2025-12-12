@@ -7,8 +7,8 @@ cache/
 logs/
 sessions/
 *.log
-*.json
-!package.json
+playlist.json
+tv_playlist.json
 playlist.m3u8
 *.pid
 
