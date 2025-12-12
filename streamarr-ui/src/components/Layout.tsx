@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Film, Calendar, Settings, Activity, Compass, Radio, Library } from 'lucide-react';
 
@@ -8,6 +8,21 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const [version, setVersion] = useState('...');
+  const [apiOnline, setApiOnline] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/v1/version')
+      .then(res => res.json())
+      .then(data => {
+        setVersion(data.current_version || 'unknown');
+        setApiOnline(true);
+      })
+      .catch(() => {
+        setVersion('offline');
+        setApiOnline(false);
+      });
+  }, []);
 
   const navItems = [
     { path: '/', icon: Activity, label: 'Dashboard' },
@@ -53,11 +68,11 @@ export default function Layout({ children }: LayoutProps) {
           <div className="text-xs text-slate-400">
             <div className="flex justify-between mb-1">
               <span>API Status</span>
-              <span className="text-green-400">●  Online</span>
+              <span className={apiOnline ? "text-green-400" : "text-red-400"}>● {apiOnline ? 'Online' : 'Offline'}</span>
             </div>
             <div className="flex justify-between">
               <span>Version</span>
-              <span>v1.0.0</span>
+              <span>{version}</span>
             </div>
           </div>
         </div>
