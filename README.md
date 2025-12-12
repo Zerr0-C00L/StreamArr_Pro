@@ -2,7 +2,7 @@
 
 **Self-hosted media server for Live TV, Movies & Series with Xtream Codes & M3U8 support**
 
-Generate dynamic playlists for Live TV, Movies and TV Series using Xtream Codes compatible API. Stream content via Real-Debrid, Torrentio, Comet, MediaFusion and direct sources. Perfect for apps like TiviMate, iMPlayer, IPTV Smarters Pro, XCIPTV and more.
+Generate dynamic playlists for Live TV, Movies and TV Series using Xtream Codes compatible API. Stream content via Real-Debrid, Torrentio, Comet, MediaFusion and direct sources. Perfect for apps like Chillio,TiviMate, iMPlayer, IPTV Smarters Pro, XCIPTV and more.
 
 [![Download ZIP](https://img.shields.io/badge/Download%20ZIP-latest-blue?style=for-the-badge&logo=github)](https://github.com/Zerr0-C00L/StreamArr/archive/refs/heads/main.zip)
 [![Ko-fi](https://www.ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/zeroq)
