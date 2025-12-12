@@ -141,6 +141,7 @@ func main() {
 	}
 	cfg.UserCreatePlaylist = appSettings.UserCreatePlaylist
 	cfg.IncludeAdultVOD = appSettings.IncludeAdultVOD
+	cfg.OnlyReleasedContent = appSettings.OnlyReleasedContent
 	if appSettings.AutoCacheIntervalHours > 0 {
 		cfg.AutoCacheIntervalHours = appSettings.AutoCacheIntervalHours
 	}

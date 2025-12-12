@@ -366,3 +366,19 @@ func (s *SeriesStore) CountEpisodes(ctx context.Context) (int, error) {
 	}
 	return int(count.Int64), nil
 }
+
+// DeleteAll removes all series from the library
+func (s *SeriesStore) DeleteAll(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM library_series")
+	return err
+}
+
+// ResetStatus resets the search status for all series
+func (s *SeriesStore) ResetStatus(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE library_series 
+		SET search_status = '',
+		    last_checked = NULL
+	`)
+	return err
+}

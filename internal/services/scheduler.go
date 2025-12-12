@@ -16,6 +16,11 @@ type ServiceStatus struct {
 	NextRun     time.Time `json:"next_run"`
 	LastError   string    `json:"last_error,omitempty"`
 	RunCount    int64     `json:"run_count"`
+	// Progress tracking
+	Progress        int    `json:"progress"`         // 0-100 percentage
+	ProgressMessage string `json:"progress_message"` // Current status message
+	ItemsProcessed  int    `json:"items_processed"`
+	ItemsTotal      int    `json:"items_total"`
 }
 
 // ServiceScheduler manages background services and their status
@@ -68,10 +73,29 @@ func (s *ServiceScheduler) MarkComplete(name string, err error, interval time.Du
 		svc.LastRun = time.Now()
 		svc.NextRun = time.Now().Add(interval)
 		svc.RunCount++
+		svc.Progress = 0
+		svc.ProgressMessage = ""
+		svc.ItemsProcessed = 0
+		svc.ItemsTotal = 0
 		if err != nil {
 			svc.LastError = err.Error()
 		} else {
 			svc.LastError = ""
+		}
+	}
+}
+
+// UpdateProgress updates the progress of a running service
+func (s *ServiceScheduler) UpdateProgress(name string, processed, total int, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if svc, exists := s.services[name]; exists {
+		svc.ItemsProcessed = processed
+		svc.ItemsTotal = total
+		svc.ProgressMessage = message
+		if total > 0 {
+			svc.Progress = (processed * 100) / total
 		}
 	}
 }

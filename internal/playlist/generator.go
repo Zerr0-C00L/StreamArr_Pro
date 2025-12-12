@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/Zerr0-C00L/StreamArr/internal/config"
 	"github.com/Zerr0-C00L/StreamArr/internal/models"
@@ -40,8 +41,29 @@ func NewPlaylistGenerator(cfg *config.Config, db *sql.DB, tmdb *services.TMDBCli
 	}
 }
 
+// isMovieReleased checks if a movie has been released to digital/streaming/home video
+func (pg *PlaylistGenerator) isMovieReleased(movie models.Movie) bool {
+	if !pg.cfg.OnlyReleasedContent {
+		return true // Filter disabled, include all movies
+	}
+	
+	if movie.ReleaseDate == nil {
+		return false // No release date = not released
+	}
+	
+	// For digital release, typically add ~90 days after theatrical release
+	now := time.Now()
+	digitalReleaseBuffer := 90 * 24 * time.Hour
+	digitalReleaseDate := movie.ReleaseDate.Add(digitalReleaseBuffer)
+	
+	return now.After(digitalReleaseDate)
+}
+
 func (pg *PlaylistGenerator) GenerateMoviePlaylist(ctx context.Context) ([]SimplePlaylistEntry, error) {
 	log.Println("Generating movie playlist...")
+	if pg.cfg.OnlyReleasedContent {
+		log.Println("OnlyReleasedContent is enabled - filtering unreleased movies")
+	}
 	
 	if !pg.cfg.UserCreatePlaylist {
 		log.Println("User playlist creation disabled, using cached GitHub playlist")
@@ -49,6 +71,7 @@ func (pg *PlaylistGenerator) GenerateMoviePlaylist(ctx context.Context) ([]Simpl
 	}
 	
 	entries := make([]SimplePlaylistEntry, 0)
+	skippedUnreleased := 0
 	
 	// Fetch movies by discovery (popular, now playing are handled by TMDB's discover)
 	// Discover by popularity (descending)
@@ -61,12 +84,20 @@ func (pg *PlaylistGenerator) GenerateMoviePlaylist(ctx context.Context) ([]Simpl
 		
 		for _, movie := range movies {
 			if movie.ReleaseDate != nil && movie.ReleaseDate.Year() >= pg.cfg.MinYear {
+				// Check if movie is released (if OnlyReleasedContent is enabled)
+				if !pg.isMovieReleased(*movie) {
+					skippedUnreleased++
+					continue
+				}
 				entry := pg.movieToEntry(*movie, "2", "Popular Movies")
 				entries = append(entries, entry)
 			}
 		}
 	}
 	
+	if skippedUnreleased > 0 {
+		log.Printf("Skipped %d unreleased movies", skippedUnreleased)
+	}
 	log.Printf("Generated %d movie entries", len(entries))
 	return entries, nil
 }

@@ -90,6 +90,20 @@ func (e *Manager) UpdateEPG(channels []livetv.Channel) error {
 	return nil
 }
 
+// Update triggers a refresh of EPG data
+func (e *Manager) Update() {
+	e.UpdateEPG(nil)
+}
+
+// Clear removes all cached EPG data
+func (e *Manager) Clear() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.programs = make(map[string][]livetv.EPGProgram)
+	e.lastUpdate = time.Time{}
+	fmt.Println("EPG: Cache cleared")
+}
+
 // GenerateXMLTV generates XMLTV format EPG
 func (e *Manager) GenerateXMLTV(channels []livetv.Channel) (string, error) {
 	e.mu.RLock()

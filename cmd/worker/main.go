@@ -89,6 +89,15 @@ func main() {
 		cfg.CometIndexers = appSettings.CometIndexers
 	}
 	
+	// Playlist settings
+	if appSettings.TotalPages > 0 {
+		cfg.TotalPages = appSettings.TotalPages
+	}
+	if appSettings.MinYear > 0 {
+		cfg.MinYear = appSettings.MinYear
+	}
+	cfg.OnlyReleasedContent = appSettings.OnlyReleasedContent
+	
 	log.Println("✓ All settings loaded from database")
 
 	// Initialize components

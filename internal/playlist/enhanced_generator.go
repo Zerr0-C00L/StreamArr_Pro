@@ -172,12 +172,38 @@ func (eg *EnhancedGenerator) GenerateComplete(ctx context.Context) error {
 }
 
 // GenerateMoviePlaylistEnhanced with quality variants and categories
+// isMovieReleased checks if a movie has been released to digital/streaming/home video
+// If OnlyReleasedContent is disabled, always returns true
+func (eg *EnhancedGenerator) isMovieReleased(movie models.Movie) bool {
+	if !eg.cfg.OnlyReleasedContent {
+		return true // Filter disabled, include all movies
+	}
+	
+	if movie.ReleaseDate == nil {
+		return false // No release date = not released
+	}
+	
+	// Check if theatrical release date has passed
+	now := time.Now()
+	
+	// For digital release, typically add ~90 days after theatrical release
+	// This is a conservative estimate for when movies become available digitally
+	digitalReleaseBuffer := 90 * 24 * time.Hour
+	digitalReleaseDate := movie.ReleaseDate.Add(digitalReleaseBuffer)
+	
+	return now.After(digitalReleaseDate)
+}
+
 func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) ([]MoviePlaylistEntry, error) {
 	log.Println("Generating enhanced movie playlist with quality variants...")
+	if eg.cfg.OnlyReleasedContent {
+		log.Println("OnlyReleasedContent is enabled - filtering unreleased movies")
+	}
 	
 	entries := []MoviePlaylistEntry{}
 	addedIDs := make(map[int]bool)
 	num := 0
+	skippedUnreleased := 0
 	
 	// Fetch Popular Movies
 	log.Println("Fetching popular movies...")
@@ -193,6 +219,12 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 				continue
 			}
 			if movie.ReleaseDate == nil || movie.ReleaseDate.Year() < eg.cfg.MinYear {
+				continue
+			}
+			
+			// Check if movie is released (if OnlyReleasedContent is enabled)
+			if !eg.isMovieReleased(*movie) {
+				skippedUnreleased++
 				continue
 			}
 			
@@ -227,6 +259,12 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 					continue
 				}
 				
+				// Check if movie is released (if OnlyReleasedContent is enabled)
+				if !eg.isMovieReleased(*movie) {
+					skippedUnreleased++
+					continue
+				}
+				
 				movieEntries := eg.createMovieEntries(*movie, genre.name, &num)
 				entries = append(entries, movieEntries...)
 				addedIDs[movie.TMDBID] = true
@@ -234,6 +272,9 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 		}
 	}
 	
+	if skippedUnreleased > 0 {
+		log.Printf("Skipped %d unreleased movies", skippedUnreleased)
+	}
 	log.Printf("Generated %d total movie entries (with variants)", len(entries))
 	return entries, nil
 }

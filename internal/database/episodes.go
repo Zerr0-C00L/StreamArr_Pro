@@ -469,3 +469,21 @@ func (e *EpisodeStore) GetUpcoming(ctx context.Context, start, end string) ([]*m
 	return episodes, rows.Err()
 }
 
+// DeleteAll removes all episodes from the database
+func (e *EpisodeStore) DeleteAll(ctx context.Context) error {
+	_, err := e.db.ExecContext(ctx, "DELETE FROM library_episodes")
+	return err
+}
+
+// ListAll returns all episodes (just counts for stats)
+func (e *EpisodeStore) ListAll(ctx context.Context) ([]*models.Episode, error) {
+	var count int
+	err := e.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM library_episodes").Scan(&count)
+	if err != nil {
+		return nil, err
+	}
+	// Return empty slice with length info encoded
+	result := make([]*models.Episode, count)
+	return result, nil
+}
+

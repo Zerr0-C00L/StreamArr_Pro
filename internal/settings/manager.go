@@ -49,6 +49,7 @@ type Settings struct {
 	IncludeAdultVOD        bool   `json:"include_adult_vod"`
 	IncludeLiveTV          bool   `json:"include_live_tv"`
 	AutoCacheIntervalHours int    `json:"auto_cache_interval_hours"`
+	OnlyReleasedContent    bool   `json:"only_released_content"` // Only include movies/series released on streaming/digital/bluray
 	
 	// Live TV / M3U Sources
 	M3USources            []M3USource `json:"m3u_sources"`

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Key, Layers, Settings as SettingsIcon, List, Bell, Code, Plus, X, Tv, Server, Activity, Play, Clock, RefreshCw, Filter } from 'lucide-react';
+import { Save, Key, Layers, Settings as SettingsIcon, List, Bell, Code, Plus, X, Tv, Server, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -17,9 +17,9 @@ interface SettingsData {
   max_file_size: number;
   use_realdebrid: boolean;
   use_premiumize: boolean;
-  stream_providers: string;
+  stream_providers: string[] | string;
   torrentio_providers: string;
-  comet_indexers: string;
+  comet_indexers: string[] | string;
   enable_quality_variants: boolean;
   show_full_stream_name: boolean;
   auto_add_collections: boolean;
@@ -54,6 +54,8 @@ interface SettingsData {
   stream_sort_prefer: string;
   // Live TV settings
   livetv_enable_plutotv: boolean;
+  // Content filter settings
+  only_released_content: boolean;
 }
 
 interface MDBListEntry {
@@ -84,9 +86,13 @@ interface ServiceStatus {
   next_run: string;
   last_error?: string;
   run_count: number;
+  progress: number;
+  progress_message: string;
+  items_processed: number;
+  items_total: number;
 }
 
-type TabType = 'api' | 'providers' | 'quality' | 'playlist' | 'livetv' | 'filters' | 'services' | 'xtream' | 'notifications' | 'advanced';
+type TabType = 'api' | 'providers' | 'quality' | 'playlist' | 'livetv' | 'filters' | 'services' | 'xtream' | 'notifications' | 'database' | 'advanced';
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsData | null>(null);
@@ -107,11 +113,15 @@ export default function Settings() {
   const [enabledSources, setEnabledSources] = useState<Set<string>>(new Set());
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [triggeringService, setTriggeringService] = useState<string | null>(null);
+  const [dbOperation, setDbOperation] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ action: string; title: string; message: string } | null>(null);
+  const [dbStats, setDbStats] = useState<{ movies: number; series: number; episodes: number; streams: number; collections: number } | null>(null);
 
   useEffect(() => {
     fetchSettings();
     fetchChannelStats();
     fetchServices();
+    fetchDbStats();
   }, []);
 
   // Poll services status when on services tab
@@ -153,6 +163,48 @@ export default function Settings() {
       setTimeout(() => setMessage(''), 5000);
     }
     setTriggeringService(null);
+  };
+
+  const fetchDbStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/database/stats`);
+      if (response.ok) {
+        const data = await response.json();
+        setDbStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch database stats:', error);
+    }
+  };
+
+  const executeDbAction = async (action: string) => {
+    setDbOperation(action);
+    setConfirmDialog(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/database/${action}`, {
+        method: 'POST',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessage(`✅ ${data.message}`);
+        setTimeout(() => setMessage(''), 5000);
+        fetchDbStats();
+        // Also refresh services if we cleared something that affects them
+        fetchServices();
+      } else {
+        const data = await response.json();
+        setMessage(`❌ Failed: ${data.error}`);
+        setTimeout(() => setMessage(''), 5000);
+      }
+    } catch (error) {
+      setMessage(`❌ Failed: ${error}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setDbOperation(null);
+  };
+
+  const showConfirmDialog = (action: string, title: string, message: string) => {
+    setConfirmDialog({ action, title, message });
   };
 
   const toggleServiceEnabled = async (serviceName: string, enabled: boolean) => {
@@ -238,21 +290,39 @@ export default function Settings() {
         m3u_sources: m3uSources,
       };
       
+      console.log('Saving settings:', settingsToSave);
+      console.log('Settings keys:', Object.keys(settingsToSave));
+      
+      let body: string;
+      try {
+        body = JSON.stringify(settingsToSave);
+        console.log('Body size:', body.length, 'bytes');
+      } catch (e) {
+        console.error('JSON stringify error:', e);
+        setMessage(`❌ Error preparing settings: ${e instanceof Error ? e.message : 'Unknown'}`);
+        setSaving(false);
+        return;
+      }
+      
+      console.log('Sending to:', `${API_BASE_URL}/settings`);
+      
       const response = await fetch(`${API_BASE_URL}/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsToSave),
+        body: body,
       });
       
       if (response.ok) {
         setMessage('✅ Settings saved successfully!');
         setTimeout(() => setMessage(''), 3000);
       } else {
-        setMessage('❌ Failed to save settings');
+        const errorText = await response.text();
+        console.error('Save failed:', response.status, errorText);
+        setMessage(`❌ Failed to save settings: ${response.status}`);
       }
     } catch (error) {
       console.error('Failed to save settings:', error);
-      setMessage('❌ Error saving settings');
+      setMessage(`❌ Error saving settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -411,6 +481,7 @@ export default function Settings() {
     { id: 'services' as TabType, label: 'Services', icon: Activity },
     { id: 'xtream' as TabType, label: 'Xtream', icon: Server },
     { id: 'notifications' as TabType, label: 'Notifications', icon: Bell },
+    { id: 'database' as TabType, label: 'Database', icon: Database },
     { id: 'advanced' as TabType, label: 'Advanced', icon: Code },
   ];
 
@@ -551,18 +622,34 @@ export default function Settings() {
 
                 {/* User's MDBLists from API */}
                 {userLists.length > 0 && (
-                  <div className="mb-4 p-3 bg-gray-800 rounded-lg">
-                    <p className="text-sm text-gray-300 mb-2">Your MDBLists (click to add):</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
-                      {userLists.map((list) => (
-                        <button
-                          key={list.id}
-                          onClick={() => addUserList(list)}
-                          className="px-2 py-1.5 text-xs text-left bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30 transition-colors border border-blue-600/30"
-                        >
-                          {list.name} <span className="text-gray-500">({list.items})</span>
-                        </button>
-                      ))}
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-300 mb-3">📋 Your MDBLists (click to add to library sync):</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                      {userLists.map((list) => {
+                        const isAdded = mdbLists.some(l => l.url.includes(list.slug));
+                        return (
+                          <div
+                            key={list.id}
+                            onClick={() => !isAdded && addUserList(list)}
+                            className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                              isAdded
+                                ? 'bg-green-900/30 border-green-700 cursor-default'
+                                : 'bg-gray-800/50 border-gray-700 hover:bg-blue-900/30 hover:border-blue-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isAdded}
+                              onChange={() => {}}
+                              className="w-4 h-4 bg-gray-800 border-gray-700 rounded pointer-events-none"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-white truncate">{list.name}</div>
+                              <div className="text-xs text-gray-500">{list.items} items</div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -585,27 +672,37 @@ export default function Settings() {
                 </div>
 
                 {mdbLists.length > 0 && (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {mdbLists.map((list, index) => (
-                      <div key={index} className="flex items-center gap-2 p-3 bg-gray-800 rounded-lg">
-                        <input
-                          type="checkbox"
-                          checked={list.enabled}
-                          onChange={() => toggleMDBList(index)}
-                          className="w-4 h-4"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-white truncate">{list.name}</div>
-                          <div className="text-xs text-gray-400 truncate">{list.url}</div>
-                        </div>
-                        <button
-                          onClick={() => removeMDBList(index)}
-                          className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-300 mb-3">✅ Added Lists (synced to library):</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                      {mdbLists.map((list, index) => (
+                        <div
+                          key={index}
+                          className={`flex items-center gap-2 p-3 rounded-lg border transition-colors ${
+                            list.enabled
+                              ? 'bg-green-900/30 border-green-700'
+                              : 'bg-gray-800/50 border-gray-700 opacity-60'
+                          }`}
                         >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                          <input
+                            type="checkbox"
+                            checked={list.enabled}
+                            onChange={() => toggleMDBList(index)}
+                            className="w-4 h-4 bg-gray-800 border-gray-700 rounded cursor-pointer"
+                          />
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleMDBList(index)}>
+                            <div className="text-sm font-medium text-white truncate">{list.name}</div>
+                            <div className="text-xs text-gray-500 truncate">{list.url.split('/').pop()}</div>
+                          </div>
+                          <button
+                            onClick={() => removeMDBList(index)}
+                            className="p-1 text-red-400 hover:text-red-300 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -643,87 +740,225 @@ export default function Settings() {
         {activeTab === 'providers' && (
           <div className="bg-gray-900 rounded-lg p-6 border border-gray-800">
             <div className="space-y-6">
+              {/* Debrid Services */}
               <div>
-                <h3 className="text-md font-medium text-gray-300 mb-4">Debrid Services</h3>
-                <p className="text-xs text-gray-500 mb-4">Premium services that cache torrents for instant high-speed streaming</p>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
+                <h3 className="text-lg font-medium text-white mb-2">💎 Debrid Services</h3>
+                <p className="text-sm text-gray-400 mb-4">Premium services that cache torrents for instant high-speed streaming</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div
+                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                      settings.use_realdebrid
+                        ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50'
+                        : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80'
+                    }`}
+                    onClick={() => updateSetting('use_realdebrid', !settings.use_realdebrid)}
+                  >
                     <input
                       type="checkbox"
-                      id="use_realdebrid"
                       checked={settings.use_realdebrid || false}
-                      onChange={(e) => updateSetting('use_realdebrid', e.target.checked)}
-                      className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
+                      onChange={() => {}}
+                      className="w-4 h-4 bg-gray-800 border-gray-700 rounded pointer-events-none"
                     />
-                    <label htmlFor="use_realdebrid" className="text-sm text-gray-300">
-                      Use Real-Debrid
-                    </label>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-white">Real-Debrid</div>
+                      <div className="text-xs text-gray-500">Most popular debrid service</div>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
+                  <div
+                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                      settings.use_premiumize
+                        ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50'
+                        : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80'
+                    }`}
+                    onClick={() => updateSetting('use_premiumize', !settings.use_premiumize)}
+                  >
                     <input
                       type="checkbox"
-                      id="use_premiumize"
                       checked={settings.use_premiumize || false}
-                      onChange={(e) => updateSetting('use_premiumize', e.target.checked)}
-                      className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
+                      onChange={() => {}}
+                      className="w-4 h-4 bg-gray-800 border-gray-700 rounded pointer-events-none"
                     />
-                    <label htmlFor="use_premiumize" className="text-sm text-gray-300">
-                      Use Premiumize
-                    </label>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-white">Premiumize</div>
+                      <div className="text-xs text-gray-500">Premium multi-host service</div>
+                    </div>
+                  </div>
+                  <div
+                    className="flex items-center gap-3 p-4 rounded-lg border border-gray-700 bg-gray-800/30 opacity-50 cursor-not-allowed"
+                    title="Coming soon"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      disabled
+                      onChange={() => {}}
+                      className="w-4 h-4 bg-gray-800 border-gray-700 rounded pointer-events-none"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-white">TorBox</div>
+                      <div className="text-xs text-gray-500">Coming soon</div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-gray-700">
-                <h3 className="text-md font-medium text-gray-300 mb-4">Stream Providers</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Stream Providers
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.stream_providers || ''}
-                      onChange={(e) => updateSetting('stream_providers', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="comet,mediafusion,torrentio"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Stremio addons to fetch streams from. Options: comet, mediafusion, torrentio, torbox
-                    </p>
-                  </div>
+              <hr className="border-gray-700" />
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Torrentio Providers
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.torrentio_providers || ''}
-                      onChange={(e) => updateSetting('torrentio_providers', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="yts,eztv,rarbg,1337x,thepiratebay"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Torrent indexers for Torrentio. Options: yts, eztv, rarbg, 1337x, thepiratebay, kickasstorrents, torrentgalaxy
-                    </p>
-                  </div>
+              {/* Stream Providers */}
+              <div>
+                <h3 className="text-lg font-medium text-white mb-2">🎬 Stream Providers</h3>
+                <p className="text-sm text-gray-400 mb-4">Stremio addons to fetch streams from. Enable the providers you want to use.</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: 'torrentio', name: 'Torrentio', desc: 'Popular Stremio addon', color: 'blue' },
+                    { id: 'comet', name: 'Comet', desc: 'Fast stream finder', color: 'purple' },
+                    { id: 'mediafusion', name: 'MediaFusion', desc: 'Multi-source addon', color: 'orange' },
+                  ].map((provider) => {
+                    const rawProviders = settings.stream_providers || [];
+                    const enabledProviders = Array.isArray(rawProviders) ? rawProviders : (typeof rawProviders === 'string' ? rawProviders.split(',').filter(Boolean) : []);
+                    const isEnabled = enabledProviders.includes(provider.id);
+                    const colorClasses = {
+                      blue: isEnabled ? 'bg-blue-900/30 border-blue-700 hover:bg-blue-900/50' : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80',
+                      purple: isEnabled ? 'bg-purple-900/30 border-purple-700 hover:bg-purple-900/50' : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80',
+                      orange: isEnabled ? 'bg-orange-900/30 border-orange-700 hover:bg-orange-900/50' : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80',
+                    };
+                    return (
+                      <div
+                        key={provider.id}
+                        className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${colorClasses[provider.color as keyof typeof colorClasses]}`}
+                        onClick={() => {
+                          const rawProviders = settings.stream_providers || [];
+                          const providers = Array.isArray(rawProviders) ? rawProviders : (typeof rawProviders === 'string' ? rawProviders.split(',').filter(Boolean) : []);
+                          let newProviders;
+                          if (providers.includes(provider.id)) {
+                            newProviders = providers.filter(p => p !== provider.id);
+                          } else {
+                            newProviders = [...providers, provider.id];
+                          }
+                          updateSetting('stream_providers', newProviders);
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isEnabled}
+                          onChange={() => {}}
+                          className="w-4 h-4 bg-gray-800 border-gray-700 rounded pointer-events-none"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-white">{provider.name}</div>
+                          <div className="text-xs text-gray-500">{provider.desc}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Comet Indexers
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.comet_indexers || ''}
-                      onChange={(e) => updateSetting('comet_indexers', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="bitsearch,eztv,thepiratebay,therarbg,yts"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Torrent indexers for Comet. Options: bitsearch, eztv, thepiratebay, therarbg, yts, nyaa
-                    </p>
+              <hr className="border-gray-700" />
+
+              {/* Torrent Indexers */}
+              <div>
+                <h3 className="text-lg font-medium text-white mb-2">🔍 Torrent Indexers</h3>
+                <p className="text-sm text-gray-400 mb-4">Select which torrent sites to search for content.</p>
+                
+                {/* Torrentio Indexers */}
+                <div className="mb-6">
+                  <h4 className="text-md font-medium text-gray-300 mb-3">Torrentio Indexers</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {[
+                      { id: 'yts', name: 'YTS', desc: 'Movies' },
+                      { id: 'eztv', name: 'EZTV', desc: 'TV Shows' },
+                      { id: 'rarbg', name: 'RARBG', desc: 'All content' },
+                      { id: '1337x', name: '1337x', desc: 'All content' },
+                      { id: 'thepiratebay', name: 'ThePirateBay', desc: 'All content' },
+                      { id: 'kickasstorrents', name: 'KickAss', desc: 'All content' },
+                      { id: 'torrentgalaxy', name: 'TorrentGalaxy', desc: 'All content' },
+                    ].map((indexer) => {
+                      const rawIndexers = settings.torrentio_providers || '';
+                      const enabledIndexers = typeof rawIndexers === 'string' ? rawIndexers.split(',').filter(Boolean) : (Array.isArray(rawIndexers) ? rawIndexers : []);
+                      const isEnabled = enabledIndexers.includes(indexer.id);
+                      return (
+                        <div
+                          key={indexer.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                            isEnabled
+                              ? 'bg-blue-900/30 border-blue-700 hover:bg-blue-900/50'
+                              : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80'
+                          }`}
+                          onClick={() => {
+                            const rawIdx = settings.torrentio_providers || '';
+                            const indexers = typeof rawIdx === 'string' ? rawIdx.split(',').filter(Boolean) : (Array.isArray(rawIdx) ? rawIdx : []);
+                            let newIndexers;
+                            if (indexers.includes(indexer.id)) {
+                              newIndexers = indexers.filter(i => i !== indexer.id);
+                            } else {
+                              newIndexers = [...indexers, indexer.id];
+                            }
+                            updateSetting('torrentio_providers', newIndexers.join(','));
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isEnabled}
+                            onChange={() => {}}
+                            className="w-3 h-3 bg-gray-800 border-gray-700 rounded pointer-events-none"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-white truncate">{indexer.name}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Comet Indexers */}
+                <div>
+                  <h4 className="text-md font-medium text-gray-300 mb-3">Comet Indexers</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {[
+                      { id: 'bitsearch', name: 'BitSearch', desc: 'All content' },
+                      { id: 'eztv', name: 'EZTV', desc: 'TV Shows' },
+                      { id: 'thepiratebay', name: 'ThePirateBay', desc: 'All content' },
+                      { id: 'therarbg', name: 'TheRARBG', desc: 'All content' },
+                      { id: 'yts', name: 'YTS', desc: 'Movies' },
+                      { id: 'nyaa', name: 'Nyaa', desc: 'Anime' },
+                    ].map((indexer) => {
+                      const rawIndexers = settings.comet_indexers || [];
+                      const enabledIndexers = Array.isArray(rawIndexers) ? rawIndexers : (typeof rawIndexers === 'string' ? rawIndexers.split(',').filter(Boolean) : []);
+                      const isEnabled = enabledIndexers.includes(indexer.id);
+                      return (
+                        <div
+                          key={indexer.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                            isEnabled
+                              ? 'bg-purple-900/30 border-purple-700 hover:bg-purple-900/50'
+                              : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80'
+                          }`}
+                          onClick={() => {
+                            const rawIdx = settings.comet_indexers || [];
+                            const indexers = Array.isArray(rawIdx) ? rawIdx : (typeof rawIdx === 'string' ? rawIdx.split(',').filter(Boolean) : []);
+                            let newIndexers;
+                            if (indexers.includes(indexer.id)) {
+                              newIndexers = indexers.filter(i => i !== indexer.id);
+                            } else {
+                              newIndexers = [...indexers, indexer.id];
+                            }
+                            updateSetting('comet_indexers', newIndexers);
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isEnabled}
+                            onChange={() => {}}
+                            className="w-3 h-3 bg-gray-800 border-gray-700 rounded pointer-events-none"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-white truncate">{indexer.name}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -971,6 +1206,25 @@ export default function Settings() {
                 </div>
                 <p className="text-xs text-gray-500 mt-1 ml-6">
                   Include adult-rated content (18+) in TMDB discovery and playlists.
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-gray-700">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="only_released"
+                    checked={settings.only_released_content || false}
+                    onChange={(e) => updateSetting('only_released_content', e.target.checked)}
+                    className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
+                  />
+                  <label htmlFor="only_released" className="text-sm font-medium text-gray-300">
+                    Only Include Released Content in Playlist
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  Only include movies/series in the IPTV playlist that are already released on streaming, digital, or Blu-ray. 
+                  Unreleased items remain in your library but won't appear in the playlist until they're available for streaming.
                 </p>
               </div>
             </div>
@@ -1458,6 +1712,30 @@ export default function Settings() {
                             )}
                           </div>
                           <p className="text-sm text-gray-400 mt-1">{service.description}</p>
+                          
+                          {/* Progress Bar - Show when running */}
+                          {service.running && service.items_total > 0 && (
+                            <div className="mt-3">
+                              <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                <span>{service.progress_message || 'Processing...'}</span>
+                                <span>{service.items_processed}/{service.items_total} ({service.progress}%)</span>
+                              </div>
+                              <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+                                <div 
+                                  className="bg-blue-500 h-full rounded-full transition-all duration-300"
+                                  style={{ width: `${service.progress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Current Activity - Show when running without total */}
+                          {service.running && service.items_total === 0 && service.progress_message && (
+                            <div className="mt-2 text-xs text-blue-400 bg-blue-900/30 px-2 py-1 rounded flex items-center gap-2">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              {service.progress_message}
+                            </div>
+                          )}
                           
                           <div className="flex flex-wrap gap-4 mt-3 text-xs text-gray-500">
                             <div className="flex items-center gap-1">
@@ -1952,6 +2230,266 @@ export default function Settings() {
                     <p className="text-xs text-gray-500 mt-1">Concurrent browser sessions (higher = faster but more RAM)</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Database Tab */}
+        {activeTab === 'database' && (
+          <div className="bg-gray-900 rounded-lg p-6 border border-gray-800">
+            <div className="space-y-6">
+              <div className="mb-4 p-4 bg-blue-900/30 border border-blue-800 rounded-lg">
+                <h3 className="text-blue-400 font-medium mb-2">🗄️ Database Management</h3>
+                <p className="text-sm text-gray-300">
+                  Manage your library database. Use these options to clear data and regenerate content.
+                </p>
+              </div>
+
+              {/* Database Statistics */}
+              <div className="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                <h3 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
+                  <Database className="h-5 w-5" /> Database Statistics
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="p-3 bg-gray-900 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-blue-400">{dbStats?.movies || 0}</div>
+                    <div className="text-xs text-gray-400">Movies</div>
+                  </div>
+                  <div className="p-3 bg-gray-900 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-purple-400">{dbStats?.series || 0}</div>
+                    <div className="text-xs text-gray-400">Series</div>
+                  </div>
+                  <div className="p-3 bg-gray-900 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-green-400">{dbStats?.episodes || 0}</div>
+                    <div className="text-xs text-gray-400">Episodes</div>
+                  </div>
+                  <div className="p-3 bg-gray-900 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-yellow-400">{dbStats?.streams || 0}</div>
+                    <div className="text-xs text-gray-400">Streams</div>
+                  </div>
+                  <div className="p-3 bg-gray-900 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-cyan-400">{dbStats?.collections || 0}</div>
+                    <div className="text-xs text-gray-400">Collections</div>
+                  </div>
+                </div>
+                <button
+                  onClick={fetchDbStats}
+                  className="mt-4 flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+                >
+                  <RefreshCw className="h-4 w-4" /> Refresh Stats
+                </button>
+              </div>
+
+              {/* Movies Section */}
+              <div className="p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+                <h3 className="text-lg font-medium text-white mb-4">🎬 Movies</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => showConfirmDialog('clear-movies', 'Clear All Movies', 'This will permanently delete ALL movies from your library. MDBList sync will repopulate them on next run. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg hover:bg-red-900/70 border border-red-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Clear All Movies</div>
+                      <div className="text-xs text-red-400">Delete all movies from library</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => showConfirmDialog('reset-movie-status', 'Reset Movie Status', 'This will reset the search status and collection_checked flag for all movies, allowing them to be re-scanned. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-yellow-900/50 text-yellow-300 rounded-lg hover:bg-yellow-900/70 border border-yellow-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Reset Movie Status</div>
+                      <div className="text-xs text-yellow-400">Re-enable scanning for all movies</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Series Section */}
+              <div className="p-4 bg-purple-900/20 border border-purple-800 rounded-lg">
+                <h3 className="text-lg font-medium text-white mb-4">📺 Series</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => showConfirmDialog('clear-series', 'Clear All Series', 'This will permanently delete ALL series and their episodes from your library. MDBList sync will repopulate them on next run. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg hover:bg-red-900/70 border border-red-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Clear All Series</div>
+                      <div className="text-xs text-red-400">Delete all series and episodes</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => showConfirmDialog('reset-series-status', 'Reset Series Status', 'This will reset the search status for all series, allowing them to be re-scanned. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-yellow-900/50 text-yellow-300 rounded-lg hover:bg-yellow-900/70 border border-yellow-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Reset Series Status</div>
+                      <div className="text-xs text-yellow-400">Re-enable scanning for all series</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Streams Section */}
+              <div className="p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+                <h3 className="text-lg font-medium text-white mb-4">🔗 Streams</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => showConfirmDialog('clear-streams', 'Clear All Streams', 'This will delete ALL cached streams. They will be fetched again when content is played. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg hover:bg-red-900/70 border border-red-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Clear All Streams</div>
+                      <div className="text-xs text-red-400">Delete all cached stream URLs</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => showConfirmDialog('clear-stale-streams', 'Clear Stale Streams', 'This will delete streams older than 7 days. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-orange-900/50 text-orange-300 rounded-lg hover:bg-orange-900/70 border border-orange-700 disabled:opacity-50"
+                  >
+                    <Clock className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Clear Stale Streams</div>
+                      <div className="text-xs text-orange-400">Delete streams older than 7 days</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Collections Section */}
+              <div className="p-4 bg-cyan-900/20 border border-cyan-800 rounded-lg">
+                <h3 className="text-lg font-medium text-white mb-4">📦 Collections</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => showConfirmDialog('clear-collections', 'Clear All Collections', 'This will delete ALL collections. Collection sync will repopulate them on next run. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-red-900/50 text-red-300 rounded-lg hover:bg-red-900/70 border border-red-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Clear All Collections</div>
+                      <div className="text-xs text-red-400">Delete all movie collections</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => showConfirmDialog('resync-collections', 'Re-sync Collections', 'This will clear all collections and trigger a full re-sync. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-cyan-900/50 text-cyan-300 rounded-lg hover:bg-cyan-900/70 border border-cyan-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Re-sync Collections</div>
+                      <div className="text-xs text-cyan-400">Clear and rebuild collection data</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Live TV Section */}
+              <div className="p-4 bg-green-900/20 border border-green-800 rounded-lg">
+                <h3 className="text-lg font-medium text-white mb-4">📡 Live TV</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => showConfirmDialog('reload-livetv', 'Reload Live TV Channels', 'This will reload all M3U sources and refresh the channel list. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-green-900/50 text-green-300 rounded-lg hover:bg-green-900/70 border border-green-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Reload Channels</div>
+                      <div className="text-xs text-green-400">Refresh M3U sources and EPG</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => showConfirmDialog('clear-epg', 'Clear EPG Cache', 'This will clear the EPG program guide cache. It will be refreshed automatically. Are you sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-orange-900/50 text-orange-300 rounded-lg hover:bg-orange-900/70 border border-orange-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Clear EPG Cache</div>
+                      <div className="text-xs text-orange-400">Delete program guide cache</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Danger Zone */}
+              <div className="p-4 bg-red-900/30 border-2 border-red-700 rounded-lg">
+                <h3 className="text-lg font-medium text-red-400 mb-2 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" /> Danger Zone
+                </h3>
+                <p className="text-sm text-gray-400 mb-4">These actions are destructive and cannot be undone.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => showConfirmDialog('clear-all-vod', 'Clear All VOD Content', 'This will delete ALL movies, series, episodes, streams and collections. This cannot be undone! Are you absolutely sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-red-800 text-white rounded-lg hover:bg-red-700 border border-red-600 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Clear All VOD Content</div>
+                      <div className="text-xs text-red-200">Delete everything except Live TV</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => showConfirmDialog('factory-reset', 'Factory Reset Database', 'This will completely reset the database to its initial state. ALL data will be lost! Are you absolutely sure?')}
+                    disabled={dbOperation !== null}
+                    className="flex items-center gap-2 px-4 py-3 bg-red-900 text-white rounded-lg hover:bg-red-800 border border-red-500 disabled:opacity-50"
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                    <div className="text-left">
+                      <div className="font-medium">Factory Reset</div>
+                      <div className="text-xs text-red-200">Reset everything to default</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Confirmation Dialog */}
+        {confirmDialog && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-700 rounded-lg p-6 max-w-md mx-4">
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle className="h-8 w-8 text-yellow-500" />
+                <h3 className="text-xl font-bold text-white">{confirmDialog.title}</h3>
+              </div>
+              <p className="text-gray-300 mb-6">{confirmDialog.message}</p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setConfirmDialog(null)}
+                  className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => executeDbAction(confirmDialog.action)}
+                  disabled={dbOperation !== null}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {dbOperation === confirmDialog.action ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" /> Processing...
+                    </>
+                  ) : (
+                    'Confirm'
+                  )}
+                </button>
               </div>
             </div>
           </div>

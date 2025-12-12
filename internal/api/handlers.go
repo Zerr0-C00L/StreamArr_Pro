@@ -280,29 +280,38 @@ func (h *Handler) addCollectionMovies(ctx context.Context, collectionTMDBID int,
 
 // scanAndLinkCollections scans all movies without a collection and checks if they belong to one
 func (h *Handler) scanAndLinkCollections(ctx context.Context) error {
-	// Get all movies
-	movies, err := h.movieStore.List(ctx, 0, 10000, nil)
+	// Get only movies that haven't been checked yet
+	movies, err := h.movieStore.ListUncheckedForCollection(ctx)
 	if err != nil {
-		fmt.Printf("[Collection Sync] Failed to list movies: %v\n", err)
+		fmt.Printf("[Collection Sync] Failed to list unchecked movies: %v\n", err)
 		return err
 	}
 
-	fmt.Printf("[Collection Sync] Starting scan of %d movies...\n", len(movies))
+	totalMovies := len(movies)
+	if totalMovies == 0 {
+		fmt.Println("[Collection Sync] All movies have been checked for collections")
+		services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, 0, 0, "All movies already checked")
+		return nil
+	}
+	
+	fmt.Printf("[Collection Sync] Starting scan of %d unchecked movies...\n", totalMovies)
+	services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, 0, totalMovies, "Scanning movies for collections...")
+	
 	linked := 0
-	skipped := 0
+	noCollection := 0
 	errors := 0
 
 	for i, movie := range movies {
-		// Skip if already linked to a collection
-		if movie.CollectionID != nil {
-			skipped++
-			continue
-		}
+		// Update progress
+		services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, i+1, totalMovies, 
+			fmt.Sprintf("Checking: %s", movie.Title))
 
 		// Fetch movie with collection info from TMDB
 		_, collection, err := h.tmdbClient.GetMovieWithCollection(ctx, movie.TMDBID)
 		if err != nil {
 			errors++
+			// Still mark as checked so we don't retry failed ones endlessly
+			h.movieStore.MarkCollectionChecked(ctx, movie.ID)
 			continue
 		}
 
@@ -313,6 +322,7 @@ func (h *Handler) scanAndLinkCollections(ctx context.Context) error {
 			if err != nil {
 				fmt.Printf("[Collection Sync] Failed to get collection %d for movie %s: %v\n", collection.TMDBID, movie.Title, err)
 				errors++
+				h.movieStore.MarkCollectionChecked(ctx, movie.ID)
 				continue
 			}
 
@@ -320,6 +330,7 @@ func (h *Handler) scanAndLinkCollections(ctx context.Context) error {
 			if err := h.collectionStore.Create(ctx, fullCollection); err != nil {
 				fmt.Printf("[Collection Sync] Failed to create collection %s: %v\n", fullCollection.Name, err)
 				errors++
+				h.movieStore.MarkCollectionChecked(ctx, movie.ID)
 				continue
 			}
 
@@ -328,25 +339,38 @@ func (h *Handler) scanAndLinkCollections(ctx context.Context) error {
 				fmt.Printf("[Collection Sync] Failed to link movie %s (ID:%d) to collection %s (ID:%d): %v\n", 
 					movie.Title, movie.ID, fullCollection.Name, fullCollection.ID, err)
 				errors++
+				h.movieStore.MarkCollectionChecked(ctx, movie.ID)
 				continue
 			}
 
 			linked++
 			fmt.Printf("[Collection Sync] Linked '%s' to '%s'\n", movie.Title, fullCollection.Name)
+			
+			// Update progress message with linked info
+			services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, i+1, totalMovies, 
+				fmt.Sprintf("Linked: %s → %s", movie.Title, fullCollection.Name))
+		} else {
+			noCollection++
 		}
+		
+		// Mark as checked regardless of whether it has a collection
+		h.movieStore.MarkCollectionChecked(ctx, movie.ID)
 
 		// Progress log every 100 movies
 		if (i+1)%100 == 0 {
-			fmt.Printf("[Collection Sync] Progress: %d/%d movies processed, %d linked, %d skipped, %d errors\n", 
-				i+1, len(movies), linked, skipped, errors)
+			fmt.Printf("[Collection Sync] Progress: %d/%d movies processed, %d linked, %d no collection, %d errors\n", 
+				i+1, totalMovies, linked, noCollection, errors)
 		}
 
 		// Rate limit
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	fmt.Printf("[Collection Sync] Complete: %d movies linked to collections, %d skipped (already linked), %d errors\n", 
-		linked, skipped, errors)
+	services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, totalMovies, totalMovies, 
+		fmt.Sprintf("Complete: %d linked, %d no collection, %d errors", linked, noCollection, errors))
+	
+	fmt.Printf("[Collection Sync] Complete: %d movies linked, %d have no collection, %d errors\n", 
+		linked, noCollection, errors)
 	return nil
 }
 
@@ -1351,30 +1375,52 @@ func (h *Handler) runService(serviceName string) {
 	
 	case services.ServiceCollectionSync:
 		interval = 24 * time.Hour
-		// First, scan existing movies for collections and link them
+		// Phase 1: Scan existing movies for collections and link them
 		if h.collectionStore != nil && h.movieStore != nil {
 			err = h.scanAndLinkCollections(ctx)
 		}
-		// Then sync incomplete collections (add missing movies)
+		// Phase 2: Sync incomplete collections (add missing movies)
 		if h.collectionStore != nil && h.settingsManager != nil {
 			settings := h.settingsManager.Get()
 			if settings.AutoAddCollections {
 				fmt.Println("[Collection Sync] Phase 2: Adding missing movies from incomplete collections...")
-				collections, _, _ := h.collectionStore.GetCollectionsWithProgress(ctx, 100, 0)
+				services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, 0, 0, "Phase 2: Checking incomplete collections...")
+				
+				collections, _, _ := h.collectionStore.GetCollectionsWithProgress(ctx, 1000, 0)
 				fmt.Printf("[Collection Sync] Found %d collections to check\n", len(collections))
-				incomplete := 0
+				
+				// Find incomplete collections
+				var incompleteColls []*models.Collection
 				for _, coll := range collections {
 					if coll.MoviesInLibrary < coll.TotalMovies {
-						incomplete++
+						incompleteColls = append(incompleteColls, coll)
+					}
+				}
+				
+				totalIncomplete := len(incompleteColls)
+				if totalIncomplete == 0 {
+					fmt.Println("[Collection Sync] Phase 2: All collections are complete!")
+					services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, 0, 0, "All collections complete!")
+				} else {
+					fmt.Printf("[Collection Sync] Found %d incomplete collections\n", totalIncomplete)
+					
+					for i, coll := range incompleteColls {
+						services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, i+1, totalIncomplete, 
+							fmt.Sprintf("Adding movies to: %s (%d/%d)", coll.Name, coll.MoviesInLibrary, coll.TotalMovies))
+						
 						fmt.Printf("[Collection Sync] '%s' is incomplete (%d/%d), adding missing movies...\n", 
 							coll.Name, coll.MoviesInLibrary, coll.TotalMovies)
 						h.addCollectionMovies(ctx, coll.TMDBID, true, "default")
 						time.Sleep(500 * time.Millisecond) // Rate limit
 					}
+					
+					services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, totalIncomplete, totalIncomplete, 
+						fmt.Sprintf("Phase 2 complete: %d collections updated", totalIncomplete))
+					fmt.Printf("[Collection Sync] Phase 2 complete: processed %d incomplete collections\n", totalIncomplete)
 				}
-				fmt.Printf("[Collection Sync] Phase 2 complete: processed %d incomplete collections\n", incomplete)
 			} else {
 				fmt.Println("[Collection Sync] Phase 2 skipped: AutoAddCollections is disabled")
+				services.GlobalScheduler.UpdateProgress(services.ServiceCollectionSync, 0, 0, "Phase 2 skipped (AutoAddCollections disabled)")
 			}
 		} else {
 			fmt.Println("[Collection Sync] Phase 2 skipped: collectionStore or settingsManager is nil")
@@ -1409,5 +1455,205 @@ func (h *Handler) UpdateServiceEnabled(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"service": serviceName,
 		"enabled": req.Enabled,
+	})
+}
+
+// GetDatabaseStats handles GET /api/database/stats
+func (h *Handler) GetDatabaseStats(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+	
+	var movieCount, seriesCount, episodeCount, streamCount, collectionCount int
+	
+	// Count movies
+	if h.movieStore != nil {
+		movies, err := h.movieStore.List(ctx, 0, 100000, nil)
+		if err == nil {
+			movieCount = len(movies)
+		}
+	}
+	
+	// Count series
+	if h.seriesStore != nil {
+		series, err := h.seriesStore.List(ctx, 0, 100000, nil)
+		if err == nil {
+			seriesCount = len(series)
+		}
+	}
+	
+	// Count episodes
+	if h.episodeStore != nil {
+		episodes, err := h.episodeStore.ListAll(ctx)
+		if err == nil {
+			episodeCount = len(episodes)
+		}
+	}
+	
+	// Count streams
+	if h.streamStore != nil {
+		streams, err := h.streamStore.List(ctx)
+		if err == nil {
+			streamCount = len(streams)
+		}
+	}
+	
+	// Count collections
+	if h.collectionStore != nil {
+		collections, err := h.collectionStore.ListAll(ctx)
+		if err == nil {
+			collectionCount = len(collections)
+		}
+	}
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"movies":      movieCount,
+		"series":      seriesCount,
+		"episodes":    episodeCount,
+		"streams":     streamCount,
+		"collections": collectionCount,
+	})
+}
+
+// ExecuteDatabaseAction handles POST /api/database/{action}
+func (h *Handler) ExecuteDatabaseAction(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	action := vars["action"]
+	ctx := context.Background()
+	
+	var message string
+	var err error
+	
+	switch action {
+	case "clear-movies":
+		if h.movieStore != nil {
+			err = h.movieStore.DeleteAll(ctx)
+			message = "All movies have been cleared from the library"
+		}
+		
+	case "clear-series":
+		if h.seriesStore != nil && h.episodeStore != nil {
+			// First clear episodes
+			err = h.episodeStore.DeleteAll(ctx)
+			if err == nil {
+				err = h.seriesStore.DeleteAll(ctx)
+			}
+			message = "All series and episodes have been cleared from the library"
+		}
+		
+	case "clear-streams":
+		if h.streamStore != nil {
+			err = h.streamStore.DeleteAll(ctx)
+			message = "All cached streams have been cleared"
+		}
+		
+	case "clear-stale-streams":
+		if h.streamStore != nil {
+			err = h.streamStore.DeleteStale(ctx, 7) // 7 days
+			message = "Stale streams (older than 7 days) have been cleared"
+		}
+		
+	case "clear-collections":
+		if h.collectionStore != nil {
+			err = h.collectionStore.DeleteAll(ctx)
+			message = "All collections have been cleared"
+		}
+		
+	case "resync-collections":
+		if h.collectionStore != nil {
+			err = h.collectionStore.DeleteAll(ctx)
+			if err == nil {
+				// Reset collection_checked flag on all movies
+				if h.movieStore != nil {
+					err = h.movieStore.ResetCollectionChecked(ctx)
+				}
+				// Trigger collection sync service
+				go h.runService(services.ServiceCollectionSync)
+				message = "Collections cleared and re-sync triggered"
+			}
+		}
+		
+	case "reset-movie-status":
+		if h.movieStore != nil {
+			err = h.movieStore.ResetStatus(ctx)
+			message = "Movie status and collection_checked flags have been reset"
+		}
+		
+	case "reset-series-status":
+		if h.seriesStore != nil {
+			err = h.seriesStore.ResetStatus(ctx)
+			message = "Series status has been reset"
+		}
+		
+	case "reload-livetv":
+		if h.channelManager != nil {
+			err = h.channelManager.LoadChannels()
+			if err == nil && h.epgManager != nil {
+				h.epgManager.Update()
+			}
+			message = "Live TV channels and EPG have been reloaded"
+		}
+		
+	case "clear-epg":
+		if h.epgManager != nil {
+			h.epgManager.Clear()
+			message = "EPG cache has been cleared"
+		}
+		
+	case "clear-all-vod":
+		// Clear everything VOD-related
+		if h.streamStore != nil {
+			h.streamStore.DeleteAll(ctx)
+		}
+		if h.episodeStore != nil {
+			h.episodeStore.DeleteAll(ctx)
+		}
+		if h.seriesStore != nil {
+			h.seriesStore.DeleteAll(ctx)
+		}
+		if h.movieStore != nil {
+			h.movieStore.DeleteAll(ctx)
+		}
+		if h.collectionStore != nil {
+			h.collectionStore.DeleteAll(ctx)
+		}
+		message = "All VOD content (movies, series, episodes, streams, collections) has been cleared"
+		
+	case "factory-reset":
+		// Clear everything
+		if h.streamStore != nil {
+			h.streamStore.DeleteAll(ctx)
+		}
+		if h.episodeStore != nil {
+			h.episodeStore.DeleteAll(ctx)
+		}
+		if h.seriesStore != nil {
+			h.seriesStore.DeleteAll(ctx)
+		}
+		if h.movieStore != nil {
+			h.movieStore.DeleteAll(ctx)
+		}
+		if h.collectionStore != nil {
+			h.collectionStore.DeleteAll(ctx)
+		}
+		if h.epgManager != nil {
+			h.epgManager.Clear()
+		}
+		if h.channelManager != nil {
+			h.channelManager.LoadChannels()
+		}
+		message = "Database has been reset to factory defaults"
+		
+	default:
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Unknown action: %s", action))
+		return
+	}
+	
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": message,
 	})
 }

@@ -46,6 +46,7 @@ type Config struct {
 	IncludeAdultVOD            bool
 	EnableQualityVariants      bool
 	ShowFullStreamName         bool
+	OnlyReleasedContent        bool
 
 	// Provider Settings
 	UseRealDebrid             bool

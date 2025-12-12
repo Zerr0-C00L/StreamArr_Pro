@@ -2,6 +2,9 @@ package api
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -9,9 +12,6 @@ import (
 // SetupRoutes configures all API routes
 func SetupRoutes(handler *Handler) http.Handler {
 	r := mux.NewRouter()
-
-	// Root handler
-	r.HandleFunc("/", handler.RootHandler).Methods("GET")
 
 	// API v1 routes
 	api := r.PathPrefix("/api/v1").Subrouter()
@@ -76,24 +76,92 @@ func SetupRoutes(handler *Handler) http.Handler {
 	// MDBList
 	api.HandleFunc("/mdblist/user-lists", handler.GetMDBListUserLists).Methods("GET")
 
-	// Enable CORS
-	r.Use(corsMiddleware)
+	// Database management
+	api.HandleFunc("/database/stats", handler.GetDatabaseStats).Methods("GET")
+	api.HandleFunc("/database/{action}", handler.ExecuteDatabaseAction).Methods("POST")
+
+	// Serve static UI files (SPA)
+	uiPath := getUIPath()
+	if uiPath != "" {
+		spa := spaHandler{staticPath: uiPath, indexPath: "index.html"}
+		r.PathPrefix("/").Handler(spa)
+	}
 
 	// Logging middleware
 	r.Use(loggingMiddleware)
 
-	return r
+	// Return with CORS middleware wrapping at top level (handles OPTIONS before routing)
+	return corsMiddleware(r)
+}
+
+// spaHandler implements the http.Handler interface for serving Single Page Applications
+type spaHandler struct {
+	staticPath string
+	indexPath  string
+}
+
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Skip API routes - let them 404 if not handled
+	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/player_api") {
+		http.NotFound(w, r)
+		return
+	}
+	
+	// Get the absolute path to prevent directory traversal
+	path := filepath.Join(h.staticPath, filepath.Clean(r.URL.Path))
+
+	// Check if file exists
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) || fi.IsDir() {
+		// File doesn't exist or is a directory, serve index.html for SPA routing
+		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Set proper content type for JS and CSS files
+	if strings.HasSuffix(path, ".js") {
+		w.Header().Set("Content-Type", "application/javascript")
+	} else if strings.HasSuffix(path, ".css") {
+		w.Header().Set("Content-Type", "text/css")
+	}
+
+	// File exists, serve it
+	http.ServeFile(w, r, path)
+}
+
+// getUIPath returns the path to the UI dist folder
+func getUIPath() string {
+	paths := []string{
+		"./streamarr-ui/dist",
+		"/opt/StreamArr/streamarr-ui/dist",
+		"/opt/streamarr/streamarr-ui/dist",
+	}
+	
+	for _, p := range paths {
+		if _, err := os.Stat(filepath.Join(p, "index.html")); err == nil {
+			return p
+		}
+	}
+	
+	return ""
 }
 
 // corsMiddleware adds CORS headers
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 
+		// Handle preflight OPTIONS request
 		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
@@ -116,9 +184,6 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	// Register Xtream Codes API routes first
 	xtreamHandler.RegisterRoutes(r)
 
-	// Root handler
-	r.HandleFunc("/", handler.RootHandler).Methods("GET")
-
 	// API v1 routes
 	api := r.PathPrefix("/api/v1").Subrouter()
 
@@ -182,11 +247,20 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	// MDBList
 	api.HandleFunc("/mdblist/user-lists", handler.GetMDBListUserLists).Methods("GET")
 
-	// Enable CORS
-	r.Use(corsMiddleware)
+	// Database management
+	api.HandleFunc("/database/stats", handler.GetDatabaseStats).Methods("GET")
+	api.HandleFunc("/database/{action}", handler.ExecuteDatabaseAction).Methods("POST")
+
+	// Serve static UI files (SPA)
+	uiPath := getUIPath()
+	if uiPath != "" {
+		spa := spaHandler{staticPath: uiPath, indexPath: "index.html"}
+		r.PathPrefix("/").Handler(spa)
+	}
 
 	// Logging middleware
 	r.Use(loggingMiddleware)
 
-	return r
+	// Return with CORS middleware wrapping at top level (handles OPTIONS before routing)
+	return corsMiddleware(r)
 }

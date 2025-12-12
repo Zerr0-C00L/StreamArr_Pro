@@ -410,3 +410,63 @@ func (s *MovieStore) CountAvailable(ctx context.Context) (int64, error) {
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM library_movies WHERE available = true").Scan(&count)
 	return count, err
 }
+
+// ListUncheckedForCollection returns movies that haven't been checked for collection membership
+func (s *MovieStore) ListUncheckedForCollection(ctx context.Context) ([]*models.Movie, error) {
+	query := `
+		SELECT id, tmdb_id, title, year, monitored, available,
+			preferred_quality, metadata, added_at, last_checked
+		FROM library_movies
+		WHERE (collection_checked = false OR collection_checked IS NULL)
+		  AND collection_id IS NULL
+		ORDER BY id
+	`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unchecked movies: %w", err)
+	}
+	defer rows.Close()
+
+	var movies []*models.Movie
+	for rows.Next() {
+		movie, err := scanMovie(rows)
+		if err != nil {
+			return nil, err
+		}
+		movies = append(movies, movie)
+	}
+
+	return movies, nil
+}
+
+// MarkCollectionChecked marks a movie as having been checked for collection membership
+func (s *MovieStore) MarkCollectionChecked(ctx context.Context, movieID int64) error {
+	_, err := s.db.ExecContext(ctx, 
+		"UPDATE library_movies SET collection_checked = true WHERE id = $1", 
+		movieID)
+	return err
+}
+
+// DeleteAll removes all movies from the library
+func (s *MovieStore) DeleteAll(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM library_movies")
+	return err
+}
+
+// ResetStatus resets the search status and collection_checked for all movies
+func (s *MovieStore) ResetStatus(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE library_movies 
+		SET metadata = metadata - 'search_status',
+		    collection_checked = false,
+		    last_checked = NULL
+	`)
+	return err
+}
+
+// ResetCollectionChecked resets the collection_checked flag for all movies
+func (s *MovieStore) ResetCollectionChecked(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE library_movies SET collection_checked = false")
+	return err
+}

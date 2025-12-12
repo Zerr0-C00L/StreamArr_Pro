@@ -184,13 +184,13 @@ func shouldReplaceChannel(existing, new *Channel) bool {
 	return false
 }
 
-// loadFromLocalM3U loads channels from a local M3U file
+// loadFromLocalM3U loads channels from a local M3U file with provider extraction
 func (cm *ChannelManager) loadFromLocalM3U(filePath string) ([]*Channel, error) {
 	file, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
-	return cm.parseM3U(string(file), "Local")
+	return cm.parseM3UWithProviders(string(file))
 }
 
 // loadFromM3UURL loads channels from a remote M3U URL
@@ -287,6 +287,136 @@ func (cm *ChannelManager) parseM3U(content string, sourceName string) ([]*Channe
 	}
 	
 	return channels, nil
+}
+
+// parseM3UWithProviders parses M3U content and extracts provider names from group-title
+// This is used for local M3U files that contain multiple providers
+func (cm *ChannelManager) parseM3UWithProviders(content string) ([]*Channel, error) {
+	channels := make([]*Channel, 0)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	
+	var currentChannel *Channel
+	var currentGroupTitle string
+	channelID := 0
+	
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		
+		if strings.HasPrefix(line, "#EXTINF:") {
+			// Parse channel info
+			currentChannel = &Channel{
+				IsLive: true,
+				Active: true,
+			}
+			
+			// Extract group-title to determine provider
+			currentGroupTitle = ""
+			if idx := strings.Index(line, "group-title=\""); idx != -1 {
+				end := strings.Index(line[idx+13:], "\"")
+				if end != -1 {
+					currentGroupTitle = line[idx+13 : idx+13+end]
+				}
+			}
+			
+			// Map group-title to provider name
+			currentChannel.Source = extractProviderName(currentGroupTitle)
+			
+			// Extract tvg-name or channel name
+			if idx := strings.Index(line, "tvg-name=\""); idx != -1 {
+				end := strings.Index(line[idx+10:], "\"")
+				if end != -1 {
+					currentChannel.Name = line[idx+10 : idx+10+end]
+				}
+			}
+			
+			// Extract tvg-logo
+			if idx := strings.Index(line, "tvg-logo=\""); idx != -1 {
+				end := strings.Index(line[idx+10:], "\"")
+				if end != -1 {
+					currentChannel.Logo = line[idx+10 : idx+10+end]
+				}
+			}
+			
+			// Extract tvg-id
+			if idx := strings.Index(line, "tvg-id=\""); idx != -1 {
+				end := strings.Index(line[idx+8:], "\"")
+				if end != -1 {
+					currentChannel.ID = line[idx+8 : idx+8+end]
+				}
+			}
+			
+			// Fallback: get name from end of line after last comma
+			if currentChannel.Name == "" {
+				if commaIdx := strings.LastIndex(line, ","); commaIdx != -1 {
+					currentChannel.Name = strings.TrimSpace(line[commaIdx+1:])
+				}
+			}
+			
+			// Generate ID if not present
+			if currentChannel.ID == "" {
+				channelID++
+				currentChannel.ID = fmt.Sprintf("%s_%d", currentChannel.Source, channelID)
+			}
+			
+		} else if !strings.HasPrefix(line, "#") && line != "" && currentChannel != nil {
+			// This is the stream URL
+			currentChannel.StreamURL = line
+			if currentChannel.Name != "" {
+				// Set category based on channel name (smart mapping)
+				currentChannel.Category = mapChannelToCategory(currentChannel.Name)
+				channels = append(channels, currentChannel)
+			}
+			currentChannel = nil
+		}
+	}
+	
+	return channels, nil
+}
+
+// extractProviderName extracts the provider name from group-title
+// e.g., "Live TV (MoveOnJoy)" -> "MoveOnJoy"
+// e.g., "USA (DADDY LIVE)" -> "DADDY LIVE USA"
+// e.g., "SPORTS (DADDY LIVE)" -> "DADDY LIVE Sports"
+func extractProviderName(groupTitle string) string {
+	groupTitle = strings.TrimSpace(groupTitle)
+	if groupTitle == "" {
+		return "Other"
+	}
+	
+	// Check for pattern like "Category (Provider)"
+	if idx := strings.Index(groupTitle, "("); idx != -1 {
+		endIdx := strings.Index(groupTitle, ")")
+		if endIdx != -1 && endIdx > idx {
+			provider := strings.TrimSpace(groupTitle[idx+1 : endIdx])
+			prefix := strings.TrimSpace(groupTitle[:idx])
+			
+			// Map to clean provider names
+			switch provider {
+			case "DADDY LIVE":
+				// Include region/category in name
+				switch prefix {
+				case "USA":
+					return "DADDY LIVE USA"
+				case "UK":
+					return "DADDY LIVE UK"
+				case "Canada":
+					return "DADDY LIVE Canada"
+				case "SPORTS", "SPORTS MISC":
+					return "DADDY LIVE Sports"
+				default:
+					return "DADDY LIVE"
+				}
+			case "MoveOnJoy":
+				return "MoveOnJoy"
+			case "TheTVApp":
+				return "TheTVApp"
+			default:
+				return provider
+			}
+		}
+	}
+	
+	return groupTitle
 }
 
 // mapChannelToCategory determines the category based on channel name

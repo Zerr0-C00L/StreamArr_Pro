@@ -26,8 +26,9 @@ type Movie struct {
 	UpdatedAt      time.Time   `json:"updated_at"`
 	AddedAt        time.Time   `json:"added_at"`
 	// Collection fields
-	CollectionID   *int64      `json:"collection_id,omitempty"`
-	Collection     *Collection `json:"collection,omitempty"`
+	CollectionID      *int64      `json:"collection_id,omitempty"`
+	Collection        *Collection `json:"collection,omitempty"`
+	CollectionChecked bool        `json:"collection_checked"` // True if we've checked TMDB for collection membership
 }
 
 // Collection represents a movie collection/franchise (e.g., "The Dark Knight Trilogy")

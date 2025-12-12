@@ -377,3 +377,28 @@ func buildQualityOrder(preferredQuality string) string {
 		`
 	}
 }
+
+// DeleteAll removes all streams from the database
+func (s *StreamStore) DeleteAll(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM available_streams")
+	return err
+}
+
+// DeleteStale removes streams older than the specified number of days
+func (s *StreamStore) DeleteStale(ctx context.Context, days int) error {
+	_, err := s.db.ExecContext(ctx, 
+		"DELETE FROM available_streams WHERE updated_at < NOW() - INTERVAL '1 day' * $1",
+		days)
+	return err
+}
+
+// List returns all streams (count only for stats)
+func (s *StreamStore) List(ctx context.Context) ([]*models.Stream, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM available_streams").Scan(&count)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*models.Stream, count)
+	return result, nil
+}

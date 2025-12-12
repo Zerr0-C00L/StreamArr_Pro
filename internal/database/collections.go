@@ -345,3 +345,20 @@ func (s *CollectionStore) GetCollectionsWithProgress(ctx context.Context, limit,
 
 	return collections, total, nil
 }
+
+// DeleteAll removes all collections from the database
+func (s *CollectionStore) DeleteAll(ctx context.Context) error {
+	// First, unlink all movies from collections
+	_, err := s.db.ExecContext(ctx, "UPDATE library_movies SET collection_id = NULL")
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, "DELETE FROM collections")
+	return err
+}
+
+// ListAll returns all collections
+func (s *CollectionStore) ListAll(ctx context.Context) ([]*models.Collection, error) {
+	collections, _, err := s.GetCollectionsWithProgress(ctx, 10000, 0)
+	return collections, err
+}
