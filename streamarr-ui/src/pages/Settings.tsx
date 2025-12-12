@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Key, Layers, Settings as SettingsIcon, List, Bell, Code, Plus, X, Tv, Server, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react';
+import { Save, Key, Layers, Settings as SettingsIcon, List, Bell, Code, Plus, X, Tv, Server, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -95,7 +95,7 @@ interface ServiceStatus {
   items_total: number;
 }
 
-type TabType = 'api' | 'providers' | 'quality' | 'playlist' | 'livetv' | 'filters' | 'services' | 'xtream' | 'notifications' | 'database' | 'advanced' | 'about';
+type TabType = 'api' | 'providers' | 'quality' | 'content' | 'playlist' | 'livetv' | 'filters' | 'services' | 'xtream' | 'notifications' | 'database' | 'advanced' | 'about';
 
 interface VersionInfo {
   current_version: string;
@@ -552,6 +552,7 @@ export default function Settings() {
     { id: 'api' as TabType, label: 'API Keys', icon: Key },
     { id: 'providers' as TabType, label: 'Providers', icon: Layers },
     { id: 'quality' as TabType, label: 'Quality', icon: SettingsIcon },
+    { id: 'content' as TabType, label: 'Content', icon: Film },
     { id: 'playlist' as TabType, label: 'Playlist', icon: List },
     { id: 'livetv' as TabType, label: 'Live TV', icon: Tv },
     { id: 'filters' as TabType, label: 'Filters', icon: Filter },
@@ -1164,6 +1165,74 @@ export default function Settings() {
           </div>
         )}
 
+        {/* Content Tab */}
+        {activeTab === 'content' && (
+          <div className="bg-gray-900 rounded-lg p-6 border border-gray-800">
+            <div className="space-y-6">
+              <div className="mb-4 p-4 bg-blue-900/30 border border-blue-800 rounded-lg">
+                <h3 className="text-blue-400 font-medium mb-2">🎬 Content Availability</h3>
+                <p className="text-sm text-gray-300">
+                  Control which content appears in your IPTV apps based on stream availability.
+                  The "Stream Search" background service periodically scans your library to check if streams are available.
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-gray-700">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="hide_unavailable"
+                    checked={settings.hide_unavailable_content || false}
+                    onChange={(e) => updateSetting('hide_unavailable_content', e.target.checked)}
+                    className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
+                  />
+                  <label htmlFor="hide_unavailable" className="text-sm font-medium text-gray-300">
+                    Hide Content Without Streams
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  Only show movies and episodes in IPTV apps if they have at least one stream available.
+                  Content without streams will be hidden from your playlist but remain in your library.
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-gray-700">
+                <h3 className="text-md font-medium text-gray-300 mb-4">📊 How It Works</h3>
+                <div className="space-y-3 text-sm text-gray-400">
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-400">1.</span>
+                    <span>The "Stream Search" service runs periodically (check Services tab)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-400">2.</span>
+                    <span>It checks Comet and MediaFusion for available streams</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-400">3.</span>
+                    <span>Movies and episodes are marked as "available" or "unavailable"</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-400">4.</span>
+                    <span>When enabled above, unavailable content is filtered from IPTV apps</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-700">
+                <div className="p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+                  <h4 className="text-yellow-400 font-medium mb-2">💡 Tips</h4>
+                  <ul className="text-sm text-gray-300 space-y-1 list-disc list-inside">
+                    <li>New releases may not have streams immediately - give it a few days</li>
+                    <li>Streams are re-checked every 7 days for items without streams</li>
+                    <li>You can manually trigger a scan from the Services tab</li>
+                    <li>This is especially useful for filtering out unreleased episodes</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Playlist Tab */}
         {activeTab === 'playlist' && (
           <div className="bg-gray-900 rounded-lg p-6 border border-gray-800">
@@ -1305,25 +1374,6 @@ export default function Settings() {
                 <p className="text-xs text-gray-500 mt-1 ml-6">
                   Only include movies/series in the IPTV playlist that are already released on streaming, digital, or Blu-ray. 
                   Unreleased items remain in your library but won't appear in the playlist until they're available for streaming.
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-gray-700">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="hide_unavailable"
-                    checked={settings.hide_unavailable_content || false}
-                    onChange={(e) => updateSetting('hide_unavailable_content', e.target.checked)}
-                    className="w-4 h-4 bg-gray-800 border-gray-700 rounded"
-                  />
-                  <label htmlFor="hide_unavailable" className="text-sm font-medium text-gray-300">
-                    Hide Content Without Streams
-                  </label>
-                </div>
-                <p className="text-xs text-gray-500 mt-1 ml-6">
-                  Only show movies/episodes in IPTV apps if they have at least one stream available. 
-                  Run the "Stream Search" service to scan your library for available streams.
                 </p>
               </div>
             </div>
