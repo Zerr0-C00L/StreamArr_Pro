@@ -1956,10 +1956,10 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// Get update branch from settings
 	branch := "main"
-	if h.settings != nil {
-		settings := h.settings.Get()
-		if settings.UpdateBranch != "" {
-			branch = settings.UpdateBranch
+	if h.settingsManager != nil {
+		s := h.settingsManager.Get()
+		if s.UpdateBranch != "" {
+			branch = s.UpdateBranch
 		}
 	}
 
