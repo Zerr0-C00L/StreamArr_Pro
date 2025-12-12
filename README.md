@@ -138,6 +138,7 @@ http://your-ip:8080/playlist.m3u8
 \`\`\`
 
 ### Supported Apps
+- Chillio
 - TiviMate
 - iMPlayer
 - IPTV Smarters Pro
@@ -219,7 +220,7 @@ docker-compose up -d
 ### Cloud (Hetzner/DigitalOcean)
 
 \`\`\`bash
-# 1. Create Ubuntu 24.04 server (~\$4/month)
+# 1. Create Ubuntu 24.04 Server
 
 # 2. Install dependencies
 apt update && apt install -y golang postgresql nginx
