@@ -140,7 +140,7 @@ func getDefaultSettings() *Settings {
 		AutoCacheIntervalHours: 6,
 		UseRealDebrid:          true,
 		UsePremiumize:          false,
-		StreamProviders:        []string{"comet", "mediafusion", "torrentio"},
+		StreamProviders:        []string{"comet", "mediafusion"},
 		TorrentioProviders:     "yts,eztv,rarbg,1337x,thepiratebay",
 		CometIndexers:          []string{"bktorrent", "thepiratebay", "yts", "eztv"},
 		UseHTTPProxy:           false,

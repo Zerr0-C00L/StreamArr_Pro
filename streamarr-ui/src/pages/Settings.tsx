@@ -887,23 +887,24 @@ export default function Settings() {
                 <p className="text-sm text-gray-400 mb-4">Stremio addons to fetch streams from. Enable the providers you want to use.</p>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: 'torrentio', name: 'Torrentio', desc: 'Popular Stremio addon', color: 'blue' },
-                    { id: 'comet', name: 'Comet', desc: 'Fast stream finder', color: 'purple' },
-                    { id: 'mediafusion', name: 'MediaFusion', desc: 'Multi-source addon', color: 'orange' },
+                    { id: 'torrentio', name: 'Torrentio', desc: '⚠️ Blocked (Cloudflare)', color: 'blue', disabled: true },
+                    { id: 'comet', name: 'Comet', desc: 'Fast stream finder', color: 'purple', disabled: false },
+                    { id: 'mediafusion', name: 'MediaFusion', desc: 'Multi-source addon', color: 'orange', disabled: false },
                   ].map((provider) => {
                     const rawProviders = settings.stream_providers || [];
                     const enabledProviders = Array.isArray(rawProviders) ? rawProviders : (typeof rawProviders === 'string' ? rawProviders.split(',').filter(Boolean) : []);
                     const isEnabled = enabledProviders.includes(provider.id);
                     const colorClasses = {
-                      blue: isEnabled ? 'bg-blue-900/30 border-blue-700 hover:bg-blue-900/50' : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80',
+                      blue: provider.disabled ? 'bg-red-900/20 border-red-800 opacity-50 cursor-not-allowed' : (isEnabled ? 'bg-blue-900/30 border-blue-700 hover:bg-blue-900/50' : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80'),
                       purple: isEnabled ? 'bg-purple-900/30 border-purple-700 hover:bg-purple-900/50' : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80',
                       orange: isEnabled ? 'bg-orange-900/30 border-orange-700 hover:bg-orange-900/50' : 'bg-gray-800/50 border-gray-700 opacity-60 hover:opacity-80',
                     };
                     return (
                       <div
                         key={provider.id}
-                        className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${colorClasses[provider.color as keyof typeof colorClasses]}`}
+                        className={`flex items-center gap-2 p-3 rounded-lg border transition-colors ${provider.disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${colorClasses[provider.color as keyof typeof colorClasses]}`}
                         onClick={() => {
+                          if (provider.disabled) return; // Don't allow toggling disabled providers
                           const rawProviders = settings.stream_providers || [];
                           const providers = Array.isArray(rawProviders) ? rawProviders : (typeof rawProviders === 'string' ? rawProviders.split(',').filter(Boolean) : []);
                           let newProviders;
@@ -917,13 +918,14 @@ export default function Settings() {
                       >
                         <input
                           type="checkbox"
-                          checked={isEnabled}
+                          checked={isEnabled && !provider.disabled}
+                          disabled={provider.disabled}
                           onChange={() => {}}
-                          className="w-4 h-4 bg-gray-800 border-gray-700 rounded pointer-events-none"
+                          className={`w-4 h-4 bg-gray-800 border-gray-700 rounded pointer-events-none ${provider.disabled ? 'opacity-50' : ''}`}
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-white">{provider.name}</div>
-                          <div className="text-xs text-gray-500">{provider.desc}</div>
+                          <div className={`text-sm font-medium ${provider.disabled ? 'text-red-400 line-through' : 'text-white'}`}>{provider.name}</div>
+                          <div className={`text-xs ${provider.disabled ? 'text-red-500' : 'text-gray-500'}`}>{provider.desc}</div>
                         </div>
                       </div>
                     );
