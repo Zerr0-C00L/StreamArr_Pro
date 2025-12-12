@@ -28,6 +28,13 @@ log "Pulling latest changes from GitHub..."
 git fetch origin main
 git reset --hard origin/main
 
+# Build UI
+log "Building UI..."
+cd streamarr-ui
+npm install --silent
+npm run build
+cd ..
+
 # Build new binary
 log "Building new server..."
 ./build.sh
