@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { streamarrApi } from '../services/api';
 import ChannelCard from '../components/ChannelCard';
-import { Search, Radio, Filter } from 'lucide-react';
+import { Search, Radio, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+
+const CHANNELS_PER_PAGE = 50;
 
 export default function LiveTV() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: channels, isLoading } = useQuery({
     queryKey: ['channels', selectedCategory],
@@ -19,6 +22,24 @@ export default function LiveTV() {
   const filteredChannels = channels?.filter(ch =>
     ch.name.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredChannels.length / CHANNELS_PER_PAGE);
+  const paginatedChannels = useMemo(() => {
+    const startIndex = (currentPage - 1) * CHANNELS_PER_PAGE;
+    return filteredChannels.slice(startIndex, startIndex + CHANNELS_PER_PAGE);
+  }, [filteredChannels, currentPage]);
+
+  // Reset to page 1 when search or category changes
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
+    setCurrentPage(1);
+  };
 
   // Get unique categories
   const categories = ['all', ...new Set(channels?.map(ch => ch.category) || [])];
@@ -63,7 +84,7 @@ export default function LiveTV() {
             type="text"
             placeholder="Search channels..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="input w-full pl-10"
           />
         </div>
@@ -72,7 +93,7 @@ export default function LiveTV() {
           <Filter className="w-5 h-5 text-slate-400" />
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            onChange={(e) => handleCategoryChange(e.target.value)}
             className="input"
           >
             {categories.map(cat => (
@@ -104,13 +125,91 @@ export default function LiveTV() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredChannels.map((channel) => (
+          {paginatedChannels.map((channel) => (
             <ChannelCard
               key={channel.id}
               channel={channel}
               onClick={() => handleChannelClick(channel.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {filteredChannels.length > CHANNELS_PER_PAGE && (
+        <div className="mt-6 flex items-center justify-between">
+          <div className="text-sm text-slate-400">
+            Showing {((currentPage - 1) * CHANNELS_PER_PAGE) + 1} to{' '}
+            {Math.min(currentPage * CHANNELS_PER_PAGE, filteredChannels.length)} of{' '}
+            {filteredChannels.length} channels
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="First page"
+            >
+              <ChevronsLeft className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Previous page"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            
+            <div className="flex items-center gap-2">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      currentPage === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Next page"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Last page"
+            >
+              <ChevronsRight className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       )}
 
