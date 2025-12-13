@@ -42,7 +42,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="p-6">
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Film className="w-8 h-8 text-primary-500" />
-            StreamArr
+            StreamArr Pro
           </h1>
           <p className="text-slate-400 text-sm mt-1">Media Management</p>
         </div>

@@ -2704,7 +2704,7 @@ export default function Settings() {
           <div className="space-y-6">
             <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
               <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
-                <h3 className="text-blue-400 font-medium mb-2">ℹ️ About StreamArr</h3>
+                <h3 className="text-blue-400 font-medium mb-2">ℹ️ About StreamArr Pro</h3>
                 <p className="text-sm text-blue-200">
                   Self-hosted media server for Live TV, Movies & Series with Xtream Codes & M3U8 support.
                 </p>
