@@ -77,52 +77,27 @@ cd ..
 log "Building new server..."
 ./build.sh
 
-# Backup current binary
-if [ -f bin/server ]; then
-    cp bin/server bin/server.backup
-    log "Backed up current server to bin/server.backup"
-fi
+# Stop all services
+log "Stopping services..."
+./stop.sh 2>&1 | tee -a "$LOG_FILE"
 
-# Get the PID file or find the running process
-PID=""
-if [ -f logs/server.pid ]; then
-    PID=$(cat logs/server.pid)
-fi
+sleep 2
 
-if [ -z "$PID" ]; then
-    PID=$(pgrep -f "bin/server" 2>/dev/null || true)
-fi
-
-# Stop old server
-if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-    log "Stopping old server (PID: $PID)..."
-    kill "$PID"
-    sleep 2
-fi
-
-# Start new server
-log "Starting new server..."
-nohup ./bin/server > logs/server.log 2>&1 &
-NEW_PID=$!
-echo $NEW_PID > logs/server.pid
+# Start all services with new binary
+log "Starting services..."
+./start.sh 2>&1 | tee -a "$LOG_FILE"
 
 sleep 3
 
 # Verify server is running
-if kill -0 "$NEW_PID" 2>/dev/null; then
-    log "✅ Update successful! New server running with PID: $NEW_PID"
+if [ -f logs/server.pid ] && kill -0 "$(cat logs/server.pid)" 2>/dev/null; then
+    log "✅ Update successful! Services are running"
     
     # Get new version
     VERSION=$(curl -s http://localhost:8080/api/v1/version 2>/dev/null | grep -o '"current_version":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
     log "New version: $VERSION"
 else
-    log "❌ Server failed to start. Restoring backup..."
-    if [ -f bin/server.backup ]; then
-        mv bin/server.backup bin/server
-        nohup ./bin/server > logs/server.log 2>&1 &
-        echo $! > logs/server.pid
-        log "Restored backup and restarted."
-    fi
+    log "❌ Server failed to start"
     exit 1
 fi
 
