@@ -63,7 +63,7 @@ func NewChannelManager() *ChannelManager {
 		m3uSources:        make([]M3USource, 0),
 		enablePlutoTV:     true, // Enabled by default
 		validateStreams:   false, // Disabled by default (can be enabled in settings)
-		validationTimeout: 3 * time.Second,
+		validationTimeout: 10 * time.Second, // Increased from 3s to reduce false positives
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -114,7 +114,10 @@ func (cm *ChannelManager) validateStreamURL(url string) bool {
 		return false
 	}
 	
-	req.Header.Set("User-Agent", "StreamArr/1.0")
+	// Add headers that some streams require
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Connection", "keep-alive")
 	
 	resp, err := client.Do(req)
 	if err != nil {
