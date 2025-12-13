@@ -53,16 +53,20 @@ if [ -f /.dockerenv ]; then
             
             log "Building version: $VERSION (commit: $COMMIT)"
             
-            # Export as environment variables for docker-compose
-            export VERSION
-            export COMMIT
-            export BUILD_DATE
+            # Write to .env file so docker-compose picks it up
+            cat > .env << EOF
+VERSION=$VERSION
+COMMIT=$COMMIT
+BUILD_DATE=$BUILD_DATE
+EOF
+            
+            log "Version info written to .env file"
             
             # Stop containers
             log "Stopping containers..."
             docker-compose down 2>&1 | tee -a "$LOG_FILE"
             
-            # Build with no cache - environment variables will be picked up by docker-compose.yml
+            # Build with no cache - will read from .env file
             log "Building new image (this may take a few minutes)..."
             docker-compose build --no-cache --pull 2>&1 | tee -a "$LOG_FILE"
             
