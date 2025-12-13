@@ -47,9 +47,9 @@ if [ -f /.dockerenv ]; then
             git pull origin $BRANCH 2>&1 | tee -a "$LOG_FILE"
             
             # Get version info from git after ensuring we have all tags
-            export VERSION=$(git describe --tags --abbrev=0 2>/dev/null || git describe --always 2>/dev/null || echo "main")
-            export COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-            export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || git describe --always 2>/dev/null || echo "main")
+            COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             
             log "Building version: $VERSION (commit: $COMMIT)"
             
@@ -57,13 +57,22 @@ if [ -f /.dockerenv ]; then
             log "Stopping containers..."
             docker-compose down 2>&1 | tee -a "$LOG_FILE"
             
-            # Build with no cache to ensure fresh build
+            # Build with explicit build args to override any cached values
             log "Building new image (this may take a few minutes)..."
-            docker-compose build --no-cache --pull 2>&1 | tee -a "$LOG_FILE"
+            docker-compose build \
+                --no-cache \
+                --pull \
+                --build-arg VERSION="$VERSION" \
+                --build-arg COMMIT="$COMMIT" \
+                --build-arg BUILD_DATE="$BUILD_DATE" \
+                2>&1 | tee -a "$LOG_FILE"
             
             # Start containers
             log "Starting containers..."
             docker-compose up -d 2>&1 | tee -a "$LOG_FILE"
+            
+            # Wait for container to be healthy
+            sleep 5
             
             log "✅ Container rebuild complete! New version: $VERSION ($COMMIT)"
         else
