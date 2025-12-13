@@ -1,12 +1,14 @@
 package epg
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -259,9 +261,22 @@ func (x *XMLTVSource) BulkLoadEPG(programs map[string][]livetv.EPGProgram) {
 			fmt.Printf("EPG: Error fetching %s: %v\n", url, err)
 			continue
 		}
+		defer resp.Body.Close()
 
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		var reader io.Reader = resp.Body
+		
+		// Check if the URL ends with .gz and decompress if needed
+		if strings.HasSuffix(url, ".gz") {
+			gzReader, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				fmt.Printf("EPG: Error decompressing %s: %v\n", url, err)
+				continue
+			}
+			defer gzReader.Close()
+			reader = gzReader
+		}
+
+		body, err := io.ReadAll(reader)
 		if err != nil {
 			fmt.Printf("EPG: Error reading %s: %v\n", url, err)
 			continue
