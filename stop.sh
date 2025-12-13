@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# StreamArr Stop Script
-# Stops all StreamArr services
+# StreamArr Pro Stop Script
+# Stops all StreamArr Pro services
 
-echo "Stopping StreamArr services..."
+echo "Stopping StreamArr Pro services..."
 
 # Kill processes by PID files
 if [ -f logs/server.pid ]; then
@@ -28,4 +28,4 @@ fi
 pkill -f "bin/server" 2>/dev/null || true
 pkill -f "bin/worker" 2>/dev/null || true
 
-echo "✅ StreamArr services stopped"
+echo "✅ StreamArr Pro services stopped"

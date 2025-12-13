@@ -1,7 +1,7 @@
 #!/bin/bash
-# Update local StreamArr installation
+# Update local StreamArr Pro installation
 
-echo "🔄 Updating StreamArr..."
+echo "🔄 Updating StreamArr Pro..."
 echo ""
 
 # Pull latest code
@@ -32,4 +32,4 @@ echo "Current version:"
 curl -s http://localhost:8080/api/v1/version | jq .
 
 echo ""
-echo "🎉 StreamArr is now running the latest version!"
+echo "🎉 StreamArr Pro is now running the latest version!"

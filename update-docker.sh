@@ -1,5 +1,5 @@
 #!/bin/bash
-# StreamArr Docker Auto-Update Script
+# StreamArr Pro Docker Auto-Update Script
 # This script pulls the latest code and rebuilds the container
 
 set -e
@@ -14,7 +14,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-log "Starting StreamArr Docker update..."
+log "Starting StreamArr Pro Docker update..."
 
 # Check if running in a container
 if [ -f /.dockerenv ]; then

@@ -1,6 +1,6 @@
-# Contributing to StreamArr
+# Contributing to StreamArr Pro
 
-Thank you for your interest in contributing to StreamArr! 🎉
+Thank you for your interest in contributing to StreamArr Pro! 🎉
 
 ## How to Contribute
 

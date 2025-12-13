@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# StreamArr - Start All Services
+# StreamArr Pro - Start All Services
 echo "╔════════════════════════════════════════╗"
-echo "║     Starting StreamArr Services        ║"
+echo "║     Starting StreamArr Pro Services    ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 

@@ -1,4 +1,4 @@
-# StreamArr
+# StreamArr Pro
 
 **Self-hosted media server for Live TV, Movies & Series with Xtream Codes & M3U8 support**
 

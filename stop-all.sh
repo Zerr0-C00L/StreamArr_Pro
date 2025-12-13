@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# StreamArr - Stop All Services
+# StreamArr Pro - Stop All Services
 echo "╔════════════════════════════════════════╗"
-echo "║     Stopping StreamArr Services        ║"
+echo "║     Stopping StreamArr Pro Services    ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 

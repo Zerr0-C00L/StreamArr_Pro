@@ -22,7 +22,7 @@ If applicable, add screenshots to help explain your problem.
 
 ## Environment
 - **Installation Method**: [Docker / Manual]
-- **StreamArr Version**: [e.g., latest, commit hash]
+- **StreamArr Pro Version**: [e.g., latest, commit hash]
 - **OS**: [e.g., Ubuntu 22.04, Windows 11, macOS]
 - **Browser** (if UI issue): [e.g., Chrome 120, Firefox 121]
 - **IPTV App** (if playback issue): [e.g., TiviMate 4.7, iMPlayer]

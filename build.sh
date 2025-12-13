@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# StreamArr Build Script
+# StreamArr Pro Build Script
 # Automatically embeds version info from git tags
 
 # Get version from latest git tag, or default to "main"
@@ -14,7 +14,7 @@ PKG="github.com/Zerr0-C00L/StreamArr/internal/api"
 # Build flags
 LDFLAGS="-X '${PKG}.Version=${VERSION}' -X '${PKG}.Commit=${COMMIT}' -X '${PKG}.BuildDate=${BUILD_DATE}'"
 
-echo "Building StreamArr..."
+echo "Building StreamArr Pro..."
 echo "  Version: ${VERSION}"
 echo "  Commit:  ${COMMIT}"
 echo "  Date:    ${BUILD_DATE}"

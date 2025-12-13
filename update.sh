@@ -1,5 +1,5 @@
 #!/bin/bash
-# StreamArr Auto-Update Script
+# StreamArr Pro Auto-Update Script
 # This script pulls the latest code and updates the deployment
 
 set -e
@@ -14,7 +14,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-log "Starting StreamArr update..."
+log "Starting StreamArr Pro update..."
 
 # Pull latest changes
 log "Pulling latest changes from GitHub..."

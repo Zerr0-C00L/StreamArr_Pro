@@ -1,12 +1,12 @@
 #!/bin/sh
 
-# StreamArr Docker Entrypoint
+# StreamArr Pro Docker Entrypoint
 # Starts both the API server and background worker processes
 
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║     StreamArr Container Starting       ║"
+echo "║   StreamArr Pro Container Starting     ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 

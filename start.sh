@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# StreamArr Quick Start Script
-# Quickly sets up and starts the StreamArr system
+# StreamArr Pro Quick Start Script
+# Quickly sets up and starts the StreamArr Pro system
 
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║       StreamArr Quick Start            ║"
+echo "║       StreamArr Pro Quick Start        ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
@@ -60,7 +60,7 @@ echo ""
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║      Starting StreamArr Services       ║"
+echo "║      Starting StreamArr Pro Services   ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
@@ -97,7 +97,7 @@ echo $WORKER_PID > logs/worker.pid
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║          StreamArr is Ready!           ║"
+echo "║        StreamArr Pro is Ready!         ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 echo "📍 API Endpoints:"

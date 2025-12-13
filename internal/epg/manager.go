@@ -147,7 +147,7 @@ func (e *Manager) GenerateXMLTV(channels []livetv.Channel) (string, error) {
 	defer e.mu.RUnlock()
 
 	tv := XMLTV{
-		GeneratorName: "StreamArr",
+		GeneratorName: "StreamArr Pro",
 		GeneratorURL:  "https://github.com/streamarr/streamarr",
 	}
 
