@@ -4,6 +4,14 @@
 
 set -e
 
+# Check if running in Docker first
+if [ -f /.dockerenv ]; then
+    # In Docker, switch to mounted host directory immediately
+    if [ -d /app/host ]; then
+        cd /app/host
+    fi
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -16,14 +24,8 @@ log() {
 
 log "Starting StreamArr Pro update..."
 
-# Pull latest changes
-log "Pulling latest changes from GitHub..."
-git fetch origin main 2>&1 | tee -a "$LOG_FILE"
-
 # Get the branch parameter (default: main)
 BRANCH="${1:-main}"
-log "Checking out branch: $BRANCH"
-git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
 
 # Check if running in Docker
 if [ -f /.dockerenv ]; then
