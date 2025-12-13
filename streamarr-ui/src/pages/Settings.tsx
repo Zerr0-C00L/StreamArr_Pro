@@ -1493,7 +1493,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Channel Sources */}}
+              {/* Channel Sources */}
               {channelStats && channelStats.sources && channelStats.sources.length > 0 && (
                 <div>
                   <h3 className="text-lg font-medium text-white mb-4">📡 Channel Sources</h3>
