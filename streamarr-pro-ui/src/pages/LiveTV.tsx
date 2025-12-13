@@ -22,11 +22,8 @@ export default function LiveTV() {
     },
   });
 
-  const { data: epgData } = useQuery({
-    queryKey: ['epg', selectedChannel?.id],
-    queryFn: () => streamarrApi.getEPG(selectedChannel!.id).then(res => res.data),
-    enabled: !!selectedChannel && viewMode === 'epg',
-  });
+  // EPG data would come from API - currently disabled
+  const epgData = null;
 
   const filteredChannels = channels?.filter(ch =>
     ch.name.toLowerCase().includes(searchQuery.toLowerCase())
