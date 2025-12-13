@@ -261,7 +261,6 @@ func (x *XMLTVSource) BulkLoadEPG(programs map[string][]livetv.EPGProgram) {
 			fmt.Printf("EPG: Error fetching %s: %v\n", url, err)
 			continue
 		}
-		defer resp.Body.Close()
 
 		var reader io.Reader = resp.Body
 		
@@ -270,11 +269,13 @@ func (x *XMLTVSource) BulkLoadEPG(programs map[string][]livetv.EPGProgram) {
 			gzReader, err := gzip.NewReader(resp.Body)
 			if err != nil {
 				fmt.Printf("EPG: Error decompressing %s: %v\n", url, err)
+				resp.Body.Close()
 				continue
 			}
-			defer gzReader.Close()
 			reader = gzReader
+			defer gzReader.Close()
 		}
+		defer resp.Body.Close()
 
 		body, err := io.ReadAll(reader)
 		if err != nil {
