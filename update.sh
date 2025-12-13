@@ -37,6 +37,11 @@ if [ -f /.dockerenv ]; then
         if [ -f /app/host/docker-compose.yml ]; then
             cd /app/host
             
+            # Fetch latest and reset to ensure we have the latest code
+            log "Fetching latest code..."
+            git fetch --tags 2>&1 | tee -a "$LOG_FILE"
+            git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
+            
             # Get version info from git
             export VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "main")
             export COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -45,8 +50,9 @@ if [ -f /.dockerenv ]; then
             log "Building version: $VERSION (commit: $COMMIT)"
             
             docker-compose down 2>&1 | tee -a "$LOG_FILE"
-            docker-compose up -d --build 2>&1 | tee -a "$LOG_FILE"
-            log "Container rebuild complete!"
+            docker-compose build --no-cache 2>&1 | tee -a "$LOG_FILE"
+            docker-compose up -d 2>&1 | tee -a "$LOG_FILE"
+            log "Container rebuild complete! New version: $VERSION"
         else
             log "ERROR: docker-compose.yml not found at /app/host"
             log "Please rebuild manually: cd /opt/StreamArr_Pro && docker-compose down && docker-compose up -d --build"
