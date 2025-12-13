@@ -55,6 +55,7 @@ interface SettingsData {
   stream_sort_prefer: string;
   // Live TV settings
   livetv_enable_plutotv: boolean;
+  livetv_validate_streams: boolean;
   // Content filter settings
   only_released_content: boolean;
   hide_unavailable_content: boolean;
@@ -1466,7 +1467,33 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Channel Sources */}
+              {/* Stream Validation */}
+              <div className="p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-white font-medium flex items-center gap-2">
+                      <span>🔍</span> Validate Stream URLs
+                    </h4>
+                    <p className="text-sm text-gray-400 mt-1">
+                      Check stream URLs before loading channels to filter broken links. Validates 100 channels concurrently.
+                    </p>
+                    <p className="text-xs text-yellow-400 mt-1">
+                      ⚠️ Warning: Adds 7-15 minutes to startup time with 40K+ channels. Disabled by default.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.livetv_validate_streams === true}
+                      onChange={(e) => updateSetting('livetv_validate_streams', e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Channel Sources */}}
               {channelStats && channelStats.sources && channelStats.sources.length > 0 && (
                 <div>
                   <h3 className="text-lg font-medium text-white mb-4">📡 Channel Sources</h3>
