@@ -1337,6 +1337,37 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Apply M3U source changes to channel manager immediately
+		if h.channelManager != nil && len(newSettings.M3USources) >= 0 {
+			m3uSources := make([]livetv.M3USource, len(newSettings.M3USources))
+			for i, s := range newSettings.M3USources {
+				m3uSources[i] = livetv.M3USource{
+					Name:    s.Name,
+					URL:     s.URL,
+					Enabled: s.Enabled,
+				}
+			}
+			h.channelManager.SetM3USources(m3uSources)
+			log.Printf("Live TV: Updated M3U sources (%d configured)", len(m3uSources))
+			
+			// Reload channels to apply changes
+			if err := h.channelManager.LoadChannels(); err != nil {
+				log.Printf("Warning: Failed to reload channels after M3U update: %v", err)
+			}
+		}
+
+		// Apply Pluto TV enabled/disabled setting
+		if h.channelManager != nil {
+			h.channelManager.SetPlutoTVEnabled(newSettings.LiveTVEnablePlutoTV)
+			log.Printf("Live TV: Pluto TV enabled=%v", newSettings.LiveTVEnablePlutoTV)
+		}
+
+		// Apply stream validation setting
+		if h.channelManager != nil {
+			h.channelManager.SetStreamValidation(newSettings.LiveTVValidateStreams)
+			log.Printf("Live TV: Stream validation enabled=%v", newSettings.LiveTVValidateStreams)
+		}
+
 		respondJSON(w, http.StatusOK, newSettings)
 		return
 	}
