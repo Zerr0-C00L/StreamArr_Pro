@@ -62,8 +62,8 @@ COPY --from=frontend-builder /app/streamarr-ui/dist /app/streamarr-ui/dist
 COPY channels/ /app/channels/
 
 # Copy update and build scripts for in-app updates
-COPY update.sh build.sh start.sh stop.sh docker-compose.yml ./
-RUN chmod +x update.sh build.sh start.sh stop.sh
+COPY update.sh build.sh start.sh stop.sh docker-compose.yml entrypoint.sh ./
+RUN chmod +x update.sh build.sh start.sh stop.sh entrypoint.sh
 
 # Install git, docker-cli, and docker-compose for container updates
 RUN apk add --no-cache git bash docker-cli docker-cli-compose
@@ -78,5 +78,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/health || exit 1
 
-# Default command
-CMD ["/app/bin/server"]
+# Default command - use entrypoint to start both server and worker
+CMD ["/app/entrypoint.sh"]
