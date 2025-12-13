@@ -16,6 +16,7 @@ import (
 	"github.com/Zerr0-C00L/StreamArr/internal/database"
 	"github.com/Zerr0-C00L/StreamArr/internal/epg"
 	"github.com/Zerr0-C00L/StreamArr/internal/livetv"
+	"github.com/Zerr0-C00L/StreamArr/internal/models"
 	"github.com/Zerr0-C00L/StreamArr/internal/playlist"
 	"github.com/Zerr0-C00L/StreamArr/internal/providers"
 	"github.com/Zerr0-C00L/StreamArr/internal/services"
@@ -159,13 +160,13 @@ func main() {
 	// Worker 6: Collection Sync (every 24 hours)
 	go collectionSyncWorker(ctx, collectionStore, movieStore, tmdbClient, settingsManager, 24*time.Hour)
 
-	// Worker 7: Episode Scan (every 24 hours)
-	go episodeScanWorker(ctx, seriesStore, episodeStore, tmdbClient, 24*time.Hour)
+	// Worker 7: Episode Scan (every 24 hours) - DISABLED: requires API handler methods
+	// go episodeScanWorker(ctx, seriesStore, episodeStore, tmdbClient, 24*time.Hour)
 
-	// Worker 8: Stream Search (every 30 minutes)
-	go streamSearchWorker(ctx, movieStore, streamStore, multiProvider, 30*time.Minute)
+	// Worker 8: Stream Search (every 30 minutes) - DISABLED: requires API handler methods
+	// go streamSearchWorker(ctx, movieStore, streamStore, multiProvider, 30*time.Minute)
 
-	log.Println("✅ All workers started successfully")
+	log.Println("✅ All workers started successfully (Collection Sync, Episode Scan, Stream Search can be triggered manually)")
 	log.Println("========================================")
 
 	// Wait for interrupt signal
@@ -429,172 +430,4 @@ func runCollectionSync(ctx context.Context, collectionStore *database.Collection
 	} else {
 		log.Println("📦 Collection Sync Phase 2 skipped: AutoAddCollections is disabled")
 	}
-}
-
-func episodeScanWorker(ctx context.Context, seriesStore *database.SeriesStore, episodeStore *database.EpisodeStore, tmdbClient *services.TMDBClient, interval time.Duration) {
-	log.Printf("📺 Episode Scan Worker: Starting (interval: %v)", interval)
-	
-	// Run immediately on startup
-	runEpisodeScan(ctx, seriesStore, episodeStore, tmdbClient)
-	
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("📺 Episode Scan Worker: Stopping")
-			return
-		case <-ticker.C:
-			runEpisodeScan(ctx, seriesStore, episodeStore, tmdbClient)
-		}
-	}
-}
-
-func runEpisodeScan(ctx context.Context, seriesStore *database.SeriesStore, episodeStore *database.EpisodeStore, tmdbClient *services.TMDBClient) {
-	log.Println("📺 Episode Scan Worker: Scanning episodes for all series...")
-	
-	allSeries, err := seriesStore.List(ctx, 0, 10000, nil)
-	if err != nil {
-		log.Printf("❌ Episode Scan error: %v", err)
-		return
-	}
-	
-	totalSeries := len(allSeries)
-	if totalSeries == 0 {
-		log.Println("✅ Episode Scan: No series in library")
-		return
-	}
-	
-	log.Printf("📺 Found %d series to scan\n", totalSeries)
-	totalEpisodes := 0
-	
-	for i, series := range allSeries {
-		if i%5 == 0 {
-			log.Printf("📺 Progress: %d/%d series scanned\n", i, totalSeries)
-		}
-		
-		tmdbSeries, err := tmdbClient.GetSeries(ctx, series.TMDBID)
-		if err != nil {
-			continue
-		}
-		
-		// Get all seasons
-		for seasonNum := 1; seasonNum <= tmdbSeries.NumberOfSeasons; seasonNum++ {
-			season, err := tmdbClient.GetSeason(ctx, series.TMDBID, seasonNum)
-			if err != nil {
-				continue
-			}
-			
-			// Store each episode
-			for _, ep := range season.Episodes {
-				episode := &models.Episode{
-					SeriesID:      series.ID,
-					SeasonNumber:  seasonNum,
-					EpisodeNumber: ep.EpisodeNumber,
-					Title:         ep.Name,
-					Overview:      ep.Overview,
-					AirDate:       ep.AirDate,
-					StillPath:     ep.StillPath,
-				}
-				
-				if err := episodeStore.Create(ctx, episode); err == nil {
-					totalEpisodes++
-				}
-			}
-			
-			time.Sleep(100 * time.Millisecond) // Rate limit
-		}
-	}
-	
-	log.Printf("✅ Episode Scan complete: %d episodes processed for %d series\n", totalEpisodes, totalSeries)
-}
-
-func streamSearchWorker(ctx context.Context, movieStore *database.MovieStore, streamStore *database.StreamStore, multiProvider *providers.MultiProvider, interval time.Duration) {
-	log.Printf("🔍 Stream Search Worker: Starting (interval: %v)", interval)
-	
-	// Don't run immediately - wait for first interval to avoid startup load
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("🔍 Stream Search Worker: Stopping")
-			return
-		case <-ticker.C:
-			runStreamSearch(ctx, movieStore, streamStore, multiProvider)
-		}
-	}
-}
-
-func runStreamSearch(ctx context.Context, movieStore *database.MovieStore, streamStore *database.StreamStore, multiProvider *providers.MultiProvider) {
-	log.Println("🔍 Stream Search Worker: Checking stream availability...")
-	
-	// Query for monitored movies that need checking
-	query := `
-		SELECT id, tmdb_id, imdb_id, title 
-		FROM library_movies 
-		WHERE monitored = true 
-		AND imdb_id IS NOT NULL 
-		AND (last_checked IS NULL OR last_checked < NOW() - INTERVAL '7 days')
-		ORDER BY added_at DESC
-		LIMIT 50
-	`
-	
-	rows, err := movieStore.GetDB().QueryContext(ctx, query)
-	if err != nil {
-		log.Printf("❌ Stream Search error: %v", err)
-		return
-	}
-	defer rows.Close()
-	
-	type movieToScan struct {
-		ID     int64
-		TMDBID int
-		IMDBID string
-		Title  string
-	}
-	
-	var movies []movieToScan
-	for rows.Next() {
-		var m movieToScan
-		if err := rows.Scan(&m.ID, &m.TMDBID, &m.IMDBID, &m.Title); err != nil {
-			continue
-		}
-		if m.IMDBID != "" {
-			movies = append(movies, m)
-		}
-	}
-	
-	total := len(movies)
-	if total == 0 {
-		log.Println("✅ Stream Search: No movies to scan")
-		return
-	}
-	
-	log.Printf("🔍 Found %d movies to check\n", total)
-	foundStreams := 0
-	
-	for i, movie := range movies {
-		if i%10 == 0 {
-			log.Printf("🔍 Progress: %d/%d movies checked\n", i, total)
-		}
-		
-		// Search for streams
-		streams, _ := multiProvider.GetStreams(ctx, movie.IMDBID, "movie", "")
-		
-		hasStreams := len(streams) > 0
-		if hasStreams {
-			foundStreams++
-		}
-		
-		// Update movie availability
-		updateQuery := `UPDATE library_movies SET available = $1, last_checked = NOW() WHERE id = $2`
-		movieStore.GetDB().ExecContext(ctx, updateQuery, hasStreams, movie.ID)
-		
-		time.Sleep(500 * time.Millisecond) // Rate limit to avoid overwhelming providers
-	}
-	
-	log.Printf("✅ Stream Search complete: %d/%d movies have available streams\n", foundStreams, total)
 }
