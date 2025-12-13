@@ -126,6 +126,51 @@ func (cm *ChannelManager) validateStreamURL(url string) bool {
 	return resp.StatusCode >= 200 && resp.StatusCode < 400
 }
 
+// validateChannelsConcurrent validates multiple channels concurrently
+func (cm *ChannelManager) validateChannelsConcurrent(channels []*Channel, concurrency int) []*Channel {
+	if !cm.validateStreams || len(channels) == 0 {
+		return channels
+	}
+	
+	type result struct {
+		channel *Channel
+		valid   bool
+	}
+	
+	resultsChan := make(chan result, len(channels))
+	semaphore := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	
+	// Validate channels concurrently
+	for _, ch := range channels {
+		wg.Add(1)
+		go func(channel *Channel) {
+			defer wg.Done()
+			semaphore <- struct{}{}        // Acquire semaphore
+			defer func() { <-semaphore }() // Release semaphore
+			
+			valid := cm.validateStreamURL(channel.StreamURL)
+			resultsChan <- result{channel: channel, valid: valid}
+		}(ch)
+	}
+	
+	// Close results channel when all validations complete
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+	
+	// Collect valid channels
+	validChannels := make([]*Channel, 0, len(channels))
+	for res := range resultsChan {
+		if res.valid {
+			validChannels = append(validChannels, res.channel)
+		}
+	}
+	
+	return validChannels
+}
+
 func (cm *ChannelManager) LoadChannels() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -263,8 +308,6 @@ func (cm *ChannelManager) parseM3U(content string, sourceName string) ([]*Channe
 	
 	var currentChannel *Channel
 	channelID := 0
-	totalParsed := 0
-	totalFiltered := 0
 	
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -321,23 +364,23 @@ func (cm *ChannelManager) parseM3U(content string, sourceName string) ([]*Channe
 			// This is the stream URL
 			currentChannel.StreamURL = line
 			if currentChannel.Name != "" {
-				totalParsed++
-				// Validate stream if validation is enabled
-				if cm.validateStreamURL(currentChannel.StreamURL) {
-					// Set category based on channel name (smart mapping)
-					currentChannel.Category = mapChannelToCategory(currentChannel.Name)
-					channels = append(channels, currentChannel)
-				} else {
-					totalFiltered++
-				}
+				// Set category based on channel name (smart mapping)
+				currentChannel.Category = mapChannelToCategory(currentChannel.Name)
+				channels = append(channels, currentChannel)
 			}
 			currentChannel = nil
 		}
 	}
 	
-	if cm.validateStreams && totalFiltered > 0 {
-		fmt.Printf("Filtered %d broken channels from %s (%d valid out of %d total)\n", 
-			totalFiltered, sourceName, len(channels), totalParsed)
+	// Validate channels concurrently if validation is enabled
+	if cm.validateStreams {
+		totalParsed := len(channels)
+		channels = cm.validateChannelsConcurrent(channels, 100) // 100 concurrent validations
+		totalFiltered := totalParsed - len(channels)
+		if totalFiltered > 0 {
+			fmt.Printf("Filtered %d broken channels from %s (%d valid out of %d total)\n", 
+				totalFiltered, sourceName, len(channels), totalParsed)
+		}
 	}
 	
 	return channels, nil
@@ -352,8 +395,6 @@ func (cm *ChannelManager) parseM3UWithProviders(content string) ([]*Channel, err
 	var currentChannel *Channel
 	var currentGroupTitle string
 	channelID := 0
-	totalParsed := 0
-	totalFiltered := 0
 	
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -418,23 +459,23 @@ func (cm *ChannelManager) parseM3UWithProviders(content string) ([]*Channel, err
 			// This is the stream URL
 			currentChannel.StreamURL = line
 			if currentChannel.Name != "" {
-				totalParsed++
-				// Validate stream if validation is enabled
-				if cm.validateStreamURL(currentChannel.StreamURL) {
-					// Set category based on channel name (smart mapping)
-					currentChannel.Category = mapChannelToCategory(currentChannel.Name)
-					channels = append(channels, currentChannel)
-				} else {
-					totalFiltered++
-				}
+				// Set category based on channel name (smart mapping)
+				currentChannel.Category = mapChannelToCategory(currentChannel.Name)
+				channels = append(channels, currentChannel)
 			}
 			currentChannel = nil
 		}
 	}
 	
-	if cm.validateStreams && totalFiltered > 0 {
-		fmt.Printf("Filtered %d broken channels from local M3U (%d valid out of %d total)\n", 
-			totalFiltered, len(channels), totalParsed)
+	// Validate channels concurrently if validation is enabled
+	if cm.validateStreams {
+		totalParsed := len(channels)
+		channels = cm.validateChannelsConcurrent(channels, 100) // 100 concurrent validations
+		totalFiltered := totalParsed - len(channels)
+		if totalFiltered > 0 {
+			fmt.Printf("Filtered %d broken channels from local M3U (%d valid out of %d total)\n", 
+				totalFiltered, len(channels), totalParsed)
+		}
 	}
 	
 	return channels, nil
