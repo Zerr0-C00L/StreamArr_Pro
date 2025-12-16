@@ -1,0 +1,214 @@
+#!/bin/bash
+# StreamArr Pro Auto-Update Script
+# This script pulls the latest code and updates the deployment
+
+set -e
+
+# Check if running in Docker first
+if [ -f /.dockerenv ]; then
+    # In Docker, switch to mounted host directory immediately
+    if [ -d /app/host ]; then
+        cd /app/host
+        echo "[DEBUG] Changed to /app/host directory"
+    else
+        echo "[ERROR] /app/host not found! Is the host directory mounted?"
+        exit 1
+    fi
+fi
+
+# Always work from the directory containing this script (or /app/host in Docker)
+if [ ! -f /.dockerenv ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    cd "$SCRIPT_DIR/.."
+fi
+
+echo "[DEBUG] Working directory: $(pwd)"
+echo "[DEBUG] Contents: $(ls -la)"
+
+# Create logs directory first
+mkdir -p logs
+
+LOG_FILE="logs/update.log"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log "Starting StreamArr Pro update..."
+
+# Get the branch parameter (default: main)
+BRANCH="${1:-main}"
+
+# Check if running in Docker
+if [ -f /.dockerenv ]; then
+    log "Running in Docker container"
+    
+    # Check if docker socket is mounted
+    if [ -S /var/run/docker.sock ]; then
+        log "Docker socket available, rebuilding containers..."
+        
+        # Use docker-compose from mounted location (already in /app/host)
+        if [ -f docker-compose.yml ]; then
+            # Fetch latest code and tags
+            log "Fetching latest code and tags..."
+            git fetch --all --tags --prune 2>&1 | tee -a "$LOG_FILE"
+            git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
+            
+            # Ensure we're on the branch, not detached HEAD
+            git checkout $BRANCH 2>&1 | tee -a "$LOG_FILE" || true
+            git pull origin $BRANCH 2>&1 | tee -a "$LOG_FILE"
+            
+            # Get version info from git after ensuring we have all tags
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || git describe --always 2>/dev/null || echo "main")
+            COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            
+            log "Building version: $VERSION (commit: $COMMIT)"
+            
+            # Write to .env file so docker-compose picks it up
+            cat > .env << EOF
+VERSION=$VERSION
+COMMIT=$COMMIT
+BUILD_DATE=$BUILD_DATE
+EOF
+            
+            log "Version info written to .env file"
+            
+            # Create a standalone update script on the HOST that will run after we exit
+            # This script runs OUTSIDE the container via docker run, so it survives container stop
+            UPDATE_RUNNER=".update_runner.sh"
+            cat > "$UPDATE_RUNNER" << 'RUNNER_EOF'
+#!/bin/sh
+# Auto-generated update runner - runs on host via docker
+cd /workspace
+mkdir -p logs
+
+# Get the project name from docker compose ls (most reliable)
+RUNNING_PROJECT=$(docker compose ls --format json 2>/dev/null | grep -o '"Name":"[^"]*"' | head -1 | cut -d'"' -f4)
+if [ -z "$RUNNING_PROJECT" ]; then
+    # Fallback: derive from folder name on host (StreamArrPro -> streamarrpro)
+    RUNNING_PROJECT="streamarrpro"
+fi
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Using project name: $RUNNING_PROJECT" >> logs/update.log
+
+sleep 3
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Stopping containers..." >> logs/update.log
+docker compose -p "$RUNNING_PROJECT" down 2>&1 >> logs/update.log
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Building new image (this may take a few minutes)..." >> logs/update.log
+docker compose -p "$RUNNING_PROJECT" build --no-cache --pull 2>&1 >> logs/update.log
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting containers..." >> logs/update.log
+docker compose -p "$RUNNING_PROJECT" up -d 2>&1 >> logs/update.log
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Container rebuild complete!" >> logs/update.log
+
+# Cleanup
+rm -f /workspace/.update_runner.sh
+RUNNER_EOF
+            chmod +x "$UPDATE_RUNNER"
+            
+            log "Starting detached rebuild process..."
+            
+            # Pre-pull the docker:cli image first so the update doesn't fail waiting for it
+            log "Pulling docker:cli image (if needed)..."
+            docker pull docker:cli >> "$LOG_FILE" 2>&1 || log "Warning: Could not pre-pull docker:cli"
+            
+            # Remove any existing updater container first
+            docker rm -f streamarr-updater 2>/dev/null || true
+            
+            # Get the actual host path by inspecting the current container's mount
+            # /app/host inside the container maps to the host's project directory
+            HOST_PATH=$(docker inspect streamarr --format '{{range .Mounts}}{{if eq .Destination "/app/host"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
+            if [ -z "$HOST_PATH" ]; then
+                # Fallback to common paths
+                HOST_PATH="/root/StreamArrPro"
+            fi
+            log "Host project path: $HOST_PATH"
+            
+            # Run the update script in a separate container that mounts the host directory
+            # This container will survive even when we stop the main streamarr container
+            # Using docker:cli which has sh and docker-compose plugin
+            log "Launching update container..."
+            docker run -d \
+                --name streamarr-updater \
+                --restart=no \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$HOST_PATH:/workspace" \
+                -w /workspace \
+                docker:cli \
+                sh -c 'cd /workspace && sh .update_runner.sh' \
+                >> "$LOG_FILE" 2>&1
+            
+            RESULT=$?
+            if [ $RESULT -eq 0 ]; then
+                log "✅ Update process started in background. Container will rebuild shortly."
+                log "Check logs/update.log for progress."
+            else
+                log "❌ Failed to start updater container (exit code: $RESULT)"
+                log "Please update manually: docker compose down && docker compose up -d --build"
+            fi
+        else
+            log "ERROR: docker-compose.yml not found at /app/host"
+            log "Please rebuild manually: cd /opt/StreamArr_Pro && docker-compose down && docker-compose up -d --build"
+        fi
+    else
+        log "Docker socket not mounted, please rebuild manually"
+        log "From host, run: cd /opt/StreamArr_Pro && docker-compose down && docker-compose up -d --build"
+    fi
+    
+    exit 0
+fi
+
+# Non-Docker update path
+log "Running in non-Docker environment"
+
+# Check if Go is installed
+if ! command -v go &> /dev/null; then
+    log "ERROR: Go is not installed. Cannot build from source."
+    log "Please install Go 1.21+ or update manually."
+    exit 1
+fi
+
+# Pull latest changes
+log "Pulling latest changes from GitHub..."
+git fetch origin main
+git reset --hard origin/main
+
+# Build UI
+log "Building UI..."
+cd streamarr-pro-ui
+npm install --silent
+npm run build
+cd ..
+
+# Build new binary
+log "Building new server..."
+./build.sh
+
+# Stop all services
+log "Stopping services..."
+./stop.sh 2>&1 | tee -a "$LOG_FILE"
+
+sleep 2
+
+# Start all services with new binary
+log "Starting services..."
+./start.sh 2>&1 | tee -a "$LOG_FILE"
+
+sleep 3
+
+# Verify server is running
+if [ -f logs/server.pid ] && kill -0 "$(cat logs/server.pid)" 2>/dev/null; then
+    log "✅ Update successful! Services are running"
+    
+    # Get new version
+    VERSION=$(curl -s http://localhost:8080/api/v1/version 2>/dev/null | grep -o '"current_version":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+    log "New version: $VERSION"
+else
+    log "❌ Server failed to start"
+    exit 1
+fi
+
+log "Update complete!"
