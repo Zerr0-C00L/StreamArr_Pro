@@ -224,21 +224,28 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 	selectedCategories := b.cfg.BalkanVODSelectedCategories
 	useAllCategories := len(selectedCategories) == 0
 	
+	log.Printf("[BalkanVOD] Selected categories: %v (useAll: %v)", selectedCategories, useAllCategories)
+	
 	// Import movies (filter by selected categories)
 	imported := 0
 	skipped := 0
 	failed := 0
 	updated := 0
+	skippedByCategory := 0
+	skippedByDomestic := 0
 
 	for _, movie := range content.Movies {
 		// Filter by category
 		if !useAllCategories && !isInSelectedCategories(movie.Category, selectedCategories) {
+			skippedByCategory++
 			skipped++
 			continue
 		}
 		
-		// Also filter by domestic categories for safety
-		if !isDomesticCategory(movie.Category) {
+		// If categories are selected, trust the selection; otherwise check domestic list
+		if useAllCategories && !isDomesticCategory(movie.Category) {
+			log.Printf("[BalkanVOD] Skipping movie '%s' - category '%s' not in domestic list", movie.Name, movie.Category)
+			skippedByDomestic++
 			skipped++
 			continue
 		}
@@ -267,7 +274,7 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 		}
 	}
 
-	log.Printf("[BalkanVOD] Import complete: %d new, %d updated, %d skipped, %d failed", imported, updated, skipped, failed)
+	log.Printf("[BalkanVOD] Import complete: %d new, %d updated, %d skipped (%d by category filter, %d not domestic), %d failed", imported, updated, skipped, skippedByCategory, skippedByDomestic, failed)
 	return nil
 }
 
