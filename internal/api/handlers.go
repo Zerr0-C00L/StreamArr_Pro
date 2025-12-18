@@ -2961,6 +2961,14 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 		// Make sure script is executable
 		exec.Command("chmod", "+x", scriptPath).Run()
 
+		// Check for existing lock file
+		lockFile := hostDir + "/logs/update.lock"
+		if lockData, err := os.ReadFile(lockFile); err == nil {
+			log.Printf("[Update] Lock file exists: %s", string(lockData))
+			// Try to remove stale lock
+			os.Remove(lockFile)
+		}
+
 		// Run update script in background (detached) so it survives container stop
 		// We use nohup and & to fully detach
 		log.Println("[Update] Executing update script in background...")
@@ -2973,17 +2981,23 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 			"PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 		)
 
-		err := cmd.Start()
+		// Capture output for debugging
+		output, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("[Update] Failed to start update: %v", err)
+			log.Printf("[Update] Failed to start update: %v, output: %s", err, string(output))
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to start update: %v", err))
 			return
 		}
 
-		// Don't wait - let it run in background
-		go func() {
-			cmd.Wait()
-		}()
+		// Give the script a moment to start
+		time.Sleep(500 * time.Millisecond)
+
+		// Verify the lock file was created (script is running)
+		if _, err := os.Stat(lockFile); err == nil {
+			log.Println("[Update] Script started successfully (lock file created)")
+		} else {
+			log.Println("[Update] Warning: Lock file not found, but script was launched")
+		}
 
 		log.Println("[Update] Script started in background")
 	} else {

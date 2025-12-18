@@ -29,10 +29,27 @@ echo "[DEBUG] Contents: $(ls -la)"
 mkdir -p logs
 
 LOG_FILE="logs/update.log"
+LOCK_FILE="logs/update.lock"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
+
+# Check for existing update process
+if [ -f "$LOCK_FILE" ]; then
+    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        log "Update already in progress (PID: $LOCK_PID)"
+        exit 1
+    else
+        log "Removing stale lock file"
+        rm -f "$LOCK_FILE"
+    fi
+fi
+
+# Create lock file
+echo $$ > "$LOCK_FILE"
+trap "rm -f $LOCK_FILE" EXIT
 
 log "Starting StreamArr Pro update..."
 
