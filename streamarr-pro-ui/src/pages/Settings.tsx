@@ -1986,7 +1986,10 @@ export default function Settings() {
                           `IPTV VOD import done: movies ${d.movies_imported || 0}, series ${d.series_imported || 0}, skipped ${d.skipped || 0}, errors ${d.errors || 0}`
                         );
                       } catch (err: any) {
-                        setMessage(`Import failed: ${err?.response?.data?.error || err.message}`);
+                        console.error('IPTV VOD Import Error:', err);
+                        const statusCode = err?.response?.status || 'unknown';
+                        const errorMsg = err?.response?.data?.error || err?.response?.data || err.message;
+                        setMessage(`Import failed (${statusCode}): ${errorMsg}`);
                       }
                     }}
                     className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm"
