@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -60,18 +63,108 @@ func main() {
 func migrateUp(db *sql.DB) error {
 	log.Println("Running migrations...")
 
-	// Read migration file
-	migration, err := os.ReadFile("migrations/001_initial_schema.up.sql")
-	if err != nil {
-		return fmt.Errorf("failed to read migration file: %w", err)
+	// Create schema_migrations table if not exists
+	if err := createMigrationsTable(db); err != nil {
+		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
-	// Execute migration
-	if _, err := db.Exec(string(migration)); err != nil {
-		return fmt.Errorf("failed to execute migration: %w", err)
+	// Get list of applied migrations
+	appliedMigrations, err := getAppliedMigrations(db)
+	if err != nil {
+		return fmt.Errorf("failed to get applied migrations: %w", err)
+	}
+
+	// Find all migration files
+	migrationFiles, err := filepath.Glob("migrations/*_*.up.sql")
+	if err != nil {
+		return fmt.Errorf("failed to find migration files: %w", err)
+	}
+
+	// Sort migrations by filename (which includes the number prefix)
+	sort.Strings(migrationFiles)
+
+	// Execute each migration that hasn't been applied
+	appliedCount := 0
+	for _, file := range migrationFiles {
+		migrationName := strings.TrimSuffix(filepath.Base(file), ".up.sql")
+		
+		// Check if migration already applied
+		if appliedMigrations[migrationName] {
+			log.Printf("  ✓ %s (already applied)", migrationName)
+			continue
+		}
+
+		log.Printf("  → Applying %s...", migrationName)
+		
+		// Read migration file
+		migration, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file %s: %w", file, err)
+		}
+
+		// Execute migration in a transaction
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
+		}
+
+		// Execute migration SQL
+		if _, err := tx.Exec(string(migration)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to execute migration %s: %w", migrationName, err)
+		}
+
+		// Record migration as applied
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES ($1, NOW())", migrationName); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to record migration %s: %w", migrationName, err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit migration %s: %w", migrationName, err)
+		}
+
+		log.Printf("  ✓ %s applied successfully", migrationName)
+		appliedCount++
+	}
+
+	if appliedCount == 0 {
+		log.Println("No new migrations to apply")
+	} else {
+		log.Printf("Applied %d migration(s)", appliedCount)
 	}
 
 	return nil
+}
+
+func createMigrationsTable(db *sql.DB) error {
+	query := `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version VARCHAR(255) PRIMARY KEY,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`
+	_, err := db.Exec(query)
+	return err
+}
+
+func getAppliedMigrations(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query("SELECT version FROM schema_migrations")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	applied := make(map[string]bool)
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		applied[version] = true
+	}
+
+	return applied, rows.Err()
 }
 
 func migrateDown(db *sql.DB) error {

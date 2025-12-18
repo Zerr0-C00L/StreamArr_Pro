@@ -7,7 +7,19 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_settings_key ON settings(key);
+-- Add updated_at column if it doesn't exist (for existing installations)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'settings' AND column_name = 'updated_at'
+    ) THEN
+        ALTER TABLE settings ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT NOW();
+    END IF;
+END $$;
+
+-- Create index if not exists
+CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 
 -- Insert default settings
 INSERT INTO settings (key, value, type) VALUES
@@ -53,3 +65,4 @@ INSERT INTO settings (key, value, type) VALUES
     ('use_github_for_cache', 'false', 'bool'),
     ('debug', 'false', 'bool')
 ON CONFLICT (key) DO NOTHING;
+

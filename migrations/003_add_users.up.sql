@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Create index on username and email for faster lookups
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- Create user_watchlist table
 CREATE TABLE IF NOT EXISTS user_watchlist (
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS user_watchlist (
     UNIQUE(user_id, item_type, item_id)
 );
 
-CREATE INDEX idx_user_watchlist_user ON user_watchlist(user_id);
-CREATE INDEX idx_user_watchlist_item ON user_watchlist(item_type, item_id);
+CREATE INDEX IF NOT EXISTS idx_user_watchlist_user ON user_watchlist(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_watchlist_item ON user_watchlist(item_type, item_id);
 
 -- Create user_history table
 CREATE TABLE IF NOT EXISTS user_history (
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS user_history (
     UNIQUE(user_id, item_type, item_id)
 );
 
-CREATE INDEX idx_user_history_user ON user_history(user_id);
-CREATE INDEX idx_user_history_watched ON user_history(watched_at);
+CREATE INDEX IF NOT EXISTS idx_user_history_user ON user_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_history_watched ON user_history(watched_at);
 
 -- Create user_playlists table
 CREATE TABLE IF NOT EXISTS user_playlists (

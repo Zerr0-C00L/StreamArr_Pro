@@ -14,12 +14,21 @@ CREATE TABLE collections (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_collections_tmdb_id ON collections(tmdb_id);
-CREATE INDEX idx_collections_name ON collections(name);
+CREATE INDEX IF NOT EXISTS idx_collections_tmdb_id ON collections(tmdb_id);
+CREATE INDEX IF NOT EXISTS idx_collections_name ON collections(name);
 
 -- Add collection_id to movies table
-ALTER TABLE library_movies ADD COLUMN collection_id BIGINT REFERENCES collections(id) ON DELETE SET NULL;
-CREATE INDEX idx_movies_collection ON library_movies(collection_id) WHERE collection_id IS NOT NULL;
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'library_movies' AND column_name = 'collection_id'
+    ) THEN
+        ALTER TABLE library_movies ADD COLUMN collection_id BIGINT REFERENCES collections(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_movies_collection ON library_movies(collection_id) WHERE collection_id IS NOT NULL;
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_collection_timestamp() RETURNS trigger AS $$
