@@ -63,7 +63,7 @@ function ContentRow({
   if (items.length === 0) return null;
 
   return (
-    <div className="mb-8 group/row">
+    <div className="mb-6 group/row">
       <div className="flex items-center justify-between mb-3 px-12">
         <h2 className="text-xl font-bold text-white">{title}</h2>
         {category && items.length > 0 && (
