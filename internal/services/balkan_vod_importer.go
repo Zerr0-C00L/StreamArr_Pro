@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Zerr0-C00L/StreamArr/internal/database"
@@ -113,6 +114,33 @@ var domesticCategories = []string{
 	"Bela Ladja",
 	"Policajac Sa Petlovog Brda",
 	"Slatke Muke",
+}
+
+// extractTMDBPath extracts just the path from a TMDB image URL
+// Converts: https://image.tmdb.org/t/p/w780/abc123.jpg -> /abc123.jpg
+// If already a path (starts with /), returns as-is
+// If empty, returns empty string
+func extractTMDBPath(imageURL string) string {
+	if imageURL == "" {
+		return ""
+	}
+	
+	// If already a path (starts with /), return as-is
+	if strings.HasPrefix(imageURL, "/") {
+		return imageURL
+	}
+	
+	// Extract path from full TMDB URL
+	// Example: https://image.tmdb.org/t/p/w780/abc123.jpg -> /abc123.jpg
+	if idx := strings.Index(imageURL, "/t/p/"); idx != -1 {
+		// Find the next / after /t/p/
+		if idx2 := strings.Index(imageURL[idx+5:], "/"); idx2 != -1 {
+			return imageURL[idx+5+idx2:]
+		}
+	}
+	
+	// If no TMDB URL pattern found, return empty
+	return ""
 }
 
 // NewBalkanVODImporter creates a new Balkan VOD importer
@@ -306,8 +334,8 @@ func (b *BalkanVODImporter) importMovie(ctx context.Context, entry BalkanMovieEn
 		Title:         entry.Name,
 		OriginalTitle: entry.Name,
 		Overview:      entry.Description,
-		PosterPath:    entry.Poster,
-		BackdropPath:  entry.Background,
+		PosterPath:    extractTMDBPath(entry.Poster),
+		BackdropPath:  extractTMDBPath(entry.Background),
 		ReleaseDate:   releaseDate,
 		Runtime:       entry.GetRuntime(),
 		Monitored:     true,
@@ -375,8 +403,8 @@ func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeries
 		TMDBID:        tmdbID,
 		Title:         entry.Name,
 		OriginalTitle: entry.Name,
-		PosterPath:    entry.Poster,
-		BackdropPath:  entry.Background,
+		PosterPath:    extractTMDBPath(entry.Poster),
+		BackdropPath:  extractTMDBPath(entry.Background),
 		FirstAirDate:  firstAirDate,
 		Monitored:     true,
 		QualityProfile: "1080p",
