@@ -329,17 +329,13 @@ func (b *BalkanVODImporter) importMovie(ctx context.Context, entry BalkanMovieEn
 	}
 	movie.Metadata["balkan_vod_streams"] = streams
 
-	// Try to add movie (will skip if already exists)
-	if existing, err := b.movieStore.GetByTMDBID(ctx, tmdbID); err == nil && existing != nil {
-		// Movie already exists, merge streams and update metadata
-		log.Printf("[BalkanVOD] Movie '%s' already exists (TMDB: %d), merging streams", entry.Name, tmdbID)
-		existing.Metadata = mergeMetadata(existing.Metadata, movie.Metadata)
-		existing.Metadata["balkan_vod_streams"] = mergeStreams(existing.Metadata["balkan_vod_streams"], streams)
-		return ImportResult{Updated: true, Error: b.movieStore.Update(ctx, existing)}
+	// Add movie directly - no duplicate checking
+	log.Printf("[BalkanVOD] Adding movie '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
+	err := b.movieStore.Add(ctx, movie)
+	if err != nil {
+		log.Printf("[BalkanVOD] Error adding movie '%s': %v", entry.Name, err)
 	}
-
-	log.Printf("[BalkanVOD] Adding new movie '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
-	return ImportResult{Updated: false, Error: b.movieStore.Add(ctx, movie)}
+	return ImportResult{Updated: false, Error: err}
 }
 
 func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeriesEntry) ImportResult {
@@ -390,17 +386,13 @@ func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeries
 	}
 	series.Metadata["balkan_vod_streams"] = streams
 
-	// Try to add series (will skip if already exists)
-	if existing, err := b.seriesStore.GetByTMDBID(ctx, tmdbID); err == nil && existing != nil {
-		// Series already exists, merge streams and update metadata
-		log.Printf("[BalkanVOD] Series '%s' already exists (TMDB: %d), merging streams", entry.Name, tmdbID)
-		existing.Metadata = mergeMetadata(existing.Metadata, series.Metadata)
-		existing.Metadata["balkan_vod_streams"] = mergeStreams(existing.Metadata["balkan_vod_streams"], streams)
-		return ImportResult{Updated: true, Error: b.seriesStore.Update(ctx, existing)}
+	// Add series directly - no duplicate checking
+	log.Printf("[BalkanVOD] Adding series '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
+	err := b.seriesStore.Add(ctx, series)
+	if err != nil {
+		log.Printf("[BalkanVOD] Error adding series '%s': %v", entry.Name, err)
 	}
-
-	log.Printf("[BalkanVOD] Adding new series '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
-	return ImportResult{Updated: false, Error: b.seriesStore.Add(ctx, series)}
+	return ImportResult{Updated: false, Error: err}
 }
 
 func isDomesticCategory(category string) bool {
