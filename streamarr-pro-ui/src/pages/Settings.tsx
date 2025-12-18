@@ -719,7 +719,8 @@ export default function Settings() {
     setLoadingCategories(true);
     try {
       const res = await api.post('iptv-vod/preview-categories', {
-        url: newM3uUrl.trim()
+        url: newM3uUrl.trim(),
+        import_mode: settings.iptv_import_mode || 'both'
       });
       
       setAvailableCategories(res.data.categories || []);
@@ -830,7 +831,8 @@ export default function Settings() {
       const response = await api.post('iptv-vod/preview-xtream-categories', {
         server_url: newXtreamUrl.trim().replace(/\/$/, ''),
         username: newXtreamUsername.trim(),
-        password: newXtreamPassword.trim()
+        password: newXtreamPassword.trim(),
+        import_mode: settings.iptv_import_mode || 'both'
       });
       
       if (response.data.categories && response.data.categories.length > 0) {

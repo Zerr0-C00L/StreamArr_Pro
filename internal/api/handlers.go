@@ -2985,10 +2985,41 @@ func (h *Handler) GetAdultVODStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// shouldIncludeCategory determines if a category should be included based on import mode
+func shouldIncludeCategory(category, url, importMode string) bool {
+	if importMode == "both" {
+		return true
+	}
+	
+	lowerURL := strings.ToLower(url)
+	lowerCategory := strings.ToLower(category)
+	
+	// Check if it's VOD content
+	isVOD := strings.Contains(lowerURL, "/movie/") || 
+		strings.Contains(lowerURL, "/series/") || 
+		strings.Contains(lowerURL, "/serije/") ||
+		strings.HasSuffix(lowerURL, ".mp4") || 
+		strings.HasSuffix(lowerURL, ".mkv") || 
+		strings.HasSuffix(lowerURL, ".avi") ||
+		strings.Contains(lowerCategory, "vod") || 
+		strings.Contains(lowerCategory, "movie") || 
+		strings.Contains(lowerCategory, "series") || 
+		strings.Contains(lowerCategory, "film")
+	
+	if importMode == "vod_only" {
+		return isVOD
+	} else if importMode == "live_only" {
+		return !isVOD
+	}
+	
+	return true
+}
+
 // PreviewM3UCategories handles POST /api/v1/iptv-vod/preview-categories
 func (h *Handler) PreviewM3UCategories(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		URL string `json:"url"`
+		URL        string `json:"url"`
+		ImportMode string `json:"import_mode"` // "vod_only", "live_only", or "both"
 	}
 	
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -2999,6 +3030,11 @@ func (h *Handler) PreviewM3UCategories(w http.ResponseWriter, r *http.Request) {
 	if req.URL == "" {
 		respondError(w, http.StatusBadRequest, "URL is required")
 		return
+	}
+	
+	// Default to "both" if not specified
+	if req.ImportMode == "" {
+		req.ImportMode = "both"
 	}
 	
 	// Fetch M3U file
@@ -3022,23 +3058,28 @@ func (h *Handler) PreviewM3UCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Parse categories
+	// Parse categories with content type tracking
 	categories := make(map[string]int) // category -> count
 	scanner := bufio.NewScanner(resp.Body)
+	var currentGroup string
 	
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "#EXTINF:") {
+			currentGroup = ""
 			// Extract group-title
 			if idx := strings.Index(line, "group-title=\""); idx != -1 {
 				start := idx + 13
 				if end := strings.Index(line[start:], "\""); end != -1 {
-					category := line[start : start+end]
-					if category != "" {
-						categories[category]++
-					}
+					currentGroup = line[start : start+end]
 				}
 			}
+		} else if currentGroup != "" && !strings.HasPrefix(line, "#") && line != "" {
+			// URL line - check if it's VOD or Live TV
+			if shouldIncludeCategory(currentGroup, line, req.ImportMode) {
+				categories[currentGroup]++
+			}
+			currentGroup = "" // Reset after processing URL
 		}
 	}
 	
@@ -3070,9 +3111,10 @@ func (h *Handler) PreviewM3UCategories(w http.ResponseWriter, r *http.Request) {
 // PreviewXtreamCategories handles POST /api/v1/iptv-vod/preview-xtream-categories
 func (h *Handler) PreviewXtreamCategories(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ServerURL string `json:"server_url"`
-		Username  string `json:"username"`
-		Password  string `json:"password"`
+		ServerURL  string `json:"server_url"`
+		Username   string `json:"username"`
+		Password   string `json:"password"`
+		ImportMode string `json:"import_mode"` // "vod_only", "live_only", or "both"
 	}
 	
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -3085,65 +3127,103 @@ func (h *Handler) PreviewXtreamCategories(w http.ResponseWriter, r *http.Request
 		return
 	}
 	
-	// Fetch VOD categories from Xtream API
-	server := strings.TrimSuffix(req.ServerURL, "/")
-	url := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_vod_categories", server, req.Username, req.Password)
-	
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch categories: %v", err))
-		return
+	// Default to "both" if not specified
+	if req.ImportMode == "" {
+		req.ImportMode = "both"
 	}
-	defer resp.Body.Close()
 	
-	if resp.StatusCode != http.StatusOK {
-		// Try parsing M3U format instead (some providers don't support player_api.php)
-		m3uURL := fmt.Sprintf("%s/get.php?username=%s&password=%s&type=m3u_plus&output=ts", server, req.Username, req.Password)
-		m3uResp, err := client.Get(m3uURL)
-		if err != nil {
-			respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch M3U: %v", err))
-			return
-		}
-		defer m3uResp.Body.Close()
+	// Fetch categories based on import mode
+	server := strings.TrimSuffix(req.ServerURL, "/")
+	
+	allCategories := make(map[string]int) // category name -> count
+	
+	// Fetch VOD categories if needed
+	if req.ImportMode == "vod_only" || req.ImportMode == "both" {
+		url := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_vod_categories", server, req.Username, req.Password)
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Get(url)
 		
-		if m3uResp.StatusCode != http.StatusOK {
-			respondError(w, http.StatusBadRequest, fmt.Sprintf("Server returned HTTP %d. Please verify your credentials and server URL.", resp.StatusCode))
-			return
-		}
-		
-		// Parse M3U categories
-		categories := make(map[string]int)
-		scanner := bufio.NewScanner(m3uResp.Body)
-		
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.HasPrefix(line, "#EXTINF:") {
-				if idx := strings.Index(line, "group-title=\""); idx != -1 {
-					start := idx + 13
-					if end := strings.Index(line[start:], "\""); end != -1 {
-						category := line[start : start+end]
-						if category != "" {
-							categories[category]++
+		if err == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			var categories []struct {
+				CategoryID   string `json:"category_id"`
+				CategoryName string `json:"category_name"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&categories); err == nil {
+				// Get VOD stream counts
+				vodURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_vod_streams", server, req.Username, req.Password)
+				vodResp, err := client.Get(vodURL)
+				if err == nil {
+					defer vodResp.Body.Close()
+					if vodResp.StatusCode == http.StatusOK {
+						var streams []struct {
+							CategoryID string `json:"category_id"`
+						}
+						if err := json.NewDecoder(vodResp.Body).Decode(&streams); err == nil {
+							counts := make(map[string]int)
+							for _, s := range streams {
+								counts[s.CategoryID]++
+							}
+							for _, cat := range categories {
+								if count, ok := counts[cat.CategoryID]; ok && count > 0 {
+									allCategories[cat.CategoryName] = count
+								}
+							}
 						}
 					}
 				}
 			}
 		}
+	}
+	
+	// Fetch Live TV categories if needed
+	if req.ImportMode == "live_only" || req.ImportMode == "both" {
+		url := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_live_categories", server, req.Username, req.Password)
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Get(url)
 		
-		if err := scanner.Err(); err != nil {
-			respondError(w, http.StatusInternalServerError, fmt.Sprintf("Error parsing M3U: %v", err))
-			return
+		if err == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			var categories []struct {
+				CategoryID   string `json:"category_id"`
+				CategoryName string `json:"category_name"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&categories); err == nil {
+				// Get live stream counts
+				liveURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_live_streams", server, req.Username, req.Password)
+				liveResp, err := client.Get(liveURL)
+				if err == nil {
+					defer liveResp.Body.Close()
+					if liveResp.StatusCode == http.StatusOK {
+						var streams []struct {
+							CategoryID string `json:"category_id"`
+						}
+						if err := json.NewDecoder(liveResp.Body).Decode(&streams); err == nil {
+							counts := make(map[string]int)
+							for _, s := range streams {
+								counts[s.CategoryID]++
+							}
+							for _, cat := range categories {
+								if count, ok := counts[cat.CategoryID]; ok && count > 0 {
+									allCategories[cat.CategoryName] = count
+								}
+							}
+						}
+					}
+				}
+			}
 		}
-		
-		// Convert to sorted list
+	}
+	
+	// If we got categories, return them
+	if len(allCategories) > 0 {
 		type Category struct {
 			Name  string `json:"name"`
 			Count int    `json:"count"`
 		}
 		
-		result := make([]Category, 0, len(categories))
-		for name, count := range categories {
+		result := make([]Category, 0, len(allCategories))
+		for name, count := range allCategories {
 			result = append(result, Category{Name: name, Count: count})
 		}
 		
@@ -3157,71 +3237,65 @@ func (h *Handler) PreviewXtreamCategories(w http.ResponseWriter, r *http.Request
 		return
 	}
 	
-	// Parse JSON response
-	var categories []struct {
-		CategoryID   string `json:"category_id"`
-		CategoryName string `json:"category_name"`
-		ParentID     int    `json:"parent_id"`
-	}
-	
-	if err := json.NewDecoder(resp.Body).Decode(&categories); err != nil {
-		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Error parsing response: %v", err))
+	// If API failed, fall back to M3U parsing
+	client := &http.Client{Timeout: 30 * time.Second}
+	m3uURL := fmt.Sprintf("%s/get.php?username=%s&password=%s&type=m3u_plus&output=ts", server, req.Username, req.Password)
+	httpReq, err := http.NewRequest("GET", m3uURL, nil)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
 		return
 	}
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0")
 	
-	// Count streams per category
-	categoryMap := make(map[string]string) // id -> name
-	for _, cat := range categories {
-		categoryMap[cat.CategoryID] = cat.CategoryName
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch M3U: %v", err))
+		return
 	}
+	defer resp.Body.Close()
 	
-	// Fetch VOD streams to get counts
-	vodURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_vod_streams", server, req.Username, req.Password)
-	vodResp, err := client.Get(vodURL)
-	if err == nil {
-		defer vodResp.Body.Close()
-		if vodResp.StatusCode == http.StatusOK {
-			var streams []struct {
-				CategoryID string `json:"category_id"`
+	if resp.StatusCode != http.StatusOK {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Server returned HTTP %d. Please verify your credentials and server URL.", resp.StatusCode))
+		return
+	}
+	// Parse M3U categories
+	categories := make(map[string]int)
+	scanner := bufio.NewScanner(resp.Body)
+	var currentGroup string
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#EXTINF:") {
+			currentGroup = ""
+			if idx := strings.Index(line, "group-title=\""); idx != -1 {
+				start := idx + 13
+				if end := strings.Index(line[start:], "\""); end != -1 {
+					currentGroup = line[start : start+end]
+				}
 			}
-			if err := json.NewDecoder(vodResp.Body).Decode(&streams); err == nil {
-				counts := make(map[string]int)
-				for _, s := range streams {
-					counts[s.CategoryID]++
-				}
-				
-				// Build result with counts
-				type Category struct {
-					Name  string `json:"name"`
-					Count int    `json:"count"`
-				}
-				
-				result := make([]Category, 0, len(categoryMap))
-				for id, name := range categoryMap {
-					result = append(result, Category{Name: name, Count: counts[id]})
-				}
-				
-				sort.Slice(result, func(i, j int) bool {
-					return result[i].Name < result[j].Name
-				})
-				
-				respondJSON(w, http.StatusOK, map[string]interface{}{
-					"categories": result,
-				})
-				return
+		} else if currentGroup != "" && !strings.HasPrefix(line, "#") && line != "" {
+			// URL line - check if it's VOD or Live TV
+			if shouldIncludeCategory(currentGroup, line, req.ImportMode) {
+				categories[currentGroup]++
 			}
+			currentGroup = ""
 		}
 	}
 	
-	// Fallback: return categories without counts
+	if err := scanner.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Error parsing M3U: %v", err))
+		return
+	}
+	
+	// Convert to sorted list
 	type Category struct {
 		Name  string `json:"name"`
 		Count int    `json:"count"`
 	}
 	
-	result := make([]Category, 0, len(categoryMap))
-	for _, name := range categoryMap {
-		result = append(result, Category{Name: name, Count: 0})
+	result := make([]Category, 0, len(categories))
+	for name, count := range categories {
+		result = append(result, Category{Name: name, Count: count})
 	}
 	
 	sort.Slice(result, func(i, j int) bool {
