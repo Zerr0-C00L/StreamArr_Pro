@@ -311,7 +311,6 @@ func (m *Manager) Update(newSettings *Settings) error {
 
 func (m *Manager) UpdatePartial(updates map[string]interface{}) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	
 	// Check if Balkan VOD is being disabled
 	isDisablingBalkan := false
@@ -327,11 +326,13 @@ func (m *Manager) UpdatePartial(updates map[string]interface{}) error {
 	// Convert current settings to map
 	settingsJSON, err := json.Marshal(m.settings)
 	if err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	
 	var settingsMap map[string]interface{}
 	if err := json.Unmarshal(settingsJSON, &settingsMap); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	
@@ -343,26 +344,29 @@ func (m *Manager) UpdatePartial(updates map[string]interface{}) error {
 	// Convert back to struct
 	updatedJSON, err := json.Marshal(settingsMap)
 	if err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	
 	if err := json.Unmarshal(updatedJSON, m.settings); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	
 	if err := m.saveToDBLocked(); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	
+	// Save callback reference before unlocking
+	callback := m.onBalkanVODDisabled
+	m.mu.Unlock()
+	
 	// Call cleanup callback if Balkan VOD was disabled
-	if isDisablingBalkan && m.onBalkanVODDisabled != nil {
-		// Call callback without lock to avoid deadlocks
-		m.mu.Unlock()
-		if err := m.onBalkanVODDisabled(); err != nil {
-			m.mu.Lock()
+	if isDisablingBalkan && callback != nil {
+		if err := callback(); err != nil {
 			return fmt.Errorf("failed to cleanup Balkan VOD content: %w", err)
 		}
-		m.mu.Lock()
 	}
 	
 	return nil
