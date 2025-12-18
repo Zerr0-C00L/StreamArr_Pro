@@ -182,6 +182,12 @@ type CategoryWithCount struct {
 	Count int    `json:"count"`
 }
 
+// ImportResult represents the result of importing a single item
+type ImportResult struct {
+	Updated bool
+	Error   error
+}
+
 // ImportBalkanVOD imports content from Balkan GitHub repos
 func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 	if !b.cfg.BalkanVODEnabled {
@@ -222,6 +228,7 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 	imported := 0
 	skipped := 0
 	failed := 0
+	updated := 0
 
 	for _, movie := range content.Movies {
 		// Filter by category
@@ -236,9 +243,12 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 			continue
 		}
 
-		if err := b.importMovie(ctx, movie); err != nil {
-			log.Printf("[BalkanVOD] Failed to import movie %s: %v", movie.Name, err)
+		result := b.importMovie(ctx, movie)
+		if result.Error != nil {
+			log.Printf("[BalkanVOD] Failed to import movie %s: %v", movie.Name, result.Error)
 			failed++
+		} else if result.Updated {
+			updated++
 		} else {
 			imported++
 		}
@@ -246,21 +256,24 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 
 	// Import series (all series are domestic)
 	for _, series := range content.Series {
-		if err := b.importSeries(ctx, series); err != nil {
-			log.Printf("[BalkanVOD] Failed to import series %s: %v", series.Name, err)
+		result := b.importSeries(ctx, series)
+		if result.Error != nil {
+			log.Printf("[BalkanVOD] Failed to import series %s: %v", series.Name, result.Error)
 			failed++
+		} else if result.Updated {
+			updated++
 		} else {
 			imported++
 		}
 	}
 
-	log.Printf("[BalkanVOD] Import complete: %d imported, %d skipped, %d failed", imported, skipped, failed)
+	log.Printf("[BalkanVOD] Import complete: %d new, %d updated, %d skipped, %d failed", imported, updated, skipped, failed)
 	return nil
 }
 
-func (b *BalkanVODImporter) importMovie(ctx context.Context, entry BalkanMovieEntry) error {
+func (b *BalkanVODImporter) importMovie(ctx context.Context, entry BalkanMovieEntry) ImportResult {
 	if len(entry.Streams) == 0 {
-		return fmt.Errorf("no streams available")
+		return ImportResult{Error: fmt.Errorf("no streams available")}
 	}
 
 	// Extract TMDB ID from poster URL if available
@@ -310,17 +323,20 @@ func (b *BalkanVODImporter) importMovie(ctx context.Context, entry BalkanMovieEn
 
 	// Try to add movie (will skip if already exists)
 	if existing, err := b.movieStore.GetByTMDBID(ctx, tmdbID); err == nil && existing != nil {
-		// Movie already exists, update metadata
+		// Movie already exists, merge streams and update metadata
+		log.Printf("[BalkanVOD] Movie '%s' already exists (TMDB: %d), merging streams", entry.Name, tmdbID)
 		existing.Metadata = mergeMetadata(existing.Metadata, movie.Metadata)
-		return b.movieStore.Update(ctx, existing)
+		existing.Metadata["balkan_vod_streams"] = mergeStreams(existing.Metadata["balkan_vod_streams"], streams)
+		return ImportResult{Updated: true, Error: b.movieStore.Update(ctx, existing)}
 	}
 
-	return b.movieStore.Add(ctx, movie)
+	log.Printf("[BalkanVOD] Adding new movie '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
+	return ImportResult{Updated: false, Error: b.movieStore.Add(ctx, movie)}
 }
 
-func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeriesEntry) error {
+func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeriesEntry) ImportResult {
 	if len(entry.Streams) == 0 {
-		return fmt.Errorf("no streams available")
+		return ImportResult{Error: fmt.Errorf("no streams available")}
 	}
 
 	// Extract TMDB ID from poster URL if available
@@ -367,12 +383,15 @@ func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeries
 
 	// Try to add series (will skip if already exists)
 	if existing, err := b.seriesStore.GetByTMDBID(ctx, tmdbID); err == nil && existing != nil {
-		// Series already exists, update metadata
+		// Series already exists, merge streams and update metadata
+		log.Printf("[BalkanVOD] Series '%s' already exists (TMDB: %d), merging streams", entry.Name, tmdbID)
 		existing.Metadata = mergeMetadata(existing.Metadata, series.Metadata)
-		return b.seriesStore.Update(ctx, existing)
+		existing.Metadata["balkan_vod_streams"] = mergeStreams(existing.Metadata["balkan_vod_streams"], streams)
+		return ImportResult{Updated: true, Error: b.seriesStore.Update(ctx, existing)}
 	}
 
-	return b.seriesStore.Add(ctx, series)
+	log.Printf("[BalkanVOD] Adding new series '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
+	return ImportResult{Updated: false, Error: b.seriesStore.Add(ctx, series)}
 }
 
 func isDomesticCategory(category string) bool {
@@ -391,6 +410,50 @@ func isInSelectedCategories(category string, selectedCategories []string) bool {
 		}
 	}
 	return false
+}
+
+// mergeStreams combines streams from existing and new sources, removing duplicates by URL
+func mergeStreams(existingStreams, newStreams interface{}) []map[string]interface{} {
+	var result []map[string]interface{}
+	seenURLs := make(map[string]bool)
+	
+	// Add existing streams
+	if existing, ok := existingStreams.([]map[string]interface{}); ok {
+		for _, stream := range existing {
+			if url, ok := stream["url"].(string); ok && url != "" {
+				if !seenURLs[url] {
+					result = append(result, stream)
+					seenURLs[url] = true
+				}
+			}
+		}
+	} else if existing, ok := existingStreams.([]interface{}); ok {
+		for _, s := range existing {
+			if stream, ok := s.(map[string]interface{}); ok {
+				if url, ok := stream["url"].(string); ok && url != "" {
+					if !seenURLs[url] {
+						result = append(result, stream)
+						seenURLs[url] = true
+					}
+				}
+			}
+		}
+	}
+	
+	// Add new streams (avoiding duplicates)
+	if newStreamsSlice, ok := newStreams.([]map[string]interface{}); ok {
+		for _, stream := range newStreamsSlice {
+			if url, ok := stream["url"].(string); ok && url != "" {
+				if !seenURLs[url] {
+					result = append(result, stream)
+					seenURLs[url] = true
+				}
+			}
+		}
+	}
+	
+	log.Printf("[BalkanVOD] Merged streams: %d existing + new = %d total unique", len(seenURLs)-len(result), len(result))
+	return result
 }
 
 func extractTMDBFromPoster(posterURL string) int {
