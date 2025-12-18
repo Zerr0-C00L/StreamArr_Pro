@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { streamarrApi, tmdbImageUrl } from '../services/api';
 import { 
   Play, Info, ChevronLeft, ChevronRight, X, Plus, 
@@ -29,10 +30,12 @@ function ContentRow({
   title, 
   items, 
   onItemClick,
+  category,
 }: { 
   title: string; 
   items: MediaItem[]; 
   onItemClick: (item: MediaItem) => void;
+  category?: string;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
@@ -61,7 +64,18 @@ function ContentRow({
 
   return (
     <div className="mb-8 group/row">
-      <h2 className="text-xl font-bold text-white mb-3 px-12">{title}</h2>
+      <div className="flex items-center justify-between mb-3 px-12">
+        <h2 className="text-xl font-bold text-white">{title}</h2>
+        {category && items.length > 0 && (
+          <Link 
+            to={`/viewall?category=${category}`}
+            className="text-sm text-slate-400 hover:text-white transition-colors flex items-center gap-1"
+          >
+            View All
+            <ChevronRight className="w-4 h-4" />
+          </Link>
+        )}
+      </div>
       <div className="relative">
         {/* Left Arrow */}
         {showLeftArrow && (
@@ -735,8 +749,16 @@ export default function Library() {
   }, [allMedia]);
 
   // Categorized content
-  const recentlyAdded = useMemo(() => {
+  const recentlyAddedMovies = useMemo(() => {
     return [...allMedia]
+      .filter(m => m.type === 'movie')
+      .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime())
+      .slice(0, 20);
+  }, [allMedia]);
+
+  const recentlyAddedSeries = useMemo(() => {
+    return [...allMedia]
+      .filter(m => m.type === 'series')
       .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime())
       .slice(0, 20);
   }, [allMedia]);
@@ -858,17 +880,45 @@ export default function Library() {
 
       {/* Content Rows */}
       <div className="relative -mt-24 z-10 pb-12">
-        {recentlyAdded.length > 0 && (
-          <ContentRow title="Recently Added" items={recentlyAdded} onItemClick={setSelectedMedia} />
+        {recentlyAddedMovies.length > 0 && (
+          <ContentRow 
+            title="Recently Added Movies" 
+            items={recentlyAddedMovies} 
+            onItemClick={setSelectedMedia}
+            category="recently-added-movies"
+          />
+        )}
+        {recentlyAddedSeries.length > 0 && (
+          <ContentRow 
+            title="Recently Added Series" 
+            items={recentlyAddedSeries} 
+            onItemClick={setSelectedMedia}
+            category="recently-added-series"
+          />
         )}
         {topRated.length > 0 && (
-          <ContentRow title="Top Rated" items={topRated} onItemClick={setSelectedMedia} />
+          <ContentRow 
+            title="Top Rated" 
+            items={topRated} 
+            onItemClick={setSelectedMedia}
+            category="top-rated"
+          />
         )}
         {moviesList.length > 0 && (
-          <ContentRow title="Movies" items={moviesList} onItemClick={setSelectedMedia} />
+          <ContentRow 
+            title="Movies" 
+            items={moviesList} 
+            onItemClick={setSelectedMedia}
+            category="movies"
+          />
         )}
         {seriesList.length > 0 && (
-          <ContentRow title="TV Shows" items={seriesList} onItemClick={setSelectedMedia} />
+          <ContentRow 
+            title="TV Shows" 
+            items={seriesList} 
+            onItemClick={setSelectedMedia}
+            category="series"
+          />
         )}
       </div>
 
