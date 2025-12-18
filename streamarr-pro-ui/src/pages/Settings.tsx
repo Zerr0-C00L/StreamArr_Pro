@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Key, Layers, Settings as SettingsIcon, Bell, Code, Plus, X, Tv, Server, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera } from 'lucide-react';
+import { Save, Key, Layers, Settings as SettingsIcon, Bell, Code, Plus, X, Tv, Server, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
