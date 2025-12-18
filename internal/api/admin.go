@@ -455,20 +455,3 @@ func (a *AdminHandler) GetStatistics(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, stats)
 }
-
-// Restart restarts the server
-func (a *AdminHandler) Restart(w http.ResponseWriter, r *http.Request) {
-	log.Println("[Admin] Server restart requested")
-	
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"status": "restarting",
-		"message": "Server is restarting...",
-	})
-	
-	// Give the response time to send before restarting
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		// Exit with code 0, Docker will restart the container
-		os.Exit(0)
-	}()
-}
