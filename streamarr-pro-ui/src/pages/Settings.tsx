@@ -718,7 +718,7 @@ export default function Settings() {
     
     setLoadingCategories(true);
     try {
-      const res = await api.post('/api/v1/iptv-vod/preview-categories', {
+      const res = await api.post('iptv-vod/preview-categories', {
         url: newM3uUrl.trim()
       });
       

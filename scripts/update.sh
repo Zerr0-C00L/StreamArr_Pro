@@ -96,11 +96,17 @@ sleep 3
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Stopping containers..." >> logs/update.log
 docker compose -p "$RUNNING_PROJECT" down 2>&1 >> logs/update.log
 
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Cleaning up unused Docker resources..." >> logs/update.log
+docker system prune -af --volumes 2>&1 >> logs/update.log || echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Cleanup had issues but continuing..." >> logs/update.log
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Building new image (this may take a few minutes)..." >> logs/update.log
 docker compose -p "$RUNNING_PROJECT" build --no-cache --pull 2>&1 >> logs/update.log
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting containers..." >> logs/update.log
 docker compose -p "$RUNNING_PROJECT" up -d 2>&1 >> logs/update.log
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Cleaning up unused Docker resources..." >> logs/update.log
+docker system prune -af --volumes 2>&1 >> logs/update.log || echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Cleanup had issues but continuing..." >> logs/update.log
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ Container rebuild complete!" >> logs/update.log
 
