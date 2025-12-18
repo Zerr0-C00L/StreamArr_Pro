@@ -3705,6 +3705,11 @@ func buildBalkanVODEpisodes(series *models.Series) []*models.Episode {
 				title = fmt.Sprintf("Episode %d", int(episodeNum))
 			}
 
+			var streamURL *string
+			if url != "" {
+				streamURL = &url
+			}
+
 			episode := &models.Episode{
 				SeriesID:      series.ID,
 				SeasonNumber:  int(seasonNum),
@@ -3713,7 +3718,7 @@ func buildBalkanVODEpisodes(series *models.Series) []*models.Episode {
 				StillPath:     thumbnail,
 				Monitored:     true,
 				Available:     url != "",
-				StreamURL:     url,
+				StreamURL:     streamURL,
 				Metadata:      make(map[string]interface{}),
 			}
 
