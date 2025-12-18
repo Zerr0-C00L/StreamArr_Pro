@@ -3003,7 +3003,14 @@ func (h *Handler) PreviewM3UCategories(w http.ResponseWriter, r *http.Request) {
 	
 	// Fetch M3U file
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(req.URL)
+	httpReq, err := http.NewRequest("GET", req.URL, nil)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
+		return
+	}
+	httpReq.Header.Set("User-Agent", "Mozilla/5.0")
+	
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch M3U: %v", err))
 		return
