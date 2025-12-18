@@ -32,12 +32,15 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
     client := &http.Client{Timeout: 30 * time.Second}
     summary := &IPTVVODImportSummary{}
 
-    // Build list of M3U URLs to scan
-    type src struct { url, name string }
+    // Build list of M3U URLs to scan with selected categories
+    type src struct { 
+        url, name string
+        selectedCategories []string
+    }
     var m3uURLs []src
     for _, s := range cfg.M3USources {
         if s.Enabled && strings.TrimSpace(s.URL) != "" {
-            m3uURLs = append(m3uURLs, src{url: s.URL, name: s.Name})
+            m3uURLs = append(m3uURLs, src{url: s.URL, name: s.Name, selectedCategories: s.SelectedCategories})
         }
     }
     for _, xs := range cfg.XtreamSources {
@@ -71,7 +74,7 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
                 return
             }
             // Parse M3U, collecting VOD entries only
-            items := extractVODItems(resp.Body, s.name)
+            items := extractVODItems(resp.Body, s.name, s.selectedCategories)
             summary.ItemsFound += len(items)
             // Import each item
             for _, it := range items {
@@ -127,11 +130,12 @@ type vodItem struct {
 }
 
 // extractVODItems scans M3U content for VOD entries and extracts title/year hints
-func extractVODItems(r io.Reader, sourceName string) []vodItem {
+func extractVODItems(r io.Reader, sourceName string, selectedCategories []string) []vodItem {
     items := make([]vodItem, 0)
     scanner := bufio.NewScanner(r)
     var currentTitle string
     var currentGroup string
+    var currentGroupOriginal string // Keep original case for comparison
     var currentURL string
 
     for scanner.Scan() {
@@ -139,6 +143,7 @@ func extractVODItems(r io.Reader, sourceName string) []vodItem {
         if strings.HasPrefix(line, "#EXTINF:") {
             currentTitle = ""
             currentGroup = ""
+            currentGroupOriginal = ""
             // tvg-name
             if idx := strings.Index(line, "tvg-name=\""); idx != -1 {
                 end := strings.Index(line[idx+10:], "\"")
@@ -156,7 +161,8 @@ func extractVODItems(r io.Reader, sourceName string) []vodItem {
             if idx := strings.Index(line, "group-title=\""); idx != -1 {
                 end := strings.Index(line[idx+13:], "\"")
                 if end != -1 {
-                    currentGroup = strings.ToLower(line[idx+13 : idx+13+end])
+                    currentGroupOriginal = line[idx+13 : idx+13+end]
+                    currentGroup = strings.ToLower(currentGroupOriginal)
                 }
             }
         } else if currentTitle != "" && !strings.HasPrefix(line, "#") && line != "" {
@@ -171,7 +177,19 @@ func extractVODItems(r io.Reader, sourceName string) []vodItem {
             isVOD = isVOD || strings.Contains(currentGroup, "vod") || strings.Contains(currentGroup, "movie") || 
                 strings.Contains(currentGroup, "series") || strings.Contains(currentGroup, "film")
             
-            if isVOD {
+            // Check if category is selected (if categories are specified)
+            categoryAllowed := true
+            if len(selectedCategories) > 0 && currentGroupOriginal != "" {
+                categoryAllowed = false
+                for _, selCat := range selectedCategories {
+                    if selCat == currentGroupOriginal {
+                        categoryAllowed = true
+                        break
+                    }
+                }
+            }
+            
+            if isVOD && categoryAllowed {
                 kind := "movie"
                 var title string
                 var year int

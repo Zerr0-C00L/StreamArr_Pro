@@ -2984,6 +2984,81 @@ func (h *Handler) GetAdultVODStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PreviewM3UCategories handles POST /api/v1/iptv-vod/preview-categories
+func (h *Handler) PreviewM3UCategories(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL string `json:"url"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	
+	if req.URL == "" {
+		respondError(w, http.StatusBadRequest, "URL is required")
+		return
+	}
+	
+	// Fetch M3U file
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(req.URL)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch M3U: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch M3U: HTTP %d", resp.StatusCode))
+		return
+	}
+	
+	// Parse categories
+	categories := make(map[string]int) // category -> count
+	scanner := bufio.NewScanner(resp.Body)
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#EXTINF:") {
+			// Extract group-title
+			if idx := strings.Index(line, "group-title=\""); idx != -1 {
+				start := idx + 13
+				if end := strings.Index(line[start:], "\""); end != -1 {
+					category := line[start : start+end]
+					if category != "" {
+						categories[category]++
+					}
+				}
+			}
+		}
+	}
+	
+	if err := scanner.Err(); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Error parsing M3U: %v", err))
+		return
+	}
+	
+	// Convert to sorted list
+	type Category struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+	
+	result := make([]Category, 0, len(categories))
+	for name, count := range categories {
+		result = append(result, Category{Name: name, Count: count})
+	}
+	
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"categories": result,
+	})
+}
+
 // ImportIPTVVOD handles POST /api/v1/iptv-vod/import
 func (h *Handler) ImportIPTVVOD(w http.ResponseWriter, r *http.Request) {
 	if h.settingsManager == nil || h.tmdbClient == nil || h.movieStore == nil || h.seriesStore == nil {

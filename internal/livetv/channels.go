@@ -36,10 +36,11 @@ type EPGProgram struct {
 
 // M3USource represents a custom M3U playlist source
 type M3USource struct {
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	EPGURL  string `json:"epg_url,omitempty"`
-	Enabled bool   `json:"enabled"`
+	Name               string   `json:"name"`
+	URL                string   `json:"url"`
+	EPGURL             string   `json:"epg_url,omitempty"`
+	Enabled            bool     `json:"enabled"`
+	SelectedCategories []string `json:"selected_categories,omitempty"`
 }
 
 // XtreamSource represents an Xtream Codes compatible IPTV provider
