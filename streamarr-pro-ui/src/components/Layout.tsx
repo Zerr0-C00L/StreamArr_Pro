@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { Settings, Home, Compass, Radio, Library, LogOut, Menu, X, User, ChevronDown } from 'lucide-react';
+import { Settings, Home, Compass, Radio, Library, LogOut, Menu, X, User, ChevronDown, RotateCw } from 'lucide-react';
 import axios from 'axios';
 
 const api = axios.create({
@@ -37,6 +37,22 @@ export default function Layout({ children }: LayoutProps) {
     localStorage.removeItem('is_admin');
     localStorage.removeItem('profile_picture');
     window.location.href = '/login';
+  };
+
+  const handleRestart = async () => {
+    if (!window.confirm('Are you sure you want to restart the server? This will briefly interrupt service.')) {
+      return;
+    }
+    
+    try {
+      setShowUserMenu(false);
+      await axios.post('/api/v1/admin/restart');
+      // Show success message
+      alert('Server restarting...');
+    } catch (error) {
+      console.error('Restart failed:', error);
+      alert('Failed to restart server');
+    }
   };
 
   useEffect(() => {
@@ -177,6 +193,13 @@ export default function Layout({ children }: LayoutProps) {
                     <Settings className="w-4 h-4" />
                     Settings
                   </Link>
+                  <button
+                    onClick={handleRestart}
+                    className="flex items-center gap-3 px-4 py-2 text-slate-300 hover:bg-white/10 transition-colors w-full"
+                  >
+                    <RotateCw className="w-4 h-4" />
+                    Restart
+                  </button>
                   <button
                     onClick={handleLogout}
                     className="flex items-center gap-3 px-4 py-2 text-slate-300 hover:bg-white/10 transition-colors w-full"

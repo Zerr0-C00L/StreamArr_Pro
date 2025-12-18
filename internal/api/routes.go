@@ -91,6 +91,9 @@ func SetupRoutes(handler *Handler) http.Handler {
 	api.HandleFunc("/settings", handler.GetSettings).Methods("GET")
 	api.HandleFunc("/settings", handler.UpdateSettings).Methods("PUT")
 
+	// Admin - System control
+	api.HandleFunc("/admin/restart", handler.Restart).Methods("POST")
+
 	// Calendar
 	api.HandleFunc("/calendar", handler.GetCalendar).Methods("GET")
 
