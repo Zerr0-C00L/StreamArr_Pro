@@ -98,7 +98,8 @@ type BalkanContentDatabase struct {
 }
 
 const (
-	balkanRepoURL = "https://raw.githubusercontent.com/Zerr0-C00L/Balkan-On-Demand/main/data/baubau-content-full-backup.json"
+	balkanRepoURL1 = "https://raw.githubusercontent.com/Zerr0-C00L/Balkan-On-Demand/main/data/baubau-content-full-backup.json"
+	balkanRepoURL2 = "https://raw.githubusercontent.com/Zerr0-C00L/Balkan-On-Demand/main/data/baubau-content.json"
 )
 
 var domesticCategories = []string{
@@ -125,34 +126,79 @@ func NewBalkanVODImporter(movieStore *database.MovieStore, seriesStore *database
 	}
 }
 
-// FetchBalkanCategories fetches all available categories with counts from GitHub repo
-func FetchBalkanCategories() ([]CategoryWithCount, error) {
-	log.Println("[BalkanVOD] Fetching categories from GitHub...")
+// fetchAndMergeBalkanData fetches content from both GitHub repos and merges them
+func fetchAndMergeBalkanData() (*BalkanContentDatabase, error) {
+	log.Println("[BalkanVOD] Fetching from multiple GitHub repos...")
 	
-	resp, err := http.Get(balkanRepoURL)
+	var mergedContent BalkanContentDatabase
+	seenMovieIDs := make(map[string]bool)
+	seenSeriesIDs := make(map[string]bool)
+	
+	// Fetch from both repos
+	repos := []string{balkanRepoURL1, balkanRepoURL2}
+	
+	for i, repoURL := range repos {
+		log.Printf("[BalkanVOD] Fetching from repo %d: %s", i+1, repoURL)
+		
+		resp, err := http.Get(repoURL)
+		if err != nil {
+			log.Printf("[BalkanVOD] Error fetching from repo %d: %v", i+1, err)
+			continue // Try next repo even if one fails
+		}
+		
+		if resp.StatusCode != 200 {
+			resp.Body.Close()
+			log.Printf("[BalkanVOD] Repo %d returned status code: %d", i+1, resp.StatusCode)
+			continue
+		}
+		
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			log.Printf("[BalkanVOD] Error reading repo %d body: %v", i+1, err)
+			continue
+		}
+		
+		log.Printf("[BalkanVOD] Downloaded %d bytes from repo %d", len(body), i+1)
+		
+		var content BalkanContentDatabase
+		if err := json.Unmarshal(body, &content); err != nil {
+			log.Printf("[BalkanVOD] Error parsing repo %d JSON: %v", i+1, err)
+			continue
+		}
+		
+		log.Printf("[BalkanVOD] Repo %d has %d movies and %d series", i+1, len(content.Movies), len(content.Series))
+		
+		// Merge movies (deduplicate by ID)
+		for _, movie := range content.Movies {
+			if movie.ID != "" && !seenMovieIDs[movie.ID] {
+				mergedContent.Movies = append(mergedContent.Movies, movie)
+				seenMovieIDs[movie.ID] = true
+			}
+		}
+		
+		// Merge series (deduplicate by ID)
+		for _, series := range content.Series {
+			if series.ID != "" && !seenSeriesIDs[series.ID] {
+				mergedContent.Series = append(mergedContent.Series, series)
+				seenSeriesIDs[series.ID] = true
+			}
+		}
+	}
+	
+	if len(mergedContent.Movies) == 0 && len(mergedContent.Series) == 0 {
+		return nil, fmt.Errorf("failed to fetch content from any repo")
+	}
+	
+	log.Printf("[BalkanVOD] Merged total: %d movies and %d series", len(mergedContent.Movies), len(mergedContent.Series))
+	return &mergedContent, nil
+}
+
+// FetchBalkanCategories fetches all available categories with counts from GitHub repos
+func FetchBalkanCategories() ([]CategoryWithCount, error) {
+	content, err := fetchAndMergeBalkanData()
 	if err != nil {
-		log.Printf("[BalkanVOD] Error fetching from GitHub: %v", err)
-		return nil, fmt.Errorf("fetch balkan content: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		log.Printf("[BalkanVOD] GitHub returned status code: %d", resp.StatusCode)
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("[BalkanVOD] Error reading response body: %v", err)
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
-	log.Printf("[BalkanVOD] Downloaded %d bytes from GitHub", len(body))
-
-	var content BalkanContentDatabase
-	if err := json.Unmarshal(body, &content); err != nil {
-		log.Printf("[BalkanVOD] Error parsing JSON: %v", err)
-		return nil, fmt.Errorf("parse content database: %w", err)
+		return nil, err
 	}
 
 	log.Printf("[BalkanVOD] Parsed %d movies and %d series", len(content.Movies), len(content.Series))
@@ -211,25 +257,10 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 
 	log.Println("[BalkanVOD] Starting import from GitHub repos...")
 	
-	// Fetch content database
-	resp, err := http.Get(balkanRepoURL)
+	// Fetch and merge content from both repos
+	content, err := fetchAndMergeBalkanData()
 	if err != nil {
 		return fmt.Errorf("fetch balkan content: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read response body: %w", err)
-	}
-
-	var content BalkanContentDatabase
-	if err := json.Unmarshal(body, &content); err != nil {
-		return fmt.Errorf("parse content database: %w", err)
 	}
 
 	log.Printf("[BalkanVOD] Fetched %d movies and %d series", len(content.Movies), len(content.Series))
