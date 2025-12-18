@@ -260,7 +260,7 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 	
 	log.Printf("[BalkanVOD] Selected categories: %v (useAll: %v)", selectedCategories, useAllCategories)
 	
-	// Import movies (filter by selected categories)
+	// Import movies (filter by selected categories if specified)
 	imported := 0
 	skipped := 0
 	failed := 0
@@ -269,20 +269,14 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 	skippedByDomestic := 0
 
 	for _, movie := range content.Movies {
-		// Filter by category
+		// Filter by category ONLY if categories are explicitly selected
 		if !useAllCategories && !isInSelectedCategories(movie.Category, selectedCategories) {
 			skippedByCategory++
 			skipped++
 			continue
 		}
 		
-		// If categories are selected, trust the selection; otherwise check domestic list
-		if useAllCategories && !isDomesticCategory(movie.Category) {
-			log.Printf("[BalkanVOD] Skipping movie '%s' - category '%s' not in domestic list", movie.Name, movie.Category)
-			skippedByDomestic++
-			skipped++
-			continue
-		}
+		// Import ALL content when no categories selected (removed domestic-only filter)
 
 		result := b.importMovie(ctx, movie)
 		if result.Error != nil {
@@ -352,24 +346,57 @@ func (b *BalkanVODImporter) importMovie(ctx context.Context, entry BalkanMovieEn
 	movie.Metadata["imported_at"] = time.Now().Format(time.RFC3339)
 	movie.Metadata["category"] = entry.Category
 	
-	// Add streams
-	streams := make([]map[string]interface{}, len(entry.Streams))
+	// Prepare new streams
+	newStreams := make([]map[string]interface{}, len(entry.Streams))
 	for i, stream := range entry.Streams {
-		streams[i] = map[string]interface{}{
+		newStreams[i] = map[string]interface{}{
 			"name":    "Balkan VOD",
 			"url":     stream.URL,
 			"quality": stream.Quality,
+			"source":  stream.Source,
 		}
 	}
-	movie.Metadata["balkan_vod_streams"] = streams
-
-	// Add movie directly - no duplicate checking
-	log.Printf("[BalkanVOD] Adding movie '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
-	err := b.movieStore.Add(ctx, movie)
+	
+	// Check if movie already exists by TMDB ID
+	existingMovie, err := b.movieStore.Get(ctx, tmdbID)
+	if err == nil && existingMovie != nil {
+		// Movie exists - merge streams
+		log.Printf("[BalkanVOD] Movie '%s' already exists - merging streams", entry.Name)
+		
+		// Get existing streams
+		existingStreams := []map[string]interface{}{}
+		if streams, ok := existingMovie.Metadata["balkan_vod_streams"].([]interface{}); ok {
+			for _, s := range streams {
+				if streamMap, ok := s.(map[string]interface{}); ok {
+					existingStreams = append(existingStreams, streamMap)
+				}
+			}
+		}
+		
+		// Append new streams to existing ones
+		allStreams := append(existingStreams, newStreams...)
+		existingMovie.Metadata["balkan_vod_streams"] = allStreams
+		existingMovie.Metadata["last_updated"] = time.Now().Format(time.RFC3339)
+		
+		// Update movie
+		err = b.movieStore.Update(ctx, existingMovie)
+		if err != nil {
+			log.Printf("[BalkanVOD] Error updating movie '%s': %v", entry.Name, err)
+			return ImportResult{Updated: false, Error: err}
+		}
+		log.Printf("[BalkanVOD] Merged %d streams into movie '%s' (total: %d)", len(newStreams), entry.Name, len(allStreams))
+		return ImportResult{Updated: true, Error: nil}
+	}
+	
+	// Movie doesn't exist - add as new
+	movie.Metadata["balkan_vod_streams"] = newStreams
+	log.Printf("[BalkanVOD] Adding new movie '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
+	err = b.movieStore.Add(ctx, movie)
 	if err != nil {
 		log.Printf("[BalkanVOD] Error adding movie '%s': %v", entry.Name, err)
+		return ImportResult{Updated: false, Error: err}
 	}
-	return ImportResult{Updated: false, Error: err}
+	return ImportResult{Updated: false, Error: nil}
 }
 
 func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeriesEntry) ImportResult {
@@ -438,15 +465,92 @@ func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeries
 			"episodes": episodes,
 		}
 	}
+	
+	// Check if series already exists by TMDB ID
+	existingSeries, err := b.seriesStore.Get(ctx, tmdbID)
+	if err == nil && existingSeries != nil {
+		// Series exists - merge seasons/episodes
+		log.Printf("[BalkanVOD] Series '%s' already exists - merging episodes", entry.Name)
+		
+		// Get existing seasons
+		existingSeasons := []map[string]interface{}{}
+		if sData, ok := existingSeries.Metadata["balkan_vod_seasons"].([]interface{}); ok {
+			for _, s := range sData {
+				if seasonMap, ok := s.(map[string]interface{}); ok {
+					existingSeasons = append(existingSeasons, seasonMap)
+				}
+			}
+		}
+		
+		// Merge logic: combine episodes from matching seasons
+		seasonMap := make(map[int][]map[string]interface{})
+		
+		// Add existing episodes to map
+		for _, season := range existingSeasons {
+			seasonNum := int(season["number"].(float64))
+			if eps, ok := season["episodes"].([]interface{}); ok {
+				for _, ep := range eps {
+					if epMap, ok := ep.(map[string]interface{}); ok {
+						seasonMap[seasonNum] = append(seasonMap[seasonNum], epMap)
+					}
+				}
+			}
+		}
+		
+		// Add new episodes to map (avoiding duplicates by episode number)
+		for _, season := range seasons {
+			seasonNum := int(season["number"].(int))
+			if eps, ok := season["episodes"].([]interface{}); ok {
+				for _, ep := range eps {
+					if epMap, ok := ep.(map[string]interface{}); ok {
+						// Check if episode already exists
+						epNum := int(epMap["episode"].(int))
+						exists := false
+						for _, existingEp := range seasonMap[seasonNum] {
+							if int(existingEp["episode"].(float64)) == epNum {
+								exists = true
+								break
+							}
+						}
+						if !exists {
+							seasonMap[seasonNum] = append(seasonMap[seasonNum], epMap)
+						}
+					}
+				}
+			}
+		}
+		
+		// Rebuild seasons array
+		mergedSeasons := []map[string]interface{}{}
+		for seasonNum, episodes := range seasonMap {
+			mergedSeasons = append(mergedSeasons, map[string]interface{}{
+				"number":   seasonNum,
+				"episodes": episodes,
+			})
+		}
+		
+		existingSeries.Metadata["balkan_vod_seasons"] = mergedSeasons
+		existingSeries.Metadata["last_updated"] = time.Now().Format(time.RFC3339)
+		
+		// Update series
+		err = b.seriesStore.Update(ctx, existingSeries)
+		if err != nil {
+			log.Printf("[BalkanVOD] Error updating series '%s': %v", entry.Name, err)
+			return ImportResult{Updated: false, Error: err}
+		}
+		log.Printf("[BalkanVOD] Merged episodes into series '%s'", entry.Name)
+		return ImportResult{Updated: true, Error: nil}
+	}
+	
+	// Series doesn't exist - add as new
 	series.Metadata["balkan_vod_seasons"] = seasons
-
-	// Add series directly - no duplicate checking
-	log.Printf("[BalkanVOD] Adding series '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
-	err := b.seriesStore.Add(ctx, series)
+	log.Printf("[BalkanVOD] Adding new series '%s' (TMDB: %d, Category: %s)", entry.Name, tmdbID, entry.Category)
+	err = b.seriesStore.Add(ctx, series)
 	if err != nil {
 		log.Printf("[BalkanVOD] Error adding series '%s': %v", entry.Name, err)
+		return ImportResult{Updated: false, Error: err}
 	}
-	return ImportResult{Updated: false, Error: err}
+	return ImportResult{Updated: false, Error: nil}
 }
 
 func isDomesticCategory(category string) bool {
