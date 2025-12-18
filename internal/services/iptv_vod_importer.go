@@ -49,7 +49,7 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
         }
         server := strings.TrimSuffix(xs.ServerURL, "/")
         url := fmt.Sprintf("%s/get.php?username=%s&password=%s&type=m3u_plus&output=ts", server, xs.Username, xs.Password)
-        m3uURLs = append(m3uURLs, src{url: url, name: xs.Name})
+        m3uURLs = append(m3uURLs, src{url: url, name: xs.Name, selectedCategories: xs.SelectedCategories})
     }
 
     // Dedup map: key = kind:title:year

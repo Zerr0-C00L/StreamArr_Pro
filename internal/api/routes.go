@@ -115,6 +115,7 @@ func SetupRoutes(handler *Handler) http.Handler {
 
 	// IPTV VOD Import (from configured M3U/Xtream)
 	api.HandleFunc("/iptv-vod/preview-categories", handler.PreviewM3UCategories).Methods("POST")
+	api.HandleFunc("/iptv-vod/preview-xtream-categories", handler.PreviewXtreamCategories).Methods("POST")
 	api.HandleFunc("/iptv-vod/import", handler.ImportIPTVVOD).Methods("POST")
 	// Fallbacks for clients hitting /api/iptv-vod/import or trailing slash
 	r.HandleFunc("/api/iptv-vod/import", handler.ImportIPTVVOD).Methods("POST")

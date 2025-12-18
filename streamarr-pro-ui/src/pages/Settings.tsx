@@ -134,6 +134,7 @@ interface XtreamSource {
   username: string;
   password: string;
   enabled: boolean;
+  selected_categories?: string[];
 }
 
 interface SourceStatus {
@@ -206,6 +207,10 @@ export default function Settings() {
   const [newXtreamUrl, setNewXtreamUrl] = useState('');
   const [newXtreamUsername, setNewXtreamUsername] = useState('');
   const [newXtreamPassword, setNewXtreamPassword] = useState('');
+  const [newXtreamCategories, setNewXtreamCategories] = useState<string[]>([]);
+  const [availableXtreamCategories, setAvailableXtreamCategories] = useState<Array<{name: string; count: number}>>([]);
+  const [loadingXtreamCategories, setLoadingXtreamCategories] = useState(false);
+  const [showXtreamCategoryModal, setShowXtreamCategoryModal] = useState(false);
   const [channelStats, setChannelStats] = useState<ChannelStats | null>(null);
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(new Set());
   const [enabledSources, setEnabledSources] = useState<Set<string>>(new Set());
@@ -812,6 +817,56 @@ export default function Settings() {
     ));
   };
 
+  // Xtream category preview function
+  const previewXtreamCategories = async () => {
+    if (!newXtreamUrl.trim() || !newXtreamUsername.trim() || !newXtreamPassword.trim()) {
+      setMessage('❌ Please enter server URL, username, and password first');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+    
+    setLoadingXtreamCategories(true);
+    try {
+      const response = await api.post('/api/v1/iptv-vod/preview-xtream-categories', {
+        server_url: newXtreamUrl.trim().replace(/\/$/, ''),
+        username: newXtreamUsername.trim(),
+        password: newXtreamPassword.trim()
+      });
+      
+      if (response.data.categories && response.data.categories.length > 0) {
+        setAvailableXtreamCategories(response.data.categories);
+        setShowXtreamCategoryModal(true);
+      } else {
+        setMessage('⚠️ No categories found');
+        setTimeout(() => setMessage(''), 3000);
+      }
+    } catch (error: any) {
+      console.error('Failed to preview categories:', error);
+      setMessage(`❌ Failed to fetch categories: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setLoadingXtreamCategories(false);
+    }
+  };
+
+  const toggleXtreamCategory = (categoryName: string) => {
+    setNewXtreamCategories(prev => {
+      if (prev.includes(categoryName)) {
+        return prev.filter(c => c !== categoryName);
+      } else {
+        return [...prev, categoryName];
+      }
+    });
+  };
+
+  const selectAllXtreamCategories = () => {
+    setNewXtreamCategories(availableXtreamCategories.map(c => c.name));
+  };
+
+  const deselectAllXtreamCategories = () => {
+    setNewXtreamCategories([]);
+  };
+
   // Xtream Source management functions
   const addXtreamSource = () => {
     if (!newXtreamName.trim() || !newXtreamUrl.trim() || !newXtreamUsername.trim() || !newXtreamPassword.trim()) {
@@ -839,7 +894,8 @@ export default function Settings() {
       server_url: newXtreamUrl.trim().replace(/\/$/, ''), // Remove trailing slash
       username: newXtreamUsername.trim(),
       password: newXtreamPassword.trim(),
-      enabled: true
+      enabled: true,
+      selected_categories: newXtreamCategories.length > 0 ? newXtreamCategories : undefined
     };
     
     setXtreamSources([...xtreamSources, newSource]);
@@ -847,6 +903,8 @@ export default function Settings() {
     setNewXtreamUrl('');
     setNewXtreamUsername('');
     setNewXtreamPassword('');
+    setNewXtreamCategories([]);
+    setAvailableXtreamCategories([]);
     setMessage('✅ Xtream source added. Click Save to apply.');
     setTimeout(() => setMessage(''), 3000);
   };
@@ -2228,6 +2286,86 @@ export default function Settings() {
                 </div>
               )}
 
+              {/* Xtream Category Selection Modal */}
+              {showXtreamCategoryModal && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                  <div className="bg-[#1a1a1a] border border-white/10 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+                    <div className="p-6 border-b border-white/10">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-semibold text-white">Select Categories to Import</h3>
+                        <button
+                          onClick={() => setShowXtreamCategoryModal(false)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          <X className="w-6 h-6" />
+                        </button>
+                      </div>
+                      <p className="text-sm text-slate-400 mt-2">
+                        Choose which categories you want to import from this Xtream source. Leave all unchecked to import everything.
+                      </p>
+                      <div className="flex gap-2 mt-4">
+                        <button
+                          onClick={selectAllXtreamCategories}
+                          className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                        >
+                          Select All
+                        </button>
+                        <button
+                          onClick={deselectAllXtreamCategories}
+                          className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                        >
+                          Deselect All
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6">
+                      {availableXtreamCategories.length === 0 ? (
+                        <p className="text-slate-400 text-center py-8">No categories found</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {availableXtreamCategories.map((cat) => (
+                            <label
+                              key={cat.name}
+                              className="flex items-center gap-3 p-3 bg-[#2a2a2a] border border-white/10 rounded-lg cursor-pointer hover:bg-[#333333] transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={newXtreamCategories.includes(cat.name)}
+                                onChange={() => toggleXtreamCategory(cat.name)}
+                                className="w-4 h-4 bg-[#1a1a1a] border-white/10 rounded"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-white truncate">{cat.name}</div>
+                                {cat.count > 0 && <div className="text-xs text-slate-500">{cat.count} items</div>}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+                      <button
+                        onClick={() => {
+                          setShowXtreamCategoryModal(false);
+                          setNewXtreamCategories([]);
+                        }}
+                        className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#333333]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => setShowXtreamCategoryModal(false)}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                      >
+                        Done ({newXtreamCategories.length} selected)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Current M3U Sources */}
               {m3uSources.length > 0 && (
                 <div>
@@ -2356,6 +2494,33 @@ export default function Settings() {
                       />
                     </div>
                   </div>
+                  
+                  {/* Category Preview and Selection */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={previewXtreamCategories}
+                      disabled={loadingXtreamCategories || !newXtreamUrl.trim() || !newXtreamUsername.trim() || !newXtreamPassword.trim()}
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loadingXtreamCategories ? (
+                        <>
+                          <Loader className="w-4 h-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4" />
+                          Preview Categories
+                        </>
+                      )}
+                    </button>
+                    {newXtreamCategories.length > 0 && (
+                      <span className="text-sm text-green-400">
+                        \u2705 {newXtreamCategories.length} categories selected
+                      </span>
+                    )}
+                  </div>
+                  
                   <button
                     onClick={addXtreamSource}
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 w-fit"
@@ -2393,6 +2558,12 @@ export default function Settings() {
                             <div className="text-xs text-cyan-400 truncate flex items-center gap-1 mt-1">
                               <span>👤</span> {source.username}
                             </div>
+                            {source.selected_categories && source.selected_categories.length > 0 && (
+                              <div className="text-xs text-purple-400 truncate flex items-center gap-1 mt-1">
+                                <span>\ud83c\udff7\ufe0f</span> {source.selected_categories.length} categories: {source.selected_categories.slice(0, 3).join(', ')}
+                                {source.selected_categories.length > 3 && '...'}
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">

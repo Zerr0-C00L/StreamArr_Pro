@@ -3060,6 +3060,117 @@ func (h *Handler) PreviewM3UCategories(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PreviewXtreamCategories handles POST /api/v1/iptv-vod/preview-xtream-categories
+func (h *Handler) PreviewXtreamCategories(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ServerURL string `json:"server_url"`
+		Username  string `json:"username"`
+		Password  string `json:"password"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	
+	if req.ServerURL == "" || req.Username == "" || req.Password == "" {
+		respondError(w, http.StatusBadRequest, "Server URL, username, and password are required")
+		return
+	}
+	
+	// Fetch VOD categories from Xtream API
+	server := strings.TrimSuffix(req.ServerURL, "/")
+	url := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_vod_categories", server, req.Username, req.Password)
+	
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch categories: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("Failed to fetch categories: HTTP %d", resp.StatusCode))
+		return
+	}
+	
+	// Parse JSON response
+	var categories []struct {
+		CategoryID   string `json:"category_id"`
+		CategoryName string `json:"category_name"`
+		ParentID     int    `json:"parent_id"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&categories); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Error parsing response: %v", err))
+		return
+	}
+	
+	// Count streams per category
+	categoryMap := make(map[string]string) // id -> name
+	for _, cat := range categories {
+		categoryMap[cat.CategoryID] = cat.CategoryName
+	}
+	
+	// Fetch VOD streams to get counts
+	vodURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_vod_streams", server, req.Username, req.Password)
+	vodResp, err := client.Get(vodURL)
+	if err == nil {
+		defer vodResp.Body.Close()
+		if vodResp.StatusCode == http.StatusOK {
+			var streams []struct {
+				CategoryID string `json:"category_id"`
+			}
+			if err := json.NewDecoder(vodResp.Body).Decode(&streams); err == nil {
+				counts := make(map[string]int)
+				for _, s := range streams {
+					counts[s.CategoryID]++
+				}
+				
+				// Build result with counts
+				type Category struct {
+					Name  string `json:"name"`
+					Count int    `json:"count"`
+				}
+				
+				result := make([]Category, 0, len(categoryMap))
+				for id, name := range categoryMap {
+					result = append(result, Category{Name: name, Count: counts[id]})
+				}
+				
+				sort.Slice(result, func(i, j int) bool {
+					return result[i].Name < result[j].Name
+				})
+				
+				respondJSON(w, http.StatusOK, map[string]interface{}{
+					"categories": result,
+				})
+				return
+			}
+		}
+	}
+	
+	// Fallback: return categories without counts
+	type Category struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+	
+	result := make([]Category, 0, len(categoryMap))
+	for _, name := range categoryMap {
+		result = append(result, Category{Name: name, Count: 0})
+	}
+	
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"categories": result,
+	})
+}
+
 // ImportIPTVVOD handles POST /api/v1/iptv-vod/import
 func (h *Handler) ImportIPTVVOD(w http.ResponseWriter, r *http.Request) {
 	if h.settingsManager == nil || h.tmdbClient == nil || h.movieStore == nil || h.seriesStore == nil {

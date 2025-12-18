@@ -18,11 +18,12 @@ type M3USource struct {
 
 // XtreamSource represents an Xtream Codes compatible IPTV provider
 type XtreamSource struct {
-	Name      string `json:"name"`
-	ServerURL string `json:"server_url"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	Enabled   bool   `json:"enabled"`
+	Name               string   `json:"name"`
+	ServerURL          string   `json:"server_url"`
+	Username           string   `json:"username"`
+	Password           string   `json:"password"`
+	Enabled            bool     `json:"enabled"`
+	SelectedCategories []string `json:"selected_categories,omitempty"`
 }
 
 // StremioAddon represents a custom Stremio addon for content providers
