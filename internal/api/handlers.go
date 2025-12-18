@@ -2435,6 +2435,25 @@ func (h *Handler) runService(serviceName string) {
 			}
 		}
 
+	case services.ServiceBalkanVODSync:
+		interval = 24 * time.Hour
+		if h.settingsManager != nil && h.tmdbClient != nil && h.movieStore != nil && h.seriesStore != nil {
+			current := h.settingsManager.Get()
+			if current.BalkanVODEnabled {
+				log.Println("[BalkanVOD] Manual trigger: Starting import...")
+				importer := services.NewBalkanVODImporter(h.movieStore, h.seriesStore, h.tmdbClient, current)
+				err = importer.ImportBalkanVOD(ctx)
+				if err != nil {
+					log.Printf("[BalkanVOD] Import error: %v", err)
+				} else {
+					log.Println("[BalkanVOD] Import completed successfully")
+				}
+			} else {
+				log.Println("[BalkanVOD] Import disabled in settings")
+				err = nil
+			}
+		}
+
 	default:
 		interval = 1 * time.Hour
 	}
