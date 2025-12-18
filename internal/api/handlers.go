@@ -3139,6 +3139,7 @@ func (h *Handler) PreviewXtreamCategories(w http.ResponseWriter, r *http.Request
 	
 	// Fetch VOD categories if needed
 	if req.ImportMode == "vod_only" || req.ImportMode == "both" {
+		// Fetch VOD movie categories
 		url := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_vod_categories", server, req.Username, req.Password)
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Get(url)
@@ -3160,6 +3161,42 @@ func (h *Handler) PreviewXtreamCategories(w http.ResponseWriter, r *http.Request
 							CategoryID string `json:"category_id"`
 						}
 						if err := json.NewDecoder(vodResp.Body).Decode(&streams); err == nil {
+							counts := make(map[string]int)
+							for _, s := range streams {
+								counts[s.CategoryID]++
+							}
+							for _, cat := range categories {
+								if count, ok := counts[cat.CategoryID]; ok && count > 0 {
+									allCategories[cat.CategoryName] = count
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		// Fetch series categories
+		seriesURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_series_categories", server, req.Username, req.Password)
+		seriesResp, err := client.Get(seriesURL)
+		
+		if err == nil && seriesResp.StatusCode == http.StatusOK {
+			defer seriesResp.Body.Close()
+			var categories []struct {
+				CategoryID   string `json:"category_id"`
+				CategoryName string `json:"category_name"`
+			}
+			if err := json.NewDecoder(seriesResp.Body).Decode(&categories); err == nil {
+				// Get series counts
+				seriesStreamsURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_series", server, req.Username, req.Password)
+				seriesStreamsResp, err := client.Get(seriesStreamsURL)
+				if err == nil {
+					defer seriesStreamsResp.Body.Close()
+					if seriesStreamsResp.StatusCode == http.StatusOK {
+						var streams []struct {
+							CategoryID string `json:"category_id"`
+						}
+						if err := json.NewDecoder(seriesStreamsResp.Body).Decode(&streams); err == nil {
 							counts := make(map[string]int)
 							for _, s := range streams {
 								counts[s.CategoryID]++
