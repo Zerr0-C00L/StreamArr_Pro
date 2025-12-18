@@ -2969,6 +2969,23 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 			os.Remove(lockFile)
 		}
 
+		// Restart containers first to ensure clean state
+		log.Println("[Update] Restarting containers to ensure clean state...")
+		restartCmd := exec.Command("/bin/sh", "-c",
+			fmt.Sprintf("cd %s && docker compose up -d 2>&1 | tail -10", hostDir))
+		restartCmd.Env = append(os.Environ(),
+			"HOME=/root",
+			"PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+		)
+		restartOutput, restartErr := restartCmd.CombinedOutput()
+		if restartErr != nil {
+			log.Printf("[Update] Warning: Pre-update restart failed: %v, output: %s", restartErr, string(restartOutput))
+		} else {
+			log.Printf("[Update] Containers restarted successfully")
+			// Give containers a moment to stabilize
+			time.Sleep(2 * time.Second)
+		}
+
 		// Run update script in background (detached) so it survives container stop
 		// We use nohup and & to fully detach
 		log.Println("[Update] Executing update script in background...")
