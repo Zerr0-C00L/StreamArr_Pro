@@ -267,11 +267,20 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 	updated := 0
 	skippedByCategory := 0
 	skippedByDomestic := 0
+	seriesFromMoviesArray := 0
 
 	for _, movie := range content.Movies {
 		// Filter by category ONLY if categories are explicitly selected
 		if !useAllCategories && !isInSelectedCategories(movie.Category, selectedCategories) {
 			skippedByCategory++
+			skipped++
+			continue
+		}
+		
+		// Check if this is actually a series (type == "series") in the movies array
+		if movie.Type == "series" {
+			// This is a series, not a movie - skip it here, it should be in the series array
+			seriesFromMoviesArray++
 			skipped++
 			continue
 		}
@@ -288,6 +297,8 @@ func (b *BalkanVODImporter) ImportBalkanVOD(ctx context.Context) error {
 			imported++
 		}
 	}
+	
+	log.Printf("[BalkanVOD] Skipped %d series found in movies array (should be in series array)", seriesFromMoviesArray)
 
 	// Import series (all series are domestic)
 	log.Printf("[BalkanVOD] Starting series import: %d series to process", len(content.Series))
