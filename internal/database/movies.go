@@ -481,3 +481,14 @@ func (s *MovieStore) ResetCollectionChecked(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, "UPDATE library_movies SET collection_checked = false")
 	return err
 }
+
+// DeleteBySource removes all movies from a specific source
+func (s *MovieStore) DeleteBySource(ctx context.Context, source string) (int64, error) {
+	result, err := s.db.ExecContext(ctx, 
+		"DELETE FROM library_movies WHERE metadata->>'source' = $1", 
+		source)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}

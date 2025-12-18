@@ -505,3 +505,14 @@ func (s *SeriesStore) ResetStatus(ctx context.Context) error {
 	`)
 	return err
 }
+
+// DeleteBySource removes all series from a specific source
+func (s *SeriesStore) DeleteBySource(ctx context.Context, source string) (int64, error) {
+	result, err := s.db.ExecContext(ctx, 
+		"DELETE FROM library_series WHERE metadata->>'source' = $1", 
+		source)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}

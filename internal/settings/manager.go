@@ -167,6 +167,9 @@ type Manager struct {
 	db       *sql.DB
 	settings *Settings
 	mu       sync.RWMutex
+	
+	// Callbacks for when settings change
+	onBalkanVODDisabled func() error // Called when Balkan VOD is disabled
 }
 
 func NewManager(db *sql.DB) *Manager {
@@ -174,6 +177,13 @@ func NewManager(db *sql.DB) *Manager {
 		db:       db,
 		settings: getDefaultSettings(),
 	}
+}
+
+// SetOnBalkanVODDisabledCallback sets a callback function to be called when Balkan VOD is disabled
+func (m *Manager) SetOnBalkanVODDisabledCallback(fn func() error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onBalkanVODDisabled = fn
 }
 
 func getDefaultSettings() *Settings {
@@ -303,6 +313,17 @@ func (m *Manager) UpdatePartial(updates map[string]interface{}) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	
+	// Check if Balkan VOD is being disabled
+	isDisablingBalkan := false
+	if balkanEnabled, ok := updates["balkan_vod_enabled"]; ok {
+		if enabled, ok := balkanEnabled.(bool); ok {
+			// Check if it's transitioning from enabled to disabled
+			if m.settings.BalkanVODEnabled && !enabled {
+				isDisablingBalkan = true
+			}
+		}
+	}
+	
 	// Convert current settings to map
 	settingsJSON, err := json.Marshal(m.settings)
 	if err != nil {
@@ -329,7 +350,22 @@ func (m *Manager) UpdatePartial(updates map[string]interface{}) error {
 		return err
 	}
 	
-	return m.saveToDBLocked()
+	if err := m.saveToDBLocked(); err != nil {
+		return err
+	}
+	
+	// Call cleanup callback if Balkan VOD was disabled
+	if isDisablingBalkan && m.onBalkanVODDisabled != nil {
+		// Call callback without lock to avoid deadlocks
+		m.mu.Unlock()
+		if err := m.onBalkanVODDisabled(); err != nil {
+			m.mu.Lock()
+			return fmt.Errorf("failed to cleanup Balkan VOD content: %w", err)
+		}
+		m.mu.Lock()
+	}
+	
+	return nil
 }
 
 func (m *Manager) saveToDBLocked() error {

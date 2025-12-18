@@ -65,6 +65,23 @@ func main() {
 	}
 	log.Println("Settings manager initialized")
 
+	// Set up callback for when Balkan VOD is disabled - clean up all Balkan VOD content
+	settingsManager.SetOnBalkanVODDisabledCallback(func() error {
+		ctx := context.Background()
+		movieCount, err := movieStore.DeleteBySource(ctx, "balkan_vod")
+		if err != nil {
+			return fmt.Errorf("failed to delete Balkan VOD movies: %w", err)
+		}
+		
+		seriesCount, err := seriesStore.DeleteBySource(ctx, "balkan_vod")
+		if err != nil {
+			return fmt.Errorf("failed to delete Balkan VOD series: %w", err)
+		}
+		
+		log.Printf("✓ Balkan VOD disabled - Removed %d movies and %d series from library", movieCount, seriesCount)
+		return nil
+	})
+
 	// Override config with ALL settings from database
 	appSettings := settingsManager.Get()
 	
