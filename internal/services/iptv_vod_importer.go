@@ -285,6 +285,15 @@ func extractVODItems(r io.Reader, sourceName string, selectedCategories []string
 var yearRe = regexp.MustCompile(`(?i)\b(19|20)\d{2}\b`)
 
 func splitTitleYear(name string) (string, int) {
+    // Strip common prefixes first (language codes, channel names, etc.)
+    prefixes := []string{"EX - ", "EN - ", "US - ", "UK - ", "EXYU - ", "|EXYU| ", "HD - "}
+    for _, prefix := range prefixes {
+        if strings.HasPrefix(name, prefix) {
+            name = strings.TrimPrefix(name, prefix)
+            break
+        }
+    }
+    
     year := 0
     // Prefer a year at end or in parentheses
     // e.g., "Dune (2021)" or "Dune 2021"
@@ -711,17 +720,15 @@ func fetchXtreamVODMovies(ctx context.Context, client *http.Client, server, user
             title = stream.Title
         }
         
-        year := 0
-        if stream.Year != "" {
-            fmt.Sscanf(stream.Year, "%d", &year)
-        }
+        // Extract year from title using splitTitleYear
+        cleanTitle, year := splitTitleYear(title)
         
         streamID := fmt.Sprintf("%v", stream.StreamID)
         streamURL := fmt.Sprintf("%s/movie/%s/%s/%s.%s", server, username, password, streamID, stream.ContainerExt)
         
         items = append(items, vodItem{
             Kind:       "movie",
-            Title:      title,
+            Title:      cleanTitle,
             Year:       year,
             URL:        streamURL,
             SourceName: sourceName,
@@ -826,12 +833,8 @@ func fetchXtreamSeries(ctx context.Context, client *http.Client, server, usernam
             title = s.Title
         }
         
-        year := 0
-        if s.Year != "" {
-            fmt.Sscanf(s.Year, "%d", &year)
-        } else if s.ReleaseDate != "" {
-            fmt.Sscanf(s.ReleaseDate, "%d", &year)
-        }
+        // Extract year from title using splitTitleYear
+        cleanTitle, year := splitTitleYear(title)
         
         seriesID := fmt.Sprintf("%v", s.SeriesID)
         // For series, we store a generic URL - actual episode URLs will be fetched when needed
@@ -839,7 +842,7 @@ func fetchXtreamSeries(ctx context.Context, client *http.Client, server, usernam
         
         items = append(items, vodItem{
             Kind:       "series",
-            Title:      title,
+            Title:      cleanTitle,
             Year:       year,
             URL:        seriesURL,
             SourceName: sourceName,
