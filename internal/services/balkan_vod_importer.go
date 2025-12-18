@@ -464,9 +464,13 @@ func (b *BalkanVODImporter) importSeries(ctx context.Context, entry BalkanSeries
 		firstAirDate = &t
 	}
 	
+	// Generate synthetic IMDB ID for Balkan VOD series
+	syntheticIMDB := fmt.Sprintf("balkan%d", -tmdbID) // Use positive value from negative TMDB ID
+	
 	// Create series entry
 	series := &models.Series{
 		TMDBID:        tmdbID,
+		IMDBID:        syntheticIMDB,
 		Title:         entry.Name,
 		OriginalTitle: entry.Name,
 		PosterPath:    extractTMDBPath(entry.Poster),

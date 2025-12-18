@@ -49,6 +49,7 @@ type Collection struct {
 type Series struct {
 	ID             int64      `json:"id"`
 	TMDBID         int        `json:"tmdb_id"`
+	IMDBID         string     `json:"imdb_id,omitempty"`
 	Title          string     `json:"title"`
 	CleanTitle     string     `json:"clean_title,omitempty"`
 	OriginalTitle  string     `json:"original_title"`

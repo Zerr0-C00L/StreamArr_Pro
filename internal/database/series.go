@@ -60,14 +60,20 @@ func (s *SeriesStore) Add(ctx context.Context, series *models.Series) error {
 
 	query := `
 		INSERT INTO library_series (
-			tmdb_id, title, year, monitored, clean_title, metadata, added_at, preferred_quality
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			tmdb_id, imdb_id, title, year, monitored, clean_title, metadata, added_at, preferred_quality
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, added_at
 	`
 
+	// Use NULL for empty IMDB ID
+	var imdbID *string
+	if series.IMDBID != "" {
+		imdbID = &series.IMDBID
+	}
+
 	err = s.db.QueryRowContext(
 		ctx, query,
-		series.TMDBID, series.Title, year, series.Monitored,
+		series.TMDBID, imdbID, series.Title, year, series.Monitored,
 		cleanTitle, metadataJSON, time.Now(), series.QualityProfile,
 	).Scan(&series.ID, &series.AddedAt)
 
