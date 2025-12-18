@@ -653,11 +653,15 @@ func fetchXtreamVODMovies(ctx context.Context, client *http.Client, server, user
         return nil, err
     }
     
+    fmt.Printf("Xtream VOD: Fetched %d total movies from %s\n", len(streams), sourceName)
+    
     // Filter by selected categories if specified
     categoryMap := make(map[string]bool)
     for _, cat := range selectedCategories {
         categoryMap[cat] = true
     }
+    
+    fmt.Printf("Xtream VOD: Selected categories: %v\n", selectedCategories)
     
     for _, stream := range streams {
         // Skip if categories are selected and this stream's category isn't in the list
@@ -725,11 +729,15 @@ func fetchXtreamSeries(ctx context.Context, client *http.Client, server, usernam
         return nil, err
     }
     
+    fmt.Printf("Xtream Series: Fetched %d total series from %s\n", len(series), sourceName)
+    
     // Filter by selected categories if specified
     categoryMap := make(map[string]bool)
     for _, cat := range selectedCategories {
         categoryMap[cat] = true
     }
+    
+    fmt.Printf("Xtream Series: Selected categories: %v\n", selectedCategories)
     
     for _, s := range series {
         // Skip if categories are selected and this series's category isn't in the list
