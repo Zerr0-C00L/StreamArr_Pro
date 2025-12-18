@@ -1980,7 +1980,7 @@ export default function Settings() {
                   <button
                     onClick={async () => {
                       try {
-                        const res = await api.post('/iptv-vod/import');
+                        const res = await api.post('iptv-vod/import');
                         const d = res.data || {};
                         setMessage(
                           `IPTV VOD import done: movies ${d.movies_imported || 0}, series ${d.series_imported || 0}, skipped ${d.skipped || 0}, errors ${d.errors || 0}`
