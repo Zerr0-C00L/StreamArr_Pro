@@ -24,17 +24,37 @@ type BalkanVODImporter struct {
 
 // BalkanMovieEntry represents a movie from baubau-content.json
 type BalkanMovieEntry struct {
-	ID          string                   `json:"id"`
-	Type        string                   `json:"type"`
-	Name        string                   `json:"name"`
-	Year        int                      `json:"year"`
-	Poster      string                   `json:"poster"`
-	Background  string                   `json:"background"`
-	Description string                   `json:"description"`
-	Runtime     int                      `json:"runtime"`
-	Genres      []string                 `json:"genres"`
-	Category    string                   `json:"category"`
-	Streams     []BalkanStream           `json:"streams"`
+	ID          string         `json:"id"`
+	Type        string         `json:"type"`
+	Name        string         `json:"name"`
+	Year        int            `json:"year"`
+	Poster      string         `json:"poster"`
+	Background  string         `json:"background"`
+	Description string         `json:"description"`
+	Runtime     interface{}    `json:"runtime"` // Can be int or string
+	Genres      []string       `json:"genres"`
+	Category    string         `json:"category"`
+	Streams     []BalkanStream `json:"streams"`
+}
+
+// GetRuntime returns runtime as int regardless of JSON type
+func (b *BalkanMovieEntry) GetRuntime() int {
+	switch v := b.Runtime.(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	case string:
+		// Try to parse string to int
+		if v == "" {
+			return 0
+		}
+		var runtime int
+		fmt.Sscanf(v, "%d", &runtime)
+		return runtime
+	default:
+		return 0
+	}
 }
 
 // BalkanSeriesEntry represents a series from baubau-content.json
@@ -262,7 +282,7 @@ func (b *BalkanVODImporter) importMovie(ctx context.Context, entry BalkanMovieEn
 		PosterPath:    entry.Poster,
 		BackdropPath:  entry.Background,
 		ReleaseDate:   releaseDate,
-		Runtime:       entry.Runtime,
+		Runtime:       entry.GetRuntime(),
 		Monitored:     true,
 		Available:     true,
 		QualityProfile: "1080p",
