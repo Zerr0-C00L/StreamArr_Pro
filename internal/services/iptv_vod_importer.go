@@ -61,6 +61,7 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
                     importErr = importMovie(ctx, tmdb, movieStore, it)
                 }
                 if importErr != nil {
+                    fmt.Printf("Error importing movie '%s' (%d): %v\n", it.Title, it.Year, importErr)
                     summary.Errors++
                 } else {
                     summary.MoviesImported++
@@ -89,6 +90,7 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
                     importErr = importSeries(ctx, tmdb, seriesStore, it)
                 }
                 if importErr != nil {
+                    fmt.Printf("Error importing series '%s' (%d): %v\n", it.Title, it.Year, importErr)
                     summary.Errors++
                 } else {
                     summary.SeriesImported++
