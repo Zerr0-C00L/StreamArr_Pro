@@ -332,6 +332,9 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	api.HandleFunc("/settings", handler.GetSettings).Methods("GET")
 	api.HandleFunc("/settings", handler.UpdateSettings).Methods("PUT")
 
+	// Zilean stats
+	api.HandleFunc("/zilean/stats", handler.GetZileanStats).Methods("GET")
+
 	// Calendar
 	api.HandleFunc("/calendar", handler.GetCalendar).Methods("GET")
 
