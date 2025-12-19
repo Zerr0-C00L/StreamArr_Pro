@@ -639,8 +639,10 @@ func (h *Handler) scanStreamAvailability(ctx context.Context) error {
 				continue
 			}
 
+			// Strip /manifest.json suffix if present
+			addonBaseURL := strings.TrimSuffix(addon.URL, "/manifest.json")
 			// Quick check using generic addon endpoint
-			url := fmt.Sprintf("%s/stream/movie/%s.json", addon.URL, movie.IMDBID)
+			url := fmt.Sprintf("%s/stream/movie/%s.json", addonBaseURL, movie.IMDBID)
 			resp, err := http.Get(url)
 			if err == nil {
 				defer resp.Body.Close()
@@ -781,7 +783,9 @@ func (h *Handler) scanStreamAvailability(ctx context.Context) error {
 				continue
 			}
 
-			url := fmt.Sprintf("%s/stream/series/%s.json", addon.URL, episodeStreamID)
+			// Strip /manifest.json suffix if present
+			addonBaseURL := strings.TrimSuffix(addon.URL, "/manifest.json")
+			url := fmt.Sprintf("%s/stream/series/%s.json", addonBaseURL, episodeStreamID)
 			resp, err := http.Get(url)
 			if err == nil {
 				var result struct {

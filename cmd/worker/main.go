@@ -609,7 +609,9 @@ func runStreamSearch(ctx context.Context, movieStore *database.MovieStore, setti
 				continue
 			}
 			
-			url := fmt.Sprintf("%s/stream/movie/%s.json", addon.URL, movie.IMDBID)
+			// Strip /manifest.json suffix if present
+			addonBaseURL := strings.TrimSuffix(addon.URL, "/manifest.json")
+			url := fmt.Sprintf("%s/stream/movie/%s.json", addonBaseURL, movie.IMDBID)
 			
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Get(url)
