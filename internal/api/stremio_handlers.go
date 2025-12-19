@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/Zerr0-C00L/StreamArr/internal/providers"
 )
 
 // StremioManifest represents the Stremio addon manifest
@@ -59,6 +60,46 @@ type StremioStreamBehaviorHints struct {
 	NotWebReady bool   `json:"notWebReady,omitempty"`
 	BingeGroup  string `json:"bingeGroup,omitempty"`
 	Filename    string `json:"filename,omitempty"`
+}
+
+// filterValidStreams removes streams with invalid or empty URLs to prevent infinite loading
+func filterValidStreams(streams []providers.TorrentioStream) []providers.TorrentioStream {
+	valid := make([]providers.TorrentioStream, 0)
+	filtered := 0
+	
+	for _, s := range streams {
+		// Skip empty URLs
+		if s.URL == "" || s.URL == "null" {
+			filtered++
+			log.Printf("[Stremio] Filtered: Empty URL - %s", s.Name)
+			continue
+		}
+		
+		// Skip invalid URL schemes
+		if !strings.HasPrefix(s.URL, "http://") && 
+		   !strings.HasPrefix(s.URL, "https://") &&
+		   !strings.HasPrefix(s.URL, "magnet:") {
+			filtered++
+			log.Printf("[Stremio] Filtered: Invalid URL scheme - %s", s.URL)
+			continue
+		}
+		
+		// Skip uncached magnet links (they will timeout in IPTV players)
+		if strings.Contains(s.URL, "magnet:") && !s.Cached {
+			filtered++
+			log.Printf("[Stremio] Filtered: Uncached magnet - %s", s.Name)
+			continue
+		}
+		
+		// Valid stream - keep it
+		valid = append(valid, s)
+	}
+	
+	if filtered > 0 {
+		log.Printf("[Stremio] Filtered out %d invalid streams, %d valid streams remain", filtered, len(valid))
+	}
+	
+	return valid
 }
 
 // getStremioProxyPosterURL builds a proxy URL for poster images
@@ -651,6 +692,9 @@ func (h *Handler) StremioStreamHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[Stremio] GetMovieStreams returned %d streams", len(streams))
 		}
 		if err == nil && len(streams) > 0 {
+			// Filter out invalid streams first
+			streams = filterValidStreams(streams)
+			
 			// Apply release filters
 			streams = h.applyReleaseFilters(streams)
 			sortStreams(streams)
@@ -686,6 +730,9 @@ func (h *Handler) StremioStreamHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[Stremio] GetSeriesStreams returned %d streams", len(streams))
 		}
 		if err == nil && len(streams) > 0 {
+			// Filter out invalid streams first
+			streams = filterValidStreams(streams)
+			
 			// Apply release filters
 			streams = h.applyReleaseFilters(streams)
 			sortStreams(streams)

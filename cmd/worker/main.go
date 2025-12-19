@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -616,12 +617,40 @@ func runStreamSearch(ctx context.Context, movieStore *database.MovieStore, setti
 			if err == nil {
 				defer resp.Body.Close()
 				var result struct {
-					Streams []interface{} `json:"streams"`
+					Streams []struct {
+						URL      string `json:"url"`
+						InfoHash string `json:"infoHash"`
+						Name     string `json:"name"`
+					} `json:"streams"`
 				}
 				if json.NewDecoder(resp.Body).Decode(&result) == nil && len(result.Streams) > 0 {
-					hasStreams = true
-					break
+					// Validate that at least one stream has a valid URL
+					validStreams := 0
+					for _, stream := range result.Streams {
+						// Skip empty URLs
+						if stream.URL == "" && stream.InfoHash == "" {
+							continue
+						}
+						// Skip invalid URL schemes
+						if stream.URL != "" && !strings.HasPrefix(stream.URL, "http://") && 
+						   !strings.HasPrefix(stream.URL, "https://") && 
+						   !strings.HasPrefix(stream.URL, "magnet:") {
+							continue
+						}
+						// Count as valid
+						validStreams++
+					}
+					
+					if validStreams > 0 {
+						hasStreams = true
+						log.Printf("  ✓ %s - Found %d valid streams", movie.Title, validStreams)
+						break
+					} else {
+						log.Printf("  ✗ %s - Streams returned but all invalid", movie.Title)
+					}
 				}
+			} else {
+				log.Printf("  ⚠️  %s - Error checking addon %s: %v", movie.Title, addon.Name, err)
 			}
 		}
 		
