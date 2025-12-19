@@ -39,6 +39,11 @@ interface SettingsData {
   use_realdebrid: boolean;
   use_premiumize: boolean;
 
+  // Zilean Integration
+  zilean_enabled: boolean;
+  zilean_url: string;
+  zilean_api_key: string;
+
   stremio_addons: Array<{name: string; url: string; enabled: boolean}>;
   stream_providers: string[] | string; // Legacy, will be removed
   torrentio_providers: string; // Legacy, will be removed
@@ -1368,6 +1373,63 @@ export default function Settings() {
                 <p className="text-xs text-slate-500 mt-1">
                   Alternative debrid service. Use either Real-Debrid OR Premiumize (or both).
                 </p>
+              </div>
+
+              {/* Zilean Integration */}
+              <div className="col-span-full mt-6 pt-6 border-t border-white/10">
+                <h3 className="text-lg font-semibold text-white mb-4">🔮 Zilean DMM Integration</h3>
+                <p className="text-sm text-slate-400 mb-4">
+                  Connect to Zilean for instant access to cached DMM torrents. Zilean indexes debrid-cached content for faster streaming.
+                </p>
+
+                <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.zilean_enabled || false}
+                    onChange={(e) => updateSetting('zilean_enabled', e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-[#2a2a2a] text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-300">Enable Zilean Provider</span>
+                </label>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Zilean URL
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.zilean_url || ''}
+                      onChange={(e) => updateSetting('zilean_url', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      placeholder="http://localhost:8181"
+                      disabled={!settings.zilean_enabled}
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      URL of your Zilean instance. Default: http://localhost:8181
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Zilean API Key (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.zilean_api_key || ''}
+                      onChange={(e) => updateSetting('zilean_api_key', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      placeholder="Leave empty if no API key is set"
+                      disabled={!settings.zilean_enabled}
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Found in settings.json on your Zilean server. Only needed if authentication is enabled.{' '}
+                      <a href="https://ipromknight.github.io/zilean/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+                        Learn more
+                      </a>
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div>

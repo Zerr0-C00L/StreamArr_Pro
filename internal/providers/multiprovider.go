@@ -61,10 +61,29 @@ type MultiProvider struct {
 	ProviderNames []string
 }
 
+// ZileanConfig holds Zilean configuration
+type ZileanConfig struct {
+	Enabled bool
+	URL     string
+	APIKey  string
+}
+
 func NewMultiProvider(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient) *MultiProvider {
+	return NewMultiProviderWithZilean(rdAPIKey, addons, tmdbClient, nil)
+}
+
+func NewMultiProviderWithZilean(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient, zileanCfg *ZileanConfig) *MultiProvider {
 	mp := &MultiProvider{
 		Providers:     make([]StreamProvider, 0),
 		ProviderNames: make([]string, 0),
+	}
+	
+	// Add Zilean provider first (highest priority for cached content)
+	if zileanCfg != nil && zileanCfg.Enabled && zileanCfg.URL != "" {
+		zileanProvider := NewZileanProvider(zileanCfg.URL, zileanCfg.APIKey, rdAPIKey)
+		mp.Providers = append(mp.Providers, zileanProvider)
+		mp.ProviderNames = append(mp.ProviderNames, "Zilean DMM")
+		log.Printf("✓ Zilean provider loaded (%s)", zileanCfg.URL)
 	}
 	
 	// Add each enabled addon as a generic Stremio provider

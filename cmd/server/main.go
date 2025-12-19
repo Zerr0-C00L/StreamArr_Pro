@@ -322,8 +322,20 @@ func main() {
 		}
 	}
 	
+	// Prepare Zilean configuration if enabled
+	var zileanCfg *providers.ZileanConfig
+	currentSettings = settingsManager.Get()
+	if currentSettings.ZileanEnabled {
+		zileanCfg = &providers.ZileanConfig{
+			Enabled: true,
+			URL:     currentSettings.ZileanURL,
+			APIKey:  currentSettings.ZileanAPIKey,
+		}
+		log.Printf("✓ Zilean DMM provider enabled: %s", currentSettings.ZileanURL)
+	}
+	
 	// Create MultiProvider for both Xtream and REST API
-	multiProvider := providers.NewMultiProvider(cfg.RealDebridAPIKey, stremioAddons, tmdbClient)
+	multiProvider := providers.NewMultiProviderWithZilean(cfg.RealDebridAPIKey, stremioAddons, tmdbClient, zileanCfg)
 	log.Printf("✓ Stremio Addons enabled: %v", multiProvider.ProviderNames)
 	
 	xtreamHandler := xtream.NewXtreamHandlerWithProvider(cfg, db, tmdbClient, rdClient, channelManager, epgManager, multiProvider)

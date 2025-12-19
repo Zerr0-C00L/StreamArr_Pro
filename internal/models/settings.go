@@ -59,6 +59,11 @@ type SettingsResponse struct {
 	MediaFusionEnabled  bool   `json:"mediafusion_enabled"`
 	TorrentioProviders  string `json:"torrentio_providers"`
 
+	// Zilean Integration
+	ZileanEnabled  bool   `json:"zilean_enabled"`
+	ZileanURL      string `json:"zilean_url"`
+	ZileanAPIKey   string `json:"zilean_api_key"`
+
 	// Content Sources (GitHub lists)
 	IncludePopularMovies         bool `json:"include_popular_movies"`
 	IncludeTopRatedMovies        bool `json:"include_top_rated_movies"`
