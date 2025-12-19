@@ -284,8 +284,8 @@ func (z *ZileanProvider) GetStats(ctx context.Context) (*ZileanStats, error) {
 
 	stats.Status = "online"
 
-	// Try to get torrent count from /dmm/filtered/all endpoint
-	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/dmm/filtered/all", z.BaseURL), nil)
+	// Try HEAD request on /dmm/filtered/all to check if torrents exist without downloading all data
+	req, err := http.NewRequestWithContext(ctx, "HEAD", fmt.Sprintf("%s/dmm/filtered/all", z.BaseURL), nil)
 	if err != nil {
 		return stats, nil
 	}
@@ -300,17 +300,46 @@ func (z *ZileanProvider) GetStats(ctx context.Context) (*ZileanStats, error) {
 	}
 	defer resp.Body.Close()
 
+	// If DMM endpoint is available, assume torrents are being scraped
+	// Return a non-zero count to indicate activity
 	if resp.StatusCode == http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
+		// Since we can't efficiently count without downloading all hashes,
+		// we'll make a small sample request to estimate
+		sampleReq, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/dmm/filtered/all", z.BaseURL), nil)
 		if err == nil {
-			// Count newlines to estimate torrents (each line is a torrent hash)
-			count := int64(0)
-			for _, b := range body {
-				if b == '\n' {
-					count++
+			if z.APIKey != "" {
+				sampleReq.Header.Set("X-Api-Key", z.APIKey)
+			}
+			
+			// Set a timeout for sampling
+			sampleCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+			sampleReq = sampleReq.WithContext(sampleCtx)
+			
+			sampleResp, err := z.Client.Do(sampleReq)
+			if err == nil {
+				defer sampleResp.Body.Close()
+				
+				// Read up to 1MB to sample
+				limited := io.LimitReader(sampleResp.Body, 1024*1024)
+				body, err := io.ReadAll(limited)
+				if err == nil && len(body) > 0 {
+					// Count lines in sample
+					count := int64(0)
+					for _, b := range body {
+						if b == '\n' {
+							count++
+						}
+					}
+					// If we got a full 1MB, there's likely many more
+					if len(body) == 1024*1024 {
+						// Estimate based on sample (rough approximation)
+						stats.TorrentCount = count * 10
+					} else {
+						stats.TorrentCount = count
+					}
 				}
 			}
-			stats.TorrentCount = count
 		}
 	}
 
