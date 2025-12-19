@@ -34,6 +34,7 @@ type Handler struct {
 	settingsStore   *database.SettingsStore
 	userStore       *database.UserStore
 	collectionStore *database.CollectionStore
+	blacklistStore  *database.BlacklistStore
 	tmdbClient      *services.TMDBClient
 	rdClient        *services.RealDebridClient
 	channelManager  *livetv.ChannelManager
@@ -73,6 +74,7 @@ func NewHandlerWithComponents(
 	settingsStore *database.SettingsStore,
 	userStore *database.UserStore,
 	collectionStore *database.CollectionStore,
+	blacklistStore *database.BlacklistStore,
 	tmdbClient *services.TMDBClient,
 	rdClient *services.RealDebridClient,
 	channelManager *livetv.ChannelManager,
@@ -88,6 +90,7 @@ func NewHandlerWithComponents(
 		settingsStore:   settingsStore,
 		userStore:       userStore,
 		collectionStore: collectionStore,
+		blacklistStore:  blacklistStore,
 		tmdbClient:      tmdbClient,
 		rdClient:        rdClient,
 		channelManager:  channelManager,
@@ -3852,3 +3855,146 @@ func (h *Handler) Restart(w http.ResponseWriter, r *http.Request) {
 		os.Exit(0)
 	}()
 }
+
+// ============================================================================
+// Blacklist Handlers
+// ============================================================================
+
+// RemoveAndBlacklist removes an item from library and adds to blacklist
+func (h *Handler) RemoveAndBlacklist(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	itemType := vars["type"] // "movie" or "series"
+	idStr := vars["id"]
+	
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid ID")
+		return
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		req.Reason = "Removed by user"
+	}
+
+	// Get the item details before deletion
+	var tmdbID int
+	var title string
+
+	if itemType == "movie" {
+		movie, err := h.movieStore.Get(ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "Movie not found")
+			return
+		}
+		tmdbID = movie.TMDBID
+		title = movie.Title
+
+		// Delete movie and its streams
+		if err := h.streamStore.DeleteByContent(ctx, "movie", id); err != nil {
+			log.Printf("Warning: Failed to delete streams for movie %d: %v", id, err)
+		}
+		if err := h.movieStore.Delete(ctx, id); err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete movie: %v", err))
+			return
+		}
+	} else if itemType == "series" {
+		series, err := h.seriesStore.Get(ctx, id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "Series not found")
+			return
+		}
+		tmdbID = series.TMDBID
+		title = series.Title
+
+		// Delete series, episodes, and streams
+		episodes, _ := h.episodeStore.ListBySeries(ctx, id)
+		for _, ep := range episodes {
+			h.streamStore.DeleteByContent(ctx, "episode", ep.ID)
+		}
+		h.episodeStore.DeleteBySeries(ctx, id)
+		if err := h.seriesStore.Delete(ctx, id); err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete series: %v", err))
+			return
+		}
+	} else {
+		respondError(w, http.StatusBadRequest, "Invalid item type")
+		return
+	}
+
+	// Add to blacklist
+	if err := h.blacklistStore.Add(ctx, tmdbID, itemType, title, req.Reason); err != nil {
+		log.Printf("Warning: Failed to add to blacklist: %v", err)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"message": fmt.Sprintf("%s removed and blacklisted", itemType),
+		"tmdb_id": tmdbID,
+		"title":   title,
+	})
+}
+
+// GetBlacklist returns paginated blacklist entries
+func (h *Handler) GetBlacklist(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	
+	if limit == 0 {
+		limit = 50
+	}
+
+	entries, total, err := h.blacklistStore.List(ctx, limit, offset)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get blacklist: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"blacklist": entries,
+		"total":     total,
+		"limit":     limit,
+		"offset":    offset,
+	})
+}
+
+// RemoveFromBlacklist removes an entry from the blacklist
+func (h *Handler) RemoveFromBlacklist(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+	
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid ID")
+		return
+	}
+
+	if err := h.blacklistStore.Remove(ctx, id); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to remove from blacklist: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": "Removed from blacklist",
+	})
+}
+
+// ClearBlacklist clears all blacklist entries
+func (h *Handler) ClearBlacklist(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	if err := h.blacklistStore.Clear(ctx); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to clear blacklist: %v", err))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{
+		"message": "Blacklist cleared",
+	})
+}
+

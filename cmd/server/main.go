@@ -52,6 +52,7 @@ func main() {
 	streamStore := database.NewStreamStore(db)
 	settingsStore := database.NewSettingsStore(db)
 	collectionStore := database.NewCollectionStore(db)
+	blacklistStore := database.NewBlacklistStore(db)
 	userStore, err := database.NewUserStore(db)
 	if err != nil {
 		log.Fatalf("Failed to initialize user store: %v", err)
@@ -397,6 +398,7 @@ func main() {
 		settingsStore,
 		userStore,
 		collectionStore,
+		blacklistStore,
 		tmdbClient,
 		rdClient,
 		channelManager,

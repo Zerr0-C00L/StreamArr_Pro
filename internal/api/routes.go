@@ -82,6 +82,12 @@ func SetupRoutes(handler *Handler) http.Handler {
 	api.HandleFunc("/collections/{id}/sync", handler.SyncCollection).Methods("POST")
 	api.HandleFunc("/collections/{id}/movies", handler.GetCollectionMovies).Methods("GET")
 
+	// Blacklist
+	api.HandleFunc("/blacklist", handler.GetBlacklist).Methods("GET")
+	api.HandleFunc("/blacklist/clear", handler.ClearBlacklist).Methods("POST")
+	api.HandleFunc("/blacklist/{id}", handler.RemoveFromBlacklist).Methods("DELETE")
+	api.HandleFunc("/{type}/{id}/remove-and-blacklist", handler.RemoveAndBlacklist).Methods("POST")
+
 	// Services
 	api.HandleFunc("/services", handler.GetServices).Methods("GET")
 	api.HandleFunc("/services/{name}", handler.UpdateServiceEnabled).Methods("PUT")
