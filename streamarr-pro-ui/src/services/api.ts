@@ -143,6 +143,19 @@ export const streamarrApi = {
   // Statistics
   getStats: () =>
     api.get('/stats'),
+
+  // Blacklist
+  removeAndBlacklist: (type: 'movie' | 'series', id: number, reason?: string) =>
+    api.post(`/${type}/${id}/remove-and-blacklist`, { reason }),
+  
+  getBlacklist: (params?: { limit?: number; offset?: number }) =>
+    api.get('/blacklist', { params }),
+  
+  removeFromBlacklist: (id: number) =>
+    api.delete(`/blacklist/${id}`),
+  
+  clearBlacklist: () =>
+    api.post('/blacklist/clear'),
 };
 
 // Trending item type from TMDB

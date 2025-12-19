@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { streamarrApi, tmdbImageUrl } from '../services/api';
 import { 
   Play, Info, ChevronLeft, ChevronRight, X, Plus, 
-  Tv, Film, Loader2, ChevronDown, Search
+  Tv, Film, Loader2, ChevronDown, Search, Trash2
 } from 'lucide-react';
 import type { Movie, Series, Episode } from '../types';
 
@@ -119,6 +119,23 @@ function DetailModal({
   const [seriesImdbId, setSeriesImdbId] = useState<string | null>(
     media.imdb_id || media.metadata?.imdb_id as string || null
   );
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const handleRemoveAndBlacklist = async () => {
+    setRemoving(true);
+    try {
+      await streamarrApi.removeAndBlacklist(media.type, media.id, 'Removed by user');
+      onClose();
+      window.location.reload(); // Refresh to update the library
+    } catch (error) {
+      console.error('Failed to remove item:', error);
+      alert('Failed to remove item. Please try again.');
+    } finally {
+      setRemoving(false);
+      setShowRemoveConfirm(false);
+    }
+  };
 
   // Fetch episodes for series
   const { data: episodes = [], isLoading: episodesLoading } = useQuery<Episode[]>({
@@ -225,6 +242,13 @@ function DetailModal({
                 <button className="p-2 rounded-full border-2 border-gray-400 hover:border-white transition-colors" title="Add to My List">
                   <Plus className="w-5 h-5 text-white" />
                 </button>
+                <button 
+                  onClick={() => setShowRemoveConfirm(true)}
+                  className="p-2 rounded-full border-2 border-red-600 hover:border-red-500 hover:bg-red-600/20 transition-colors" 
+                  title="Remove from Library"
+                >
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </button>
               </div>
             </div>
           </div>
@@ -330,6 +354,44 @@ function DetailModal({
               </div>
             )}
           </div>
+
+          {/* Remove Confirmation Dialog */}
+          {showRemoveConfirm && (
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-40" onClick={() => setShowRemoveConfirm(false)}>
+              <div className="bg-[#242424] rounded-lg p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-xl font-bold text-white mb-2">Remove from Library?</h3>
+                <p className="text-slate-300 mb-4">
+                  This will permanently remove "{media.title}" from your library and add it to the blacklist to prevent re-importing.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setShowRemoveConfirm(false)}
+                    disabled={removing}
+                    className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleRemoveAndBlacklist}
+                    disabled={removing}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {removing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Removing...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        Remove & Blacklist
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
