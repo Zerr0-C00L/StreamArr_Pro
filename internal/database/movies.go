@@ -90,7 +90,7 @@ func scanMovie(rows *sql.Rows) (*models.Movie, error) {
 	err := rows.Scan(
 		&movie.ID, &movie.TMDBID, &movie.Title, &year,
 		&movie.Monitored, &movie.Available, &movie.QualityProfile,
-		&metadataJSON, &movie.AddedAt, &movie.LastChecked,
+		&metadataJSON, &movie.AddedAt, &movie.LastChecked, &movie.CollectionID,
 	)
 	if err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func scanMovie(rows *sql.Rows) (*models.Movie, error) {
 func (s *MovieStore) Get(ctx context.Context, id int64) (*models.Movie, error) {
 	query := `
 		SELECT id, tmdb_id, title, year, monitored, available,
-			preferred_quality, metadata, added_at, last_checked
+			preferred_quality, metadata, added_at, last_checked, collection_id
 		FROM library_movies
 		WHERE id = $1
 	`
@@ -163,7 +163,7 @@ func (s *MovieStore) Get(ctx context.Context, id int64) (*models.Movie, error) {
 func (s *MovieStore) GetByTMDBID(ctx context.Context, tmdbID int) (*models.Movie, error) {
 	query := `
 		SELECT id, tmdb_id, title, year, monitored, available,
-			preferred_quality, metadata, added_at, last_checked
+			preferred_quality, metadata, added_at, last_checked, collection_id
 		FROM library_movies
 		WHERE tmdb_id = $1
 	`
@@ -185,7 +185,7 @@ func (s *MovieStore) GetByTMDBID(ctx context.Context, tmdbID int) (*models.Movie
 func (s *MovieStore) List(ctx context.Context, offset, limit int, monitored *bool) ([]*models.Movie, error) {
 	query := `
 		SELECT id, tmdb_id, title, year, monitored, available,
-			preferred_quality, metadata, added_at, last_checked
+			preferred_quality, metadata, added_at, last_checked, collection_id
 		FROM library_movies
 	`
 
@@ -220,7 +220,7 @@ func (s *MovieStore) List(ctx context.Context, offset, limit int, monitored *boo
 func (s *MovieStore) Search(ctx context.Context, query string, limit int) ([]*models.Movie, error) {
 	sqlQuery := `
 		SELECT id, tmdb_id, title, year, monitored, available,
-			preferred_quality, metadata, added_at, last_checked
+			preferred_quality, metadata, added_at, last_checked, collection_id
 		FROM library_movies
 		WHERE title_vector @@ plainto_tsquery('english', $1)
 		ORDER BY ts_rank(title_vector, plainto_tsquery('english', $1)) DESC
