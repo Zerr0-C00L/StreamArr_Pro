@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { streamarrApi, tmdbImageUrl } from '../services/api';
 import { 
   Play, Info, ChevronLeft, ChevronRight, X, Plus, 
@@ -24,148 +24,6 @@ type MediaItem = {
   metadata?: Record<string, any>;
   imdb_id?: string;
 };
-
-// Netflix-style horizontal row component
-function ContentRow({ 
-  title, 
-  items, 
-  onItemClick,
-  category,
-}: { 
-  title: string; 
-  items: MediaItem[]; 
-  onItemClick: (item: MediaItem) => void;
-  category?: string;
-}) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [showLeftArrow, setShowLeftArrow] = useState(false);
-  const [showRightArrow, setShowRightArrow] = useState(true);
-
-  const scroll = (direction: 'left' | 'right') => {
-    if (rowRef.current) {
-      const scrollAmount = rowRef.current.clientWidth * 0.8;
-      rowRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  const handleScroll = () => {
-    if (rowRef.current) {
-      setShowLeftArrow(rowRef.current.scrollLeft > 0);
-      setShowRightArrow(
-        rowRef.current.scrollLeft < rowRef.current.scrollWidth - rowRef.current.clientWidth - 10
-      );
-    }
-  };
-
-  if (items.length === 0) return null;
-
-  return (
-    <div className="mb-6 group/row">
-      <div className="flex items-center justify-between mb-3 px-12">
-        <h2 className="text-xl font-bold text-white">{title}</h2>
-        {category && items.length > 0 && (
-          <Link 
-            to={`/viewall?category=${category}`}
-            className="text-sm text-slate-400 hover:text-white transition-colors flex items-center gap-1"
-          >
-            View All
-            <ChevronRight className="w-4 h-4" />
-          </Link>
-        )}
-      </div>
-      <div className="relative">
-        {/* Left Arrow */}
-        {showLeftArrow && (
-          <button
-            onClick={() => scroll('left')}
-            className="absolute left-0 top-0 bottom-0 z-20 w-12 bg-gradient-to-r from-black/80 to-transparent 
-                       flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity"
-          >
-            <ChevronLeft className="w-8 h-8 text-white" />
-          </button>
-        )}
-
-        {/* Content */}
-        <div 
-          ref={rowRef}
-          onScroll={handleScroll}
-          className="flex gap-2 overflow-x-auto scrollbar-hide px-12 pb-4"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {items.map((item) => (
-            <div
-              key={`${item.type}-${item.id}`}
-              className="w-[180px] flex-shrink-0 group/card cursor-pointer transition-transform duration-300 
-                         hover:scale-110 hover:z-10"
-              onClick={() => onItemClick(item)}
-            >
-              <div className="relative aspect-[2/3] rounded-md overflow-hidden bg-slate-800 shadow-lg">
-                {item.poster_path ? (
-                  <img
-                    src={tmdbImageUrl(item.poster_path, 'w342')}
-                    alt={item.title}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900">
-                    {item.type === 'movie' ? <Film className="w-12 h-12 text-slate-600" /> : <Tv className="w-12 h-12 text-slate-600" />}
-                  </div>
-                )}
-                
-                {/* Overlay on hover */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent 
-                               opacity-0 group-hover/card:opacity-100 transition-opacity">
-                  <div className="absolute bottom-0 left-0 right-0 p-3">
-                    <div className="flex gap-2 mb-2">
-                      <button className="p-1.5 rounded-full bg-white hover:bg-white/80 transition-colors">
-                        <Play className="w-4 h-4 text-black fill-black" />
-                      </button>
-                      <button className="p-1.5 rounded-full border border-gray-400 hover:border-white transition-colors">
-                        <Plus className="w-4 h-4 text-white" />
-                      </button>
-                      <button className="p-1.5 rounded-full border border-gray-400 hover:border-white transition-colors ml-auto">
-                        <ChevronDown className="w-4 h-4 text-white" />
-                      </button>
-                    </div>
-                    <h3 className="text-white font-semibold text-sm line-clamp-1">{item.title}</h3>
-                    <div className="flex items-center gap-2 mt-1 text-xs">
-                      {item.vote_average && item.vote_average > 0 && (
-                        <span className="text-green-400 font-semibold">
-                          {(item.vote_average * 10).toFixed(0)}%
-                        </span>
-                      )}
-                      {item.year && <span className="text-slate-400">{item.year}</span>}
-                      <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
-                        item.type === 'movie' ? 'bg-purple-600' : 'bg-green-600'
-                      } text-white`}>
-                        {item.type === 'movie' ? 'MOVIE' : 'SERIES'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Right Arrow */}
-        {showRightArrow && (
-          <button
-            onClick={() => scroll('right')}
-            className="absolute right-0 top-0 bottom-0 z-20 w-12 bg-gradient-to-l from-black/80 to-transparent 
-                       flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity"
-          >
-            <ChevronRight className="w-8 h-8 text-white" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // Netflix-style Hero Banner
 function HeroBanner({ item, onPlay, onMoreInfo }: { 
@@ -681,6 +539,12 @@ export default function Library() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
+
+  // Get current view from URL params (default to 'all')
+  const currentView = searchParams.get('view') || 'all';
 
   // Fetch movies
   const { data: movies = [], isLoading: moviesLoading } = useQuery({
@@ -748,35 +612,59 @@ export default function Library() {
     }
   }, [allMedia]);
 
-  // Categorized content
-  const recentlyAddedMovies = useMemo(() => {
-    return [...allMedia]
-      .filter(m => m.type === 'movie')
-      .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime())
-      .slice(0, 20);
-  }, [allMedia]);
+  // Filtered media based on current view
+  const filteredMedia = useMemo(() => {
+    let filtered = [...allMedia];
 
-  const recentlyAddedSeries = useMemo(() => {
-    return [...allMedia]
-      .filter(m => m.type === 'series')
-      .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime())
-      .slice(0, 20);
-  }, [allMedia]);
+    switch (currentView) {
+      case 'recently-added-movies':
+        filtered = filtered
+          .filter(m => m.type === 'movie')
+          .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
+        break;
+      case 'recently-added-series':
+        filtered = filtered
+          .filter(m => m.type === 'series')
+          .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
+        break;
+      case 'top-rated':
+        filtered = filtered
+          .filter(m => m.vote_average && m.vote_average > 0)
+          .sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
+        break;
+      case 'movies':
+        filtered = filtered.filter(m => m.type === 'movie');
+        break;
+      case 'series':
+        filtered = filtered.filter(m => m.type === 'series');
+        break;
+      default:
+        filtered = filtered.sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
+    }
 
-  const topRated = useMemo(() => {
-    return [...allMedia]
-      .filter(m => m.vote_average && m.vote_average > 0)
-      .sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0))
-      .slice(0, 20);
-  }, [allMedia]);
+    return filtered;
+  }, [allMedia, currentView]);
 
-  const moviesList = useMemo(() => {
-    return allMedia.filter(m => m.type === 'movie').slice(0, 30);
-  }, [allMedia]);
+  // Pagination
+  const totalPages = Math.ceil(filteredMedia.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentItems = filteredMedia.slice(startIndex, endIndex);
 
-  const seriesList = useMemo(() => {
-    return allMedia.filter(m => m.type === 'series').slice(0, 30);
-  }, [allMedia]);
+  // Reset page when view changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [currentView]);
+
+  // View titles
+  const viewTitles: Record<string, string> = {
+    'all': 'All Media',
+    'recently-added-movies': 'Recently Added Movies',
+    'recently-added-series': 'Recently Added Series',
+    'top-rated': 'Top Rated',
+    'movies': 'Movies',
+    'series': 'TV Shows',
+  };
 
   // Search results
   const searchResults = useMemo(() => {
@@ -878,47 +766,156 @@ export default function Library() {
         onMoreInfo={() => featuredItem && setSelectedMedia(featuredItem)}
       />
 
-      {/* Content Rows */}
-      <div className="relative -mt-24 z-10 pb-12">
-        {recentlyAddedMovies.length > 0 && (
-          <ContentRow 
-            title="Recently Added Movies" 
-            items={recentlyAddedMovies} 
-            onItemClick={setSelectedMedia}
-            category="recently-added-movies"
-          />
-        )}
-        {recentlyAddedSeries.length > 0 && (
-          <ContentRow 
-            title="Recently Added Series" 
-            items={recentlyAddedSeries} 
-            onItemClick={setSelectedMedia}
-            category="recently-added-series"
-          />
-        )}
-        {topRated.length > 0 && (
-          <ContentRow 
-            title="Top Rated" 
-            items={topRated} 
-            onItemClick={setSelectedMedia}
-            category="top-rated"
-          />
-        )}
-        {moviesList.length > 0 && (
-          <ContentRow 
-            title="Movies" 
-            items={moviesList} 
-            onItemClick={setSelectedMedia}
-            category="movies"
-          />
-        )}
-        {seriesList.length > 0 && (
-          <ContentRow 
-            title="TV Shows" 
-            items={seriesList} 
-            onItemClick={setSelectedMedia}
-            category="series"
-          />
+      {/* Filter Tabs */}
+      <div className="relative -mt-20 z-10 px-12 mb-6">
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'recently-added-movies', label: 'Recent Movies' },
+            { key: 'recently-added-series', label: 'Recent Series' },
+            { key: 'top-rated', label: 'Top Rated' },
+            { key: 'movies', label: 'Movies' },
+            { key: 'series', label: 'TV Shows' },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setSearchParams({ view: tab.key });
+                setCurrentPage(1);
+              }}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                currentView === tab.key
+                  ? 'bg-white text-black'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content Grid */}
+      <div className="relative z-10 px-12 pb-12">
+        <div className="mb-4">
+          <h2 className="text-2xl font-bold text-white mb-2">{viewTitles[currentView]}</h2>
+          <p className="text-slate-400">
+            Showing {startIndex + 1}-{Math.min(endIndex, filteredMedia.length)} of {filteredMedia.length} items
+          </p>
+        </div>
+
+        {currentItems.length > 0 ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-8">
+              {currentItems.map((item) => (
+                <div
+                  key={`${item.type}-${item.id}`}
+                  onClick={() => setSelectedMedia(item)}
+                  className="group cursor-pointer"
+                >
+                  <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-slate-800 mb-2 
+                                 group-hover:ring-2 ring-white transition-all">
+                    {item.poster_path ? (
+                      <img
+                        src={tmdbImageUrl(item.poster_path, 'w342')}
+                        alt={item.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        {item.type === 'movie' ? (
+                          <Film className="w-12 h-12 text-slate-600" />
+                        ) : (
+                          <Tv className="w-12 h-12 text-slate-600" />
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Type Badge */}
+                    <div className="absolute top-2 left-2">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${
+                        item.type === 'movie' ? 'bg-purple-600' : 'bg-green-600'
+                      } text-white`}>
+                        {item.type === 'movie' ? 'MOVIE' : 'SERIES'}
+                      </span>
+                    </div>
+
+                    {/* Rating */}
+                    {item.vote_average && item.vote_average > 0 && (
+                      <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-1 rounded backdrop-blur-sm">
+                        <span className="text-yellow-400 text-xs font-bold">
+                          {item.vote_average.toFixed(1)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <h3 className="text-white text-sm font-medium line-clamp-2 group-hover:text-slate-300 transition-colors">
+                    {item.title}
+                  </h3>
+                  {item.year && (
+                    <p className="text-slate-400 text-xs">{item.year}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded bg-slate-800 text-white disabled:opacity-50 disabled:cursor-not-allowed
+                           hover:bg-slate-700 transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 7) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 4) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 3) {
+                      pageNum = totalPages - 6 + i;
+                    } else {
+                      pageNum = currentPage - 3 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-1 rounded transition-colors ${
+                          currentPage === pageNum
+                            ? 'bg-red-600 text-white'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded bg-slate-800 text-white disabled:opacity-50 disabled:cursor-not-allowed
+                           hover:bg-slate-700 transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-center py-20">
+            <p className="text-slate-400 text-xl">No items found</p>
+          </div>
         )}
       </div>
 
