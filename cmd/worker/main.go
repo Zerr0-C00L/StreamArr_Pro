@@ -551,7 +551,6 @@ func runStreamSearch(ctx context.Context, movieStore *database.MovieStore, setti
 		AND imdb_id IS NOT NULL 
 		AND (last_checked IS NULL OR last_checked < NOW() - INTERVAL '7 days')
 		ORDER BY added_at DESC
-		LIMIT 50
 	`
 	
 	rows, err := movieStore.GetDB().QueryContext(ctx, query)

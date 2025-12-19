@@ -574,7 +574,6 @@ func (h *Handler) scanStreamAvailability(ctx context.Context) error {
 		WHERE monitored = true 
 		AND (last_checked IS NULL OR last_checked < NOW() - INTERVAL '7 days')
 		ORDER BY added_at DESC
-		LIMIT 100
 	`
 
 	rows, err := h.movieStore.GetDB().QueryContext(ctx, query)
@@ -719,7 +718,6 @@ func (h *Handler) scanStreamAvailability(ctx context.Context) error {
 		AND (e.last_checked IS NULL OR e.last_checked < NOW() - INTERVAL '7 days')
 		AND e.air_date IS NOT NULL AND e.air_date < NOW()
 		ORDER BY e.air_date DESC
-		LIMIT 200
 	`
 
 	episodeRows, err := h.movieStore.GetDB().QueryContext(ctx, episodeQuery)
