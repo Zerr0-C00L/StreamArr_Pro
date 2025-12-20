@@ -1,0 +1,243 @@
+name: Combine and Categorize Playlists
+
+on:
+  workflow_dispatch:  # Allow manual trigger
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+
+jobs:
+  combine:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Combine and categorize playlists
+        run: |
+          #!/bin/bash
+          
+          echo "Starting playlist combination and categorization..."
+          
+          # Create output directories
+          mkdir -p combined
+          
+          # M3U files to process
+          FILES=(
+            "iptv"
+            "playlist25"
+            "daddylive-channels"
+            "denstv"
+            "fstv"
+            "rdstv"
+            "trial"
+            "tvpass"
+            "udptv"
+            "vision+"
+            "vod"
+            "yoyo"
+            "DewaNonton"
+            "china"
+            "hbogoasia"
+          )
+          
+          # Initialize category files
+          echo "#EXTM3U" > combined/all.m3u
+          echo "#EXTM3U" > combined/movies.m3u
+          echo "#EXTM3U" > combined/series.m3u
+          echo "#EXTM3U" > combined/live-tv.m3u
+          echo "#EXTM3U" > combined/vod.m3u
+          echo "#EXTM3U" > combined/sports.m3u
+          echo "#EXTM3U" > combined/kids.m3u
+          echo "#EXTM3U" > combined/news.m3u
+          echo "#EXTM3U" > combined/entertainment.m3u
+          
+          # Add metadata
+          DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          for file in combined/*.m3u; do
+            echo "# Auto-generated combined playlist" >> "$file"
+            echo "# Generated: $DATE" >> "$file"
+            echo "# Source: https://github.com/Zerr0-C00L/lalajo" >> "$file"
+            echo "" >> "$file"
+          done
+          
+          # Process each source file
+          for source_file in "${FILES[@]}"; do
+            if [ ! -f "$source_file" ]; then
+              echo "⚠ Skipping $source_file (not found)"
+              continue
+            fi
+            
+            echo "Processing: $source_file"
+            
+            # Read file line by line
+            while IFS= read -r line || [ -n "$line" ]; do
+              # Skip #EXTM3U header
+              if [[ "$line" == "#EXTM3U" ]]; then
+                continue
+              fi
+              
+              # Process #EXTINF lines
+              if [[ "$line" == "#EXTINF"* ]]; then
+                EXTINF_LINE="$line"
+                
+                # Read the next line (URL) - handle EOF
+                if ! read -r URL_LINE; then
+                  URL_LINE=""
+                fi
+                
+                # Skip if URL is empty
+                if [ -z "$URL_LINE" ]; then
+                  continue
+                fi
+                
+                # Extract group-title if present
+                GROUP=""
+                if [[ "$line" =~ group-title=\"([^\"]*)\" ]]; then
+                  GROUP="${BASH_REMATCH[1]}"
+                fi
+                
+                # Convert to lowercase for categorization
+                LINE_LOWER=$(echo "$line" | tr '[:upper:]' '[:lower:]')
+                GROUP_LOWER=$(echo "$GROUP" | tr '[:upper:]' '[:lower:]')
+                
+                # Determine category
+                CATEGORIES=("all")
+                
+                # VOD/Movies detection
+                if [[ "$GROUP_LOWER" =~ (movie|film|cinema|vod) ]] || \
+                   [[ "$LINE_LOWER" =~ (movie|film|cinema) ]] || \
+                   [[ "$source_file" == "vod" ]]; then
+                  CATEGORIES+=("movies" "vod")
+                fi
+                
+                # Series/Shows detection
+                if [[ "$GROUP_LOWER" =~ (series|show|drama|tv.show) ]] || \
+                   [[ "$LINE_LOWER" =~ (series|episode|season|s[0-9]+e[0-9]+) ]]; then
+                  CATEGORIES+=("series" "vod")
+                fi
+                
+                # Live TV detection
+                if [[ "$GROUP_LOWER" =~ (live|channel|tv) ]] && \
+                   [[ ! "$GROUP_LOWER" =~ (movie|vod|series) ]] || \
+                   [[ "$source_file" =~ (daddylive|iptv|denstv|fstv|rdstv) ]]; then
+                  CATEGORIES+=("live-tv")
+                fi
+                
+                # Sports detection
+                if [[ "$GROUP_LOWER" =~ (sport|football|soccer|basketball|tennis|f1|nfl|nba|ufc|boxing) ]] || \
+                   [[ "$LINE_LOWER" =~ (sport|espn|bein.sport|sky.sport|fox.sport) ]]; then
+                  CATEGORIES+=("sports")
+                fi
+                
+                # Kids detection
+                if [[ "$GROUP_LOWER" =~ (kid|child|cartoon|disney|nickelodeon|cartoon.network) ]] || \
+                   [[ "$LINE_LOWER" =~ (kid|cartoon|disney|nickelodeon) ]]; then
+                  CATEGORIES+=("kids")
+                fi
+                
+                # News detection
+                if [[ "$GROUP_LOWER" =~ (news|cnn|bbc|aljazeera|fox.news) ]] || \
+                   [[ "$LINE_LOWER" =~ (news|cnn|bbc) ]]; then
+                  CATEGORIES+=("news")
+                fi
+                
+                # Entertainment detection
+                if [[ "$GROUP_LOWER" =~ (entertainment|music|reality) ]] || \
+                   [[ "$LINE_LOWER" =~ (mtv|vh1|e!|entertainment) ]]; then
+                  CATEGORIES+=("entertainment")
+                fi
+                
+                # If no specific category matched, add to live-tv or vod based on source
+                if [ ${#CATEGORIES[@]} -eq 1 ]; then
+                  if [[ "$source_file" =~ (vod|DewaNonton) ]]; then
+                    CATEGORIES+=("vod")
+                  else
+                    CATEGORIES+=("live-tv")
+                  fi
+                fi
+                
+                # Write to appropriate category files
+                for category in "${CATEGORIES[@]}"; do
+                  echo "$EXTINF_LINE" >> "combined/${category}.m3u"
+                  echo "$URL_LINE" >> "combined/${category}.m3u"
+                done
+              fi
+            done < "$source_file" || true
+            
+            echo "  ✓ Processed $source_file"
+          done
+          
+          # Count channels in each category
+          echo ""
+          echo "📊 Category Statistics:"
+          for file in combined/*.m3u; do
+            COUNT=$(grep -c "^#EXTINF" "$file" || echo "0")
+            FILENAME=$(basename "$file" .m3u)
+            printf "  %-15s: %5d channels\n" "$FILENAME" "$COUNT"
+          done
+          
+          # Create README for combined folder
+          cat > combined/README.md << 'EOF'
+          # Combined Playlists
+          
+          Auto-generated categorized playlists from all sources in the repository.
+          
+          ## Available Playlists
+          
+          - **all.m3u** - All channels combined
+          - **movies.m3u** - Movies and films
+          - **series.m3u** - TV series and shows
+          - **live-tv.m3u** - Live TV channels
+          - **vod.m3u** - Video on demand content
+          - **sports.m3u** - Sports channels and events
+          - **kids.m3u** - Kids and cartoon channels
+          - **news.m3u** - News channels
+          - **entertainment.m3u** - Entertainment channels
+          
+          ## Usage
+          
+          Access these playlists directly via GitHub raw URLs:
+          
+          ```
+          https://raw.githubusercontent.com/Zerr0-C00L/lalajo/main/combined/all.m3u
+          https://raw.githubusercontent.com/Zerr0-C00L/lalajo/main/combined/movies.m3u
+          https://raw.githubusercontent.com/Zerr0-C00L/lalajo/main/combined/series.m3u
+          https://raw.githubusercontent.com/Zerr0-C00L/lalajo/main/combined/live-tv.m3u
+          ```
+          
+          ## Update Schedule
+          
+          These playlists are automatically updated:
+          - When any source M3U file is modified
+          - Daily at midnight UTC
+          - Manually via GitHub Actions workflow dispatch
+          
+          Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+          
+          echo ""
+          echo "✅ Combination complete!"
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add combined/
+          
+          # Check if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "🤖 Auto-update combined playlists [skip ci]
+
+            - Updated categorized playlists
+            - Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+            "
+            git push
+            echo "✅ Changes pushed successfully"
+          fi

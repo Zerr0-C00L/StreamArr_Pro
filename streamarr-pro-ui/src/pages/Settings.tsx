@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Save, Key, Layers, Settings as SettingsIcon, Bell, Code, Plus, X, Tv, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search } from 'lucide-react';
 import axios from 'axios';
 
+// v1.2.1 - Added manual IP configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 // Create axios instance with auth token
