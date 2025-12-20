@@ -65,6 +65,7 @@ func SetupRoutes(handler *Handler) http.Handler {
 	api.HandleFunc("/channels/check-source", handler.CheckM3USourceStatus).Methods("POST")
 	api.HandleFunc("/channels/{id}", handler.GetChannel).Methods("GET")
 	api.HandleFunc("/channels/{id}/stream", handler.GetChannelStream).Methods("GET")
+	api.HandleFunc("/channels/proxy", handler.ProxyChannelStream).Methods("GET")
 
 	// Search
 	api.HandleFunc("/search/movies", handler.SearchMovies).Methods("GET")
@@ -306,6 +307,7 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	api.HandleFunc("/channels/check-source", handler.CheckM3USourceStatus).Methods("POST")
 	api.HandleFunc("/channels/{id}", handler.GetChannel).Methods("GET")
 	api.HandleFunc("/channels/{id}/stream", handler.GetChannelStream).Methods("GET")
+	api.HandleFunc("/channels/proxy", handler.ProxyChannelStream).Methods("GET")
 
 	// Search
 	api.HandleFunc("/search/movies", handler.SearchMovies).Methods("GET")

@@ -351,7 +351,9 @@ function VideoPlayer({ channel, onClose }: { channel: Channel; onClose: () => vo
     const video = videoRef.current;
     if (!video || !channel.stream_url) return;
 
-    const streamUrl = channel.stream_url;
+    // Use proxy endpoint to avoid CORS issues
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+    const streamUrl = `${API_BASE_URL}/channels/proxy?id=${channel.id}`;
 
     // Check if HLS is supported
     if (Hls.isSupported()) {

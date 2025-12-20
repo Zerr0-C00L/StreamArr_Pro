@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -1925,6 +1926,87 @@ func (h *Handler) GetChannelStream(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{
 		"stream_url": channel.StreamURL,
 	})
+}
+
+// ProxyChannelStream proxies the channel stream to avoid CORS issues
+func (h *Handler) ProxyChannelStream(w http.ResponseWriter, r *http.Request) {
+	if h.channelManager == nil {
+		http.Error(w, "channel manager not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing channel ID", http.StatusBadRequest)
+		return
+	}
+
+	channel, err := h.channelManager.GetChannel(id)
+	if err != nil {
+		http.Error(w, "channel not found", http.StatusNotFound)
+		return
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
+
+	// Create request to stream server
+	req, err := http.NewRequest("GET", channel.StreamURL, nil)
+	if err != nil {
+		http.Error(w, "failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	// Copy headers from original request
+	for key, values := range r.Header {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+
+	// Make request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to fetch stream: %v", err)
+		http.Error(w, "failed to fetch stream", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Range")
+
+	// Copy response headers
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	// Ensure proper content type for HLS
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		if strings.HasSuffix(channel.StreamURL, ".m3u8") {
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		} else if strings.HasSuffix(channel.StreamURL, ".ts") {
+			w.Header().Set("Content-Type", "video/mp2t")
+		}
+	}
+
+	// Write status code
+	w.WriteHeader(resp.StatusCode)
+
+	// Stream the response
+	io.Copy(w, resp.Body)
 }
 
 // GetChannelEPG handles GET /api/channels/{id}/epg
