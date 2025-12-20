@@ -187,38 +187,41 @@ fi
 # Non-Docker update path
 log "Running in non-Docker environment"
 
-# Check if Go is installed
-if ! command -v go &> /dev/null; then
+# Check if Go is installed (prefer /usr/local/go/bin/go)
+GO_BIN="go"
+if [ -x "/usr/local/go/bin/go" ]; then
+    GO_BIN="/usr/local/go/bin/go"
+elif ! command -v go &> /dev/null; then
     log "ERROR: Go is not installed. Cannot build from source."
     log "Please install Go 1.21+ or update manually."
     exit 1
 fi
 
+log "Using Go binary: $GO_BIN"
+
 # Pull latest changes
 log "Pulling latest changes from GitHub..."
-git fetch origin main
-git reset --hard origin/main
+git fetch origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
 
-# Build UI
-log "Building UI..."
-cd streamarr-pro-ui
-npm install --silent
-npm run build
-cd ..
+# Build new server binary
+log "Building new server binary..."
+$GO_BIN build -o bin/server ./cmd/server || {
+    log "ERROR: Failed to build server"
+    exit 1
+}
 
-# Build new binary
-log "Building new server..."
-./build.sh
+# Build new worker binary
+log "Building new worker binary..."
+$GO_BIN build -o bin/worker ./cmd/worker || {
+    log "ERROR: Failed to build worker"
+    exit 1
+}
 
-# Stop all services
-log "Stopping services..."
-./stop.sh 2>&1 | tee -a "$LOG_FILE"
-
-sleep 2
-
-# Start all services with new binary
-log "Starting services..."
-./start.sh 2>&1 | tee -a "$LOG_FILE"
+# Restart services
+log "Restarting services..."
+systemctl restart streamarr
+systemctl restart streamarr-worker
 
 sleep 3
 
