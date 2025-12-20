@@ -208,9 +208,12 @@ git reset --hard "origin/$BRANCH"
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# Package path for ldflags
+PKG="github.com/Zerr0-C00L/StreamArr/internal/api"
+
 # Build new server binary with version info
 log "Building new server binary..."
-$GO_BIN build -ldflags "-X main.Version=latest -X main.Commit=$COMMIT -X main.BuildDate=$BUILD_DATE" \
+$GO_BIN build -ldflags "-X '${PKG}.Version=latest' -X '${PKG}.Commit=$COMMIT' -X '${PKG}.BuildDate=$BUILD_DATE'" \
     -o bin/server ./cmd/server || {
     log "ERROR: Failed to build server"
     exit 1
@@ -218,7 +221,7 @@ $GO_BIN build -ldflags "-X main.Version=latest -X main.Commit=$COMMIT -X main.Bu
 
 # Build new worker binary with version info
 log "Building new worker binary..."
-$GO_BIN build -ldflags "-X main.Version=latest -X main.Commit=$COMMIT -X main.BuildDate=$BUILD_DATE" \
+$GO_BIN build -ldflags "-X '${PKG}.Version=latest' -X '${PKG}.Commit=$COMMIT' -X '${PKG}.BuildDate=$BUILD_DATE'" \
     -o bin/worker ./cmd/worker || {
     log "ERROR: Failed to build worker"
     exit 1
