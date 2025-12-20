@@ -54,15 +54,7 @@ type SettingsResponse struct {
 	MediaFusionEnabled  bool   `json:"mediafusion_enabled"`
 	TorrentioProviders  string `json:"torrentio_providers"`
 
-	// Comet Provider Settings
-	CometEnabled           bool   `json:"comet_enabled"`
-	CometIndexers          string `json:"comet_indexers"`           // Comma-separated indexer list
-	CometOnlyShowCached    bool   `json:"comet_only_show_cached"`   // Only show cached torrents
-	CometMaxResults        int    `json:"comet_max_results"`        // Max results per quality
-	CometSortBy            string `json:"comet_sort_by"`            // quality, qualitysize, seeders, size
-	CometExcludedQualities string `json:"comet_excluded_qualities"` // Comma-separated quality exclusions
-	CometPriorityLanguages string `json:"comet_priority_languages"` // Comma-separated priority languages
-	CometMaxSize           string `json:"comet_max_size"`           // Max file size (e.g., "10GB" or "10GB,2GB")
+	// Removed Comet Provider Settings
 
 	// Content Sources (GitHub lists)
 	IncludePopularMovies         bool `json:"include_popular_movies"`

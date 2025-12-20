@@ -70,11 +70,6 @@ func main() {
 		log.Println("✓ MDBList API key loaded from settings")
 	}
 	
-	// Service URLs
-	if appSettings.CometURL != "" {
-		cfg.CometURL = appSettings.CometURL
-	}
-	
 	// Provider settings
 	cfg.UseRealDebrid = appSettings.UseRealDebrid
 	cfg.UsePremiumize = appSettings.UsePremiumize

@@ -24,6 +24,7 @@ func SessionMiddleware(next http.Handler) http.Handler {
 			path == "/api/v1/auth/verify" ||
 			path == "/api/v1/health" ||
 			path == "/api/v1/version" ||
+			path == "/api/v1/admin/restart" ||
 			strings.HasPrefix(path, "/player_api.php") ||
 			strings.HasPrefix(path, "/get.php") ||
 			!strings.HasPrefix(path, "/api/") {

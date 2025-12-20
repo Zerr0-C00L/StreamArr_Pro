@@ -49,3 +49,5 @@ hashlist_shards/
 
 # Archived legacy files
 archive/
+logs/
+cache/

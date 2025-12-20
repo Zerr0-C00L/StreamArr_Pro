@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { streamarrApi, tmdbImageUrl } from '../services/api';
 import { 
-  Play, Info, ChevronLeft, ChevronRight, X, Plus, 
+  Play, ChevronLeft, ChevronRight, X, Plus, 
   Tv, Film, Loader2, ChevronDown, Search, Trash2
 } from 'lucide-react';
 import type { Movie, Series, Episode } from '../types';
@@ -26,86 +26,7 @@ type MediaItem = {
   collection_id?: number;
 };
 
-// Netflix-style Hero Banner
-function HeroBanner({ item, onPlay, onMoreInfo }: { 
-  item: MediaItem | null; 
-  onPlay: () => void;
-  onMoreInfo: () => void;
-}) {
-  if (!item) return null;
 
-  return (
-    <div className="relative h-[80vh] min-h-[500px] max-h-[800px]">
-      {/* Background Image */}
-      <div className="absolute inset-0">
-        {item.backdrop_path ? (
-          <img
-            src={tmdbImageUrl(item.backdrop_path, 'original')}
-            alt={item.title}
-            className="w-full h-full object-cover"
-          />
-        ) : item.poster_path ? (
-          <img
-            src={tmdbImageUrl(item.poster_path, 'original')}
-            alt={item.title}
-            className="w-full h-full object-cover object-top blur-sm"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900" />
-        )}
-        {/* Gradients */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-[#141414]/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-[#141414]/30" />
-      </div>
-
-      {/* Content */}
-      <div className="absolute bottom-[15%] left-12 right-12 max-w-2xl">
-        <div className="flex items-center gap-3 mb-4">
-          <span className={`px-3 py-1 rounded text-sm font-bold ${
-            item.type === 'movie' ? 'bg-purple-600' : 'bg-green-600'
-          } text-white`}>
-            {item.type === 'movie' ? 'MOVIE' : 'SERIES'}
-          </span>
-          {item.vote_average && item.vote_average > 0 && (
-            <span className="flex items-center gap-1 text-green-400 font-semibold">
-              {(item.vote_average * 10).toFixed(0)}% Match
-            </span>
-          )}
-          {item.year && <span className="text-slate-300 font-medium">{item.year}</span>}
-        </div>
-
-        <h1 className="text-4xl md:text-6xl font-black text-white mb-4 drop-shadow-2xl leading-tight">
-          {item.title}
-        </h1>
-
-        {item.overview && (
-          <p className="text-base md:text-lg text-slate-200 mb-6 line-clamp-3 leading-relaxed">
-            {item.overview}
-          </p>
-        )}
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onPlay}
-            className="flex items-center gap-2 px-6 md:px-8 py-2.5 md:py-3 bg-white text-black font-bold rounded 
-                       hover:bg-white/80 transition-colors text-base md:text-lg"
-          >
-            <Play className="w-5 h-5 md:w-6 md:h-6 fill-black" />
-            Play
-          </button>
-          <button
-            onClick={onMoreInfo}
-            className="flex items-center gap-2 px-6 md:px-8 py-2.5 md:py-3 bg-gray-500/70 text-white font-bold rounded 
-                       hover:bg-gray-500/50 transition-colors text-base md:text-lg backdrop-blur-sm"
-          >
-            <Info className="w-5 h-5 md:w-6 md:h-6" />
-            More Info
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Netflix-style Detail Modal
 function DetailModal({ 
@@ -582,7 +503,7 @@ function StreamCard({ stream, compact = false, forceFullName = false }: { stream
               e.stopPropagation();
               setShowFullName(!showFullName);
             }}
-            className={`text-left text-slate-300 ${compact ? 'text-xs' : 'text-sm'} ${showFullName ? 'whitespace-normal break-all' : 'line-clamp-1'} hover:text-white transition-colors cursor-pointer`}
+            className={`text-left text-slate-300 ${compact ? 'text-xs' : 'text-sm'} ${showFullName ? 'whitespace-normal break-words w-full' : 'line-clamp-1'} hover:text-white transition-colors cursor-pointer block`}
             title={showFullName ? "Click to collapse" : fileName}
           >
             {fileName}
@@ -628,7 +549,6 @@ function StreamCard({ stream, compact = false, forceFullName = false }: { stream
 export default function Library() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
@@ -688,52 +608,45 @@ export default function Library() {
     return [...movieItems, ...seriesItems];
   }, [movies, series]);
 
-  // Featured item (random from top rated with backdrop)
-  const [featuredItem, setFeaturedItem] = useState<MediaItem | null>(null);
-  
-  useEffect(() => {
-    const withBackdrop = allMedia.filter(m => m.backdrop_path);
-    if (withBackdrop.length > 0) {
-      const sorted = withBackdrop.sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
-      const top = sorted.slice(0, Math.min(10, sorted.length));
-      setFeaturedItem(top[Math.floor(Math.random() * top.length)]);
-    } else if (allMedia.length > 0) {
-      setFeaturedItem(allMedia[0]);
-    }
-  }, [allMedia]);
-
-  // Filtered media based on current view
+  // Filtered media based on current view and search
   const filteredMedia = useMemo(() => {
     let filtered = [...allMedia];
 
-    switch (currentView) {
-      case 'recently-added-movies':
-        filtered = filtered
-          .filter(m => m.type === 'movie')
-          .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
-        break;
-      case 'recently-added-series':
-        filtered = filtered
-          .filter(m => m.type === 'series')
-          .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
-        break;
-      case 'top-rated':
-        filtered = filtered
-          .filter(m => m.vote_average && m.vote_average > 0)
-          .sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
-        break;
-      case 'movies':
-        filtered = filtered.filter(m => m.type === 'movie');
-        break;
-      case 'series':
-        filtered = filtered.filter(m => m.type === 'series');
-        break;
-      default:
-        filtered = filtered.sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
+    // Apply search filter if search term exists
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(m => m.title.toLowerCase().includes(term));
+    } else {
+      // Apply view filters only if not searching
+      switch (currentView) {
+        case 'recently-added-movies':
+          filtered = filtered
+            .filter(m => m.type === 'movie')
+            .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
+          break;
+        case 'recently-added-series':
+          filtered = filtered
+            .filter(m => m.type === 'series')
+            .sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
+          break;
+        case 'top-rated':
+          filtered = filtered
+            .filter(m => m.vote_average && m.vote_average > 0)
+            .sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
+          break;
+        case 'movies':
+          filtered = filtered.filter(m => m.type === 'movie');
+          break;
+        case 'series':
+          filtered = filtered.filter(m => m.type === 'series');
+          break;
+        default:
+          filtered = filtered.sort((a, b) => new Date(b.added_at || 0).getTime() - new Date(a.added_at || 0).getTime());
+      }
     }
 
     return filtered;
-  }, [allMedia, currentView]);
+  }, [allMedia, currentView, searchTerm]);
 
   // Pagination
   const totalPages = Math.ceil(filteredMedia.length / ITEMS_PER_PAGE);
@@ -755,13 +668,6 @@ export default function Library() {
     'movies': 'Movies',
     'series': 'TV Shows',
   };
-
-  // Search results
-  const searchResults = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-    const term = searchTerm.toLowerCase();
-    return allMedia.filter(m => m.title.toLowerCase().includes(term));
-  }, [allMedia, searchTerm]);
 
   if (isLoading) {
     return (
@@ -785,79 +691,31 @@ export default function Library() {
 
   return (
     <div className="min-h-screen bg-[#141414] -m-6 -mt-6">
-      {/* Search overlay */}
-      {showSearch && (
-        <div className="fixed inset-0 z-50 bg-black/95 pt-20 px-6 md:px-12 overflow-y-auto">
-          <div className="max-w-5xl mx-auto">
-            <div className="flex items-center gap-4 mb-8">
-              <Search className="w-8 h-8 text-slate-400 flex-shrink-0" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search titles..."
-                className="flex-1 bg-transparent text-2xl md:text-3xl text-white placeholder-slate-500 outline-none"
-                autoFocus
-              />
-              <button 
-                onClick={() => { setShowSearch(false); setSearchTerm(''); }}
-                className="p-2 rounded-full hover:bg-slate-800 transition-colors"
+      {/* Filter Tabs with Search */}
+      <div className="relative z-10 px-12 pt-6 mb-6">
+        {/* Search Bar */}
+        <div className="mb-6 max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search library..."
+              className="w-full pl-10 pr-4 py-2.5 bg-white/10 text-white placeholder-slate-400 rounded-lg border border-white/20 focus:border-white/40 focus:outline-none transition-colors"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-white/10 rounded transition-colors"
               >
-                <X className="w-8 h-8 text-white" />
+                <X className="w-4 h-4 text-slate-400" />
               </button>
-            </div>
-            
-            {searchResults.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {searchResults.map(item => (
-                  <div
-                    key={`${item.type}-${item.id}`}
-                    className="cursor-pointer hover:scale-105 transition-transform"
-                    onClick={() => { setSelectedMedia(item); setShowSearch(false); setSearchTerm(''); }}
-                  >
-                    <div className="aspect-[2/3] rounded-md overflow-hidden bg-slate-800">
-                      {item.poster_path ? (
-                        <img src={tmdbImageUrl(item.poster_path, 'w342')} alt={item.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          {item.type === 'movie' ? <Film className="w-8 h-8 text-slate-600" /> : <Tv className="w-8 h-8 text-slate-600" />}
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-white text-sm mt-2 truncate font-medium">{item.title}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {searchTerm && searchResults.length === 0 && (
-              <div className="text-center py-20">
-                <Search className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400 text-xl">No results found for "{searchTerm}"</p>
-              </div>
             )}
           </div>
         </div>
-      )}
 
-      {/* Search button (floating) */}
-      <button
-        onClick={() => setShowSearch(true)}
-        className="fixed top-4 right-72 z-30 p-2.5 rounded-full bg-black/60 hover:bg-black/80 transition-colors backdrop-blur-sm"
-        title="Search"
-      >
-        <Search className="w-5 h-5 text-white" />
-      </button>
-
-      {/* Hero Banner */}
-      <HeroBanner 
-        item={featuredItem}
-        onPlay={() => featuredItem && setSelectedMedia(featuredItem)}
-        onMoreInfo={() => featuredItem && setSelectedMedia(featuredItem)}
-      />
-
-      {/* Filter Tabs */}
-      <div className="relative -mt-20 z-10 px-12 mb-6">
+        {/* Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {[
             { key: 'all', label: 'All' },

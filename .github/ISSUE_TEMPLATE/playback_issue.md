@@ -19,7 +19,7 @@ What should happen when playing this content?
 
 ## Environment
 - **Installation Method**: [Docker / Manual]
-- **Streaming Provider**: [Real-Debrid / Torrentio / Comet / MediaFusion]
+- **Streaming Provider**: [Real-Debrid / Stremio Addon]
 - **IPTV App**: [e.g., TiviMate, iMPlayer, VLC]
 - **Device**: [e.g., Android TV, Fire Stick, iPhone]
 - **Connection**: [WiFi / Ethernet / Mobile Data]

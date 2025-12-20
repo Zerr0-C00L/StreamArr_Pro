@@ -143,40 +143,69 @@ func (g *GenericStremioProvider) fetchStreams(url, cacheKey string) ([]Torrentio
 		}
 	}
 	
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+	// Retry logic for rate limiting and transient errors
+	maxRetries := 3
+	var lastErr error
+	
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Exponential backoff: 1s, 2s, 4s
+		if attempt > 0 {
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+			log.Printf("[RETRY] Attempt %d for %s (backing off %v)", attempt+1, g.Name, backoff)
+			time.Sleep(backoff)
+		}
+		
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		
+		resp, err := g.Client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+		
+		// Retry on 429 (rate limit) or 503 (service unavailable)
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+			lastErr = fmt.Errorf("rate limited/service unavailable: %d", resp.StatusCode)
+			if attempt < maxRetries-1 {
+				continue
+			}
+			return nil, lastErr
+		}
+		
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+		
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read response: %w", err)
+		}
+		
+		var response GenericStreamResponse
+		if err := json.Unmarshal(body, &response); err != nil {
+			return nil, fmt.Errorf("decode response: %w", err)
+		}
+		
+		// Cache the response
+		g.Cache[cacheKey] = &GenericStreamCachedResponse{
+			Data:      &response,
+			Timestamp: time.Now(),
+		}
+		
+		return g.convertToTorrentioStreams(response.Streams), nil
 	}
 	
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-	
-	resp, err := g.Client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetch streams: %w", err)
+	// All retries failed
+	if lastErr != nil {
+		return nil, lastErr
 	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-	
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-	
-	var response GenericStreamResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	
-	// Cache the response
-	g.Cache[cacheKey] = &GenericStreamCachedResponse{
-		Data:      &response,
-		Timestamp: time.Now(),
-	}
-	
-	return g.convertToTorrentioStreams(response.Streams), nil
+	return nil, fmt.Errorf("failed to fetch streams after %d attempts", maxRetries)
 }
 
 func (g *GenericStremioProvider) convertToTorrentioStreams(genericStreams []GenericStream) []TorrentioStream {

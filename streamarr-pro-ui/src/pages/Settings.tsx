@@ -39,16 +39,6 @@ interface SettingsData {
   use_realdebrid: boolean;
   use_premiumize: boolean;
 
-  // Comet Provider Settings
-  comet_enabled: boolean;
-  comet_indexers: string;
-  comet_only_show_cached: boolean;
-  comet_max_results: number;
-  comet_sort_by: string;
-  comet_excluded_qualities: string;
-  comet_priority_languages: string;
-  comet_max_size: string;
-
   stremio_addons: Array<{name: string; url: string; enabled: boolean}>;
   stream_providers: string[] | string; // Legacy, will be removed
   torrentio_providers: string; // Legacy, will be removed
@@ -194,8 +184,6 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Dropdown option sets
-  const indexerOptions = ['bitorrent', 'therarbg', 'yts', 'eztv', 'thepiratebay', 'kickass', 'torrentgalaxy', 'magnetdl'];
-  const qualityOptions = ['4k', '1080p', '720p', '480p', 'cam', 'screener', 'brremux', 'hdr', 'dolbyvision', '3d'];
   const languageOptions = [
     'english', 'russian', 'italian', 'spanish', 'german', 'french', 'hindi', 'turkish', 'portuguese',
     'polish', 'dutch', 'thai', 'vietnamese', 'indonesian', 'arabic', 'chinese', 'korean', 'japanese'
@@ -247,10 +235,6 @@ export default function Settings() {
     'REMUX','HDR','DV','Dolby Vision','3D','ATMOS','TrueHD','DTS-HD','CAM','TS','SCR','HDTS','HDCAM',
     'TELESYNC','TELECINE','TC','DVDSCR','R5','R6'
   ];
-  const toArray = (str?: string) => (str || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
   const toPipeArray = (str?: string) => (str || '')
     .split('|')
     .map(s => s.trim())
@@ -1709,173 +1693,6 @@ export default function Settings() {
 
               <hr className="border-white/10" />
 
-              {/* Comet Provider Configuration */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-white mb-2">🌟 Comet Torrent Provider</h3>
-                <p className="text-sm text-slate-400 mb-4">
-                  Configure Comet for real-time torrent searches. Comet searches multiple indexers and checks RealDebrid cache availability.
-                </p>
-
-                <label className="flex items-center gap-2 mb-4 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.comet_enabled !== false} // Default to true
-                    onChange={(e) => updateSetting('comet_enabled', e.target.checked)}
-                    className="w-4 h-4 rounded border-white/20 bg-[#2a2a2a] text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-slate-300">Enable Comet Provider</span>
-                </label>
-
-                <label className="flex items-center gap-2 mb-4 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.comet_only_show_cached || false}
-                    onChange={(e) => updateSetting('comet_only_show_cached', e.target.checked)}
-                    className="w-4 h-4 rounded border-white/20 bg-[#2a2a2a] text-blue-600 focus:ring-blue-500"
-                    disabled={settings.comet_enabled === false}
-                  />
-                  <span className="text-sm text-slate-300">Only Show Cached Torrents</span>
-                </label>
-                <p className="text-xs text-slate-500 mb-4">
-                  When enabled, only torrents that are already cached in RealDebrid will be shown, ensuring instant playback.
-                </p>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Indexers
-                  </label>
-                  <select
-                    multiple
-                    value={toArray(settings.comet_indexers || 'bitorrent,therarbg,yts,eztv,thepiratebay')}
-                    onChange={(e) => {
-                      const values = Array.from(e.target.selectedOptions).map(o => o.value);
-                      updateSetting('comet_indexers', values.join(','));
-                    }}
-                    className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    disabled={settings.comet_enabled === false}
-                  >
-                    {indexerOptions.map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">Tip: Hold Cmd/Ctrl to select multiple indexers</p>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Sorting
-                  </label>
-                  <select
-                    value={settings.comet_sort_by || 'quality'}
-                    onChange={(e) => updateSetting('comet_sort_by', e.target.value)}
-                    className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    disabled={settings.comet_enabled === false}
-                  >
-                    <option value="quality">By quality then seeders</option>
-                    <option value="qualitysize">By quality then size</option>
-                    <option value="seeders">By seeders</option>
-                    <option value="size">By size</option>
-                  </select>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Priority Languages
-                  </label>
-                  <select
-                    multiple
-                    value={toArray(settings.comet_priority_languages)}
-                    onChange={(e) => {
-                      const values = Array.from(e.target.selectedOptions).map(o => o.value);
-                      updateSetting('comet_priority_languages', values.join(','));
-                    }}
-                    className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    disabled={settings.comet_enabled === false}
-                  >
-                    {languageOptions.map((lang) => (
-                      <option key={lang} value={lang}>{lang}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Selected language dubs/subs will be prioritized at the top
-                  </p>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Exclude Qualities/Resolutions
-                  </label>
-                  <select
-                    multiple
-                    value={toArray(settings.comet_excluded_qualities)}
-                    onChange={(e) => {
-                      const values = Array.from(e.target.selectedOptions).map(o => o.value);
-                      updateSetting('comet_excluded_qualities', values.join(','));
-                    }}
-                    className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    disabled={settings.comet_enabled === false}
-                  >
-                    {qualityOptions.map((q) => (
-                      <option key={q} value={q}>{q}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">Use Cmd/Ctrl for multi-select</p>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Max Results Per Quality
-                  </label>
-                  <select
-                    value={settings.comet_max_results || 5}
-                    onChange={(e) => updateSetting('comet_max_results', Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    disabled={settings.comet_enabled === false}
-                  >
-                    {[1,3,5,10,20,50,75,100,150].map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Limit the number of results shown per quality tier
-                  </p>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Max Video Size
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={settings.comet_max_size || ''}
-                      onChange={(e) => updateSetting('comet_max_size', e.target.value)}
-                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="e.g., 10GB or 10GB,2GB for movies,series"
-                      disabled={settings.comet_enabled === false}
-                    />
-                    <select
-                      onChange={(e) => updateSetting('comet_max_size', e.target.value)}
-                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      disabled={settings.comet_enabled === false}
-                    >
-                      <option value="">Custom…</option>
-                      <option value="5GB">5GB</option>
-                      <option value="8GB">8GB</option>
-                      <option value="10GB">10GB</option>
-                      <option value="15GB">15GB</option>
-                      <option value="2GB,1GB">Movies 2GB, Series 1GB</option>
-                      <option value="8GB,4GB">Movies 8GB, Series 4GB</option>
-                    </select>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Set maximum file size (e.g., 5GB, 800MB). Use comma for different limits: movies,series
-                  </p>
-                </div>
-              </div>
-
-              <hr className="border-white/10" />
-
               {/* Built-in Stremio Addon (moved from Stremio tab) */}
               <div>
                 <div className="mb-4 p-4 bg-purple-900/30 border border-purple-800 rounded-lg">
@@ -2095,7 +1912,7 @@ export default function Settings() {
                     <li><strong>Restart server</strong> after adding/changing addons for changes to take effect</li>
                   </ul>
                   <div className="mt-3 text-xs text-slate-500">
-                    <span className="font-medium">Popular addons:</span> Torrentio, Comet, MediaFusion, Autostream, Sootio, Stremthru
+                    <span className="font-medium">Popular addons:</span> Torrentio, MediaFusion, Autostream, Sootio, Stremthru
                   </div>
                 </div>
                 
@@ -2174,7 +1991,7 @@ export default function Settings() {
                     <div className="text-center py-8 text-slate-400">
                       <Layers className="w-12 h-12 mx-auto mb-2 opacity-50" />
                       <p>No addons configured. Click "Add Addon" to get started.</p>
-                      <p className="text-xs mt-2">Popular addons: Torrentio, Comet, MediaFusion</p>
+                      <p className="text-xs mt-2">Popular addons: Torrentio, MediaFusion</p>
                     </div>
                   )}
                 </div>
@@ -2473,7 +2290,7 @@ export default function Settings() {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-red-400">2.</span>
-                    <span>It checks Comet and MediaFusion for available streams</span>
+                    <span>It checks configured Stremio addons for available streams</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-red-400">3.</span>
@@ -5118,7 +4935,7 @@ export default function Settings() {
                 <h4 className="text-slate-300 font-medium mb-3">Credits</h4>
                 <div className="text-sm text-slate-400 space-y-1">
                   <div>• Movie & TV data provided by <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:underline">TMDB</a></div>
-                  <div>• Streaming via <a href="https://real-debrid.com" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:underline">Real-Debrid</a>, Torrentio, Comet, MediaFusion</div>
+                  <div>• Streaming via <a href="https://real-debrid.com" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:underline">Real-Debrid</a> and Stremio addons</div>
                   <div>• Live TV channels from various free sources</div>
                 </div>
                 <div className="text-xs text-slate-500 mt-4 pt-4 border-t border-white/10">

@@ -106,11 +106,6 @@ func main() {
 		log.Println("✓ MDBList API key loaded from settings")
 	}
 	
-	// Service URLs
-	if appSettings.CometURL != "" {
-		cfg.CometURL = appSettings.CometURL
-	}
-	
 	// Provider settings
 	cfg.UseRealDebrid = appSettings.UseRealDebrid
 	cfg.UsePremiumize = appSettings.UsePremiumize
@@ -311,31 +306,13 @@ func main() {
 		}
 	}
 	
-	// Load Comet configuration from settings
-	cometSettings := settingsManager.Get()
-	var cometCfg *providers.CometProviderConfig
-	if cometSettings.CometEnabled {
-		indexers := []string{}
-		if cometSettings.CometIndexers != "" {
-			indexers = strings.Split(cometSettings.CometIndexers, ",")
-			// Trim whitespace from each indexer
-			for i := range indexers {
-				indexers[i] = strings.TrimSpace(indexers[i])
-			}
-		}
-		cometCfg = &providers.CometProviderConfig{
-			Enabled:        true,
-			Indexers:       indexers,
-			OnlyShowCached: cometSettings.CometOnlyShowCached,
-		}
-	}
-	
-	// Create MultiProvider with Comet configuration
-	multiProvider := providers.NewMultiProviderWithConfig(cfg.RealDebridAPIKey, stremioAddons, tmdbClient, cometCfg)
+	// Create MultiProvider
+	multiProvider := providers.NewMultiProviderWithConfig(cfg.RealDebridAPIKey, stremioAddons, tmdbClient)
 	log.Printf("✓ Stream providers enabled: %v", multiProvider.ProviderNames)
-	
+
+	// Create Xtream handler
 	xtreamHandler := xtream.NewXtreamHandlerWithProvider(cfg, db, tmdbClient, rdClient, channelManager, epgManager, multiProvider)
-	
+
 	// Wire up settings for hiding unavailable content
 	xtreamHandler.SetHideUnavailable(func() bool {
 		s := settingsManager.Get()
