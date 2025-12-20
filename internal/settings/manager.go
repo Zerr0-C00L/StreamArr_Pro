@@ -159,9 +159,10 @@ type Settings struct {
 	UpdateBranch string `json:"update_branch"` // GitHub branch for updates: main, dev, etc.
 	
 	// System Settings
-	Debug      bool   `json:"debug"`
-	ServerPort int    `json:"server_port"`
-	Host       string `json:"host"`
+	Debug       bool   `json:"debug"`
+	ServerPort  int    `json:"server_port"`
+	Host        string `json:"host"`
+	UserSetHost string `json:"user_set_host"` // Manual public IP/domain for IPTV connection details
 	
 	// Xtream API Credentials (separate from web app login)
 	XtreamUsername string `json:"xtream_username"`
