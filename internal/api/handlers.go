@@ -1930,22 +1930,31 @@ func (h *Handler) GetChannelStream(w http.ResponseWriter, r *http.Request) {
 
 // ProxyChannelStream proxies the channel stream to avoid CORS issues
 func (h *Handler) ProxyChannelStream(w http.ResponseWriter, r *http.Request) {
-	if h.channelManager == nil {
-		http.Error(w, "channel manager not initialized", http.StatusServiceUnavailable)
-		return
+	// Get stream URL from query parameter
+	streamURL := r.URL.Query().Get("url")
+	if streamURL == "" {
+		// Fallback to channel ID lookup
+		if h.channelManager == nil {
+			http.Error(w, "channel manager not initialized", http.StatusServiceUnavailable)
+			return
+		}
+
+		id := r.URL.Query().Get("id")
+		if id == "" {
+			http.Error(w, "missing stream URL or channel ID", http.StatusBadRequest)
+			return
+		}
+
+		channel, err := h.channelManager.GetChannel(id)
+		if err != nil {
+			log.Printf("Channel not found for ID %s: %v", id, err)
+			http.Error(w, "channel not found", http.StatusNotFound)
+			return
+		}
+		streamURL = channel.StreamURL
 	}
 
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "missing channel ID", http.StatusBadRequest)
-		return
-	}
-
-	channel, err := h.channelManager.GetChannel(id)
-	if err != nil {
-		http.Error(w, "channel not found", http.StatusNotFound)
-		return
-	}
+	log.Printf("Proxying stream: %s", streamURL)
 
 	// Create HTTP client with timeout
 	client := &http.Client{
@@ -1958,8 +1967,9 @@ func (h *Handler) ProxyChannelStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create request to stream server
-	req, err := http.NewRequest("GET", channel.StreamURL, nil)
+	req, err := http.NewRequest("GET", streamURL, nil)
 	if err != nil {
+		log.Printf("Failed to create request: %v", err)
 		http.Error(w, "failed to create request", http.StatusInternalServerError)
 		return
 	}
@@ -1974,8 +1984,8 @@ func (h *Handler) ProxyChannelStream(w http.ResponseWriter, r *http.Request) {
 	// Make request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Failed to fetch stream: %v", err)
-		http.Error(w, "failed to fetch stream", http.StatusBadGateway)
+		log.Printf("Failed to fetch stream from %s: %v", streamURL, err)
+		http.Error(w, fmt.Sprintf("failed to fetch stream: %v", err), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -1995,9 +2005,9 @@ func (h *Handler) ProxyChannelStream(w http.ResponseWriter, r *http.Request) {
 	// Ensure proper content type for HLS
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
-		if strings.HasSuffix(channel.StreamURL, ".m3u8") {
+		if strings.HasSuffix(streamURL, ".m3u8") {
 			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		} else if strings.HasSuffix(channel.StreamURL, ".ts") {
+		} else if strings.HasSuffix(streamURL, ".ts") {
 			w.Header().Set("Content-Type", "video/mp2t")
 		}
 	}
