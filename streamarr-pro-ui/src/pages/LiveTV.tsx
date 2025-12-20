@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { streamarrApi } from '../services/api';
 import { 
   Search, Radio, Filter, Play, ChevronLeft, ChevronRight, 
-  Loader2, ExternalLink, Tv, X
+  Loader2, ExternalLink, Tv, X, Maximize, Volume2, VolumeX, Pause
 } from 'lucide-react';
 import type { Channel } from '../types';
+import Hls from 'hls.js';
 
 const CHANNELS_PER_PAGE = 50;
 
@@ -14,6 +15,7 @@ export default function LiveTV() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [playingChannel, setPlayingChannel] = useState<Channel | null>(null);
 
   const { data: channels = [], isLoading } = useQuery({
     queryKey: ['channels', selectedCategory],
@@ -178,7 +180,16 @@ export default function LiveTV() {
       {selectedChannel && (
         <ChannelModal 
           channel={selectedChannel} 
-          onClose={() => setSelectedChannel(null)} 
+          onClose={() => setSelectedChannel(null)}
+          onPlay={setPlayingChannel}
+        />
+      )}
+
+      {/* Video Player Modal */}
+      {playingChannel && (
+        <VideoPlayer
+          channel={playingChannel}
+          onClose={() => setPlayingChannel(null)}
         />
       )}
     </div>
@@ -260,11 +271,10 @@ function ChannelCard({ channel, onClick }: { channel: Channel; onClick: () => vo
 }
 
 // Channel Modal Component
-function ChannelModal({ channel, onClose }: { channel: Channel; onClose: () => void }) {
+function ChannelModal({ channel, onClose, onPlay }: { channel: Channel; onClose: () => void; onPlay: (channel: Channel) => void }) {
   const handlePlay = () => {
-    if (channel.stream_url) {
-      window.open(channel.stream_url, '_blank');
-    }
+    onPlay(channel);
+    onClose();
   };
 
   return (
@@ -323,6 +333,232 @@ function ChannelModal({ channel, onClose }: { channel: Channel; onClose: () => v
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Video Player Component
+function VideoPlayer({ channel, onClose }: { channel: Channel; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !channel.stream_url) return;
+
+    const streamUrl = channel.stream_url;
+
+    // Check if HLS is supported
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 90,
+      });
+      
+      hlsRef.current = hls;
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+      
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setLoading(false);
+        video.play().catch((err) => {
+          console.error('Auto-play failed:', err);
+          setIsPlaying(false);
+        });
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error('HLS error:', data);
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              setError('Network error - trying to recover...');
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              setError('Media error - trying to recover...');
+              hls.recoverMediaError();
+              break;
+            default:
+              setError('Fatal error occurred');
+              hls.destroy();
+              break;
+          }
+        }
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS support (Safari)
+      video.src = streamUrl;
+      video.addEventListener('loadedmetadata', () => {
+        setLoading(false);
+        video.play().catch((err) => {
+          console.error('Auto-play failed:', err);
+          setIsPlaying(false);
+        });
+      });
+      video.addEventListener('error', () => {
+        setError('Failed to load stream');
+      });
+    } else {
+      setError('HLS not supported in this browser');
+      setLoading(false);
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+      }
+    };
+  }, [channel.stream_url]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      video.play();
+      setIsPlaying(true);
+    } else {
+      video.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(!isMuted);
+  };
+
+  const toggleFullscreen = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!document.fullscreenElement) {
+      video.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  const handleExternalPlay = () => {
+    if (channel.stream_url) {
+      window.open(channel.stream_url, '_blank');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95" onClick={onClose}>
+      <div 
+        className="relative w-full max-w-6xl aspect-video bg-black"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+        >
+          <X className="w-6 h-6 text-white" />
+        </button>
+
+        {/* Channel info */}
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-3">
+          {channel.logo && (
+            <img src={channel.logo} alt={channel.name} className="h-8 object-contain" />
+          )}
+          <div>
+            <h3 className="text-white font-bold text-lg drop-shadow-lg">{channel.name}</h3>
+            {channel.active && (
+              <div className="flex items-center gap-1 text-red-500 text-sm font-medium">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                LIVE
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Video element */}
+        <video
+          ref={videoRef}
+          className="w-full h-full bg-black"
+          controls={false}
+          autoPlay
+          playsInline
+        />
+
+        {/* Loading overlay */}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <Loader2 className="w-12 h-12 animate-spin text-white" />
+          </div>
+        )}
+
+        {/* Error overlay */}
+        {error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white">
+            <Tv className="w-16 h-16 mb-4 text-red-500" />
+            <p className="text-xl mb-2">{error}</p>
+            <button
+              onClick={handleExternalPlay}
+              className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-2"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open in External Player
+            </button>
+          </div>
+        )}
+
+        {/* Controls overlay */}
+        {!loading && !error && (
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={togglePlay}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-6 h-6 text-white fill-white" />
+                  ) : (
+                    <Play className="w-6 h-6 text-white fill-white" />
+                  )}
+                </button>
+                <button
+                  onClick={toggleMute}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                >
+                  {isMuted ? (
+                    <VolumeX className="w-6 h-6 text-white" />
+                  ) : (
+                    <Volume2 className="w-6 h-6 text-white" />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExternalPlay}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  title="Open in external player"
+                >
+                  <ExternalLink className="w-5 h-5 text-white" />
+                </button>
+                <button
+                  onClick={toggleFullscreen}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                >
+                  <Maximize className="w-6 h-6 text-white" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
