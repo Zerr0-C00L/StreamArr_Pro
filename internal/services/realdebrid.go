@@ -242,7 +242,9 @@ func (c *RealDebridClient) GetStreamURL(ctx context.Context, infoHash string) (s
 		return "", err
 	}
 
-	return unrestricted.Download, nil
+	// Return streaming URL instead of direct download
+	// Format: https://real-debrid.com/streaming-{id}
+	return fmt.Sprintf("https://real-debrid.com/streaming-%s", unrestricted.ID), nil
 }
 
 // DeleteTorrent removes a torrent from Real-Debrid
