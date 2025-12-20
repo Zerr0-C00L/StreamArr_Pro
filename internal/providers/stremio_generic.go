@@ -19,6 +19,7 @@ type GenericStremioProvider struct {
 	RealDebridAPIKey string
 	Client           *http.Client
 	Cache            map[string]*GenericStreamCachedResponse
+	rateLimiter      chan struct{} // Semaphore to limit concurrent requests
 }
 
 type GenericStreamCachedResponse struct {
@@ -53,7 +54,8 @@ func NewGenericStremioProvider(name, baseURL, rdAPIKey string) *GenericStremioPr
 		Client: &http.Client{
 			Timeout: 120 * time.Second,
 		},
-		Cache: make(map[string]*GenericStreamCachedResponse),
+		Cache:       make(map[string]*GenericStreamCachedResponse),
+		rateLimiter: make(chan struct{}, 2), // Max 2 concurrent requests to avoid overwhelming addon
 	}
 }
 
@@ -142,6 +144,10 @@ func (g *GenericStremioProvider) fetchStreams(url, cacheKey string) ([]Torrentio
 			return g.convertToTorrentioStreams(cached.Data.Streams), nil
 		}
 	}
+	
+	// Rate limiting: max 2 concurrent requests to avoid overwhelming the addon
+	g.rateLimiter <- struct{}{}        // Acquire
+	defer func() { <-g.rateLimiter }() // Release
 	
 	// Retry logic for rate limiting and transient errors
 	maxRetries := 3
