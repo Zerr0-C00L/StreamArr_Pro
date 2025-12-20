@@ -534,12 +534,12 @@ function StreamCard({ stream, compact = false, forceFullName = false }: { stream
       <button
         onClick={(e) => {
           e.stopPropagation();
-          if (stream.url) window.open(stream.url, '_blank');
+          alert('⚠️ Playback temporarily disabled\n\nWe are working on fixing stream provider rate limiting issues. Please check back soon!');
         }}
-        className="flex-shrink-0 p-2.5 rounded-full bg-white hover:bg-white/80 hover:scale-110 transition-all opacity-70 group-hover:opacity-100"
-        title="Play stream"
+        className="flex-shrink-0 p-2.5 rounded-full bg-gray-600 hover:bg-gray-500 hover:scale-110 transition-all opacity-70 group-hover:opacity-100"
+        title="Playback temporarily disabled"
       >
-        <Play className="w-4 h-4 text-black fill-black" />
+        <Play className="w-4 h-4 text-white fill-white" />
       </button>
     </div>
   );
