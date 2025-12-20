@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Zerr0-C00L/StreamArr/internal/services"
@@ -60,52 +61,21 @@ type MultiProvider struct {
 	Providers        []StreamProvider
 	ProviderNames    []string
 	dmmDirectProvider *DMMDirectProvider // Direct DMM queries
-	cometProvider     *CometProvider     // Comet for real-time search
 }
 
 // Removed Zilean-related code: provider and config
-
-// CometProviderConfig for configuring Comet provider
-type CometProviderConfig struct {
-	Enabled        bool
-	Indexers       []string
-	OnlyShowCached bool
-}
+// Removed Comet-related code: provider and config
 
 func NewMultiProvider(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient) *MultiProvider {
-	return NewMultiProviderWithConfig(rdAPIKey, addons, tmdbClient, nil)
+	return NewMultiProviderWithConfig(rdAPIKey, addons, tmdbClient)
 }
 
 // Removed NewMultiProviderWithZilean (deprecated)
 
-func NewMultiProviderWithConfig(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient, cometCfg *CometProviderConfig) *MultiProvider {
+func NewMultiProviderWithConfig(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient) *MultiProvider {
 	mp := &MultiProvider{
 		Providers:     make([]StreamProvider, 0),
 		ProviderNames: make([]string, 0),
-	}
-	
-	// Add Comet provider (real-time torrent search)
-	if rdAPIKey != "" {
-		// Use config if provided, otherwise use defaults
-		var indexers []string
-		enabled := true
-		
-		if cometCfg != nil {
-			enabled = cometCfg.Enabled
-			indexers = cometCfg.Indexers
-		}
-		
-		if enabled {
-			if len(indexers) == 0 {
-				indexers = []string{"bitorrent", "therarbg", "yts", "eztv", "thepiratebay"}
-			}
-			onlyShowCached := cometCfg.OnlyShowCached
-			cometProvider := NewCometProvider(rdAPIKey, indexers, onlyShowCached)
-			mp.cometProvider = cometProvider
-			mp.Providers = append(mp.Providers, cometProvider)
-			mp.ProviderNames = append(mp.ProviderNames, "Comet (Live Torrent Search)")
-			log.Printf("✓ Comet provider loaded with indexers: %v (cached only: %v)", indexers, onlyShowCached)
-		}
 	}
 	
 	// Add each enabled addon as a generic Stremio provider
@@ -119,18 +89,7 @@ func NewMultiProviderWithConfig(rdAPIKey string, addons []StremioAddon, tmdbClie
 		mp.ProviderNames = append(mp.ProviderNames, addon.Name)
 		log.Printf("Loaded Stremio addon: %s (%s)", addon.Name, addon.URL)
 	}
-	
-	// Add default Torrentio addon if Real-Debrid is configured
-	if len(mp.Providers) == 0 && rdAPIKey != "" {
-		log.Println("⚠️  No Stremio addons configured - using Torrentio with Real-Debrid")
-		
-		// Torrentio is a popular public Stremio addon that works with Real-Debrid
-		torrentioProvider := NewGenericStremioProvider("Torrentio", "https://torrentio.stremio.space/manifest.json", rdAPIKey)
-		mp.Providers = append(mp.Providers, torrentioProvider)
-		mp.ProviderNames = append(mp.ProviderNames, "Torrentio (Real-Debrid)")
-		log.Println("✓ Torrentio addon loaded with Real-Debrid")
-	}
-	
+
 	// Add fallback free providers if no addons and no Real-Debrid
 	if len(mp.Providers) == 0 {
 		log.Println("⚠️  No Stremio addons configured and no Real-Debrid - using fallback free providers")
@@ -155,25 +114,119 @@ func NewMultiProviderWithConfig(rdAPIKey string, addons []StremioAddon, tmdbClie
 	return mp
 }
 
+// StreamRequest represents a request for streams, following Stremio SDK pattern
+type StreamRequest struct {
+	Type        string // "movie" or "series"
+	ID          string // IMDb ID (tt prefix) or TMDB ID (tmdb prefix)
+	Season      int    // Only for series
+	Episode     int    // Only for series
+	ReleaseYear int    // Movie/Series release year for filtering (0 = no filtering)
+	Title       string // Media title for reference
+}
+
+// StreamResponse represents the response from stream handlers
+type StreamResponse struct {
+	Streams []TorrentioStream `json:"streams"`
+}
+
+// GetStreams is the main method that follows Stremio SDK pattern
+// It handles both movies and series with proper type validation
+func (mp *MultiProvider) GetStreams(req StreamRequest) ([]TorrentioStream, error) {
+	// Validate request
+	if req.Type != "movie" && req.Type != "series" {
+		return nil, fmt.Errorf("invalid type: %s, must be 'movie' or 'series'", req.Type)
+	}
+	
+	if req.ID == "" {
+		return nil, fmt.Errorf("ID is required")
+	}
+	
+	// Route to appropriate handler
+	if req.Type == "movie" {
+		return mp.GetMovieStreamsWithYear(req.ID, req.ReleaseYear)
+	} else if req.Type == "series" {
+		if req.Season < 0 || req.Episode < 0 {
+			return nil, fmt.Errorf("season and episode must be >= 0 for series")
+		}
+		return mp.GetSeriesStreams(req.ID, req.Season, req.Episode)
+	}
+	
+	return nil, fmt.Errorf("unknown type: %s", req.Type)
+}
+
+// GetMovieStreamsWithYear fetches movie streams and filters by release year
+func (mp *MultiProvider) GetMovieStreamsWithYear(imdbID string, releaseYear int) ([]TorrentioStream, error) {
+	streams, err := mp.GetMovieStreams(imdbID)
+	if err != nil {
+		return nil, err
+	}
+	
+	log.Printf("[YEAR-FILTER] Retrieved %d streams for %s before year filtering (release year: %d)", len(streams), imdbID, releaseYear)
+	
+	// If no release year provided, return all streams
+	if releaseYear <= 0 {
+		log.Printf("[YEAR-FILTER] No release year specified, returning all %d streams", len(streams))
+		return streams, nil
+	}
+	
+	// Filter streams by year - only keep streams matching the release year
+	filtered := []TorrentioStream{}
+	for _, stream := range streams {
+		streamYear := extractYearFromStream(stream)
+		
+		// Keep stream if:
+		// - No year found in stream (could be valid)
+		// - Year matches release year
+		if streamYear == 0 || streamYear == releaseYear {
+			filtered = append(filtered, stream)
+			if streamYear == 0 {
+				log.Printf("[YEAR-FILTER] Keeping stream with no year detected: %s", stream.Title)
+			} else {
+				log.Printf("[YEAR-FILTER] Keeping stream with matching year %d: %s", streamYear, stream.Title)
+			}
+		} else {
+			log.Printf("[YEAR-FILTER] ❌ Filtering out stream with mismatched year: %d != %d - %s", streamYear, releaseYear, stream.Title)
+		}
+	}
+	
+	log.Printf("[YEAR-FILTER] Filtered %d -> %d streams (removed %d)", len(streams), len(filtered), len(streams)-len(filtered))
+	
+	return filtered, nil
+}
+
 func (mp *MultiProvider) GetMovieStreams(imdbID string) ([]TorrentioStream, error) {
 	var lastErr error
 	var allStreams []TorrentioStream
+	
+	log.Printf("[PROVIDER] Fetching movie streams for IMDB ID: %s", imdbID)
 	
 	for i, provider := range mp.Providers {
 		providerName := mp.ProviderNames[i]
 		
 		streams, err := provider.GetMovieStreams(imdbID)
 		if err != nil {
-			log.Printf("Provider %s failed for movie %s: %v", providerName, imdbID, err)
+			log.Printf("[PROVIDER] %s failed for movie %s: %v", providerName, imdbID, err)
 			lastErr = err
 			continue
 		}
 		
-		if len(streams) > 0 {
-			log.Printf("Provider %s returned %d streams for movie %s", providerName, len(streams), imdbID)
-			allStreams = append(allStreams, streams...)
+		log.Printf("[PROVIDER] %s returned %d streams for movie %s", providerName, len(streams), imdbID)
+		
+		// Filter out any episode streams that shouldn't be included in movie results
+		filteredStreams := filterMovieStreams(streams)
+		
+		if len(filteredStreams) < len(streams) {
+			log.Printf("[PROVIDER] %s: Filtered out %d episode-like streams (kept %d movie streams)", 
+				providerName, len(streams)-len(filteredStreams), len(filteredStreams))
+		}
+		
+		if len(filteredStreams) > 0 {
+			log.Printf("[PROVIDER] %s added %d valid movie streams", providerName, len(filteredStreams))
+			allStreams = append(allStreams, filteredStreams...)
 		}
 	}
+	
+	log.Printf("[PROVIDER] Total streams collected: %d", len(allStreams))
 	
 	if len(allStreams) == 0 && lastErr != nil {
 		return nil, fmt.Errorf("all providers failed, last error: %w", lastErr)
@@ -437,4 +490,71 @@ func parseQualityInt(quality string) int {
 	
 	// Default to 720p if quality is unknown
 	return 720
+}
+
+// filterMovieStreams removes streams that appear to be from TV series episodes
+// This prevents episode results (S01E01, S02E05, etc.) from appearing in movie stream results
+func filterMovieStreams(streams []TorrentioStream) []TorrentioStream {
+	filtered := []TorrentioStream{}
+	
+	for _, stream := range streams {
+		// Check if this stream looks like a TV episode
+		// Common patterns: "S01E01", "1x01", "Season 1 Episode 1", etc.
+		if isEpisodeStream(stream) {
+			log.Printf("[EPISODE-FILTER] ❌ Filtering out episode-like stream: %s (from source: %s)", stream.Title, stream.Source)
+			continue
+		}
+		filtered = append(filtered, stream)
+	}
+	
+	if len(filtered) < len(streams) {
+		log.Printf("[EPISODE-FILTER] Filtered %d -> %d streams (removed %d episode-like streams)", 
+			len(streams), len(filtered), len(streams)-len(filtered))
+	}
+	
+	return filtered
+}
+
+// isEpisodeStream checks if a stream appears to be from a TV series episode
+func isEpisodeStream(stream TorrentioStream) bool {
+	// Combine all text fields to search
+	fullText := strings.ToLower(fmt.Sprintf("%s %s %s", stream.Name, stream.Title, stream.Source))
+	
+	// Check for season/episode patterns
+	episodePatterns := []string{
+		"s\\d+e\\d+",     // S01E01
+		"\\d+x\\d+",      // 1x01
+		"season.*episode", // Season 1 Episode 1
+		"ep\\d+",         // EP01
+		": s\\d+:",       // : S01:
+	}
+	
+	for _, pattern := range episodePatterns {
+		if matched, _ := regexp.MatchString(pattern, fullText); matched {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// extractYearFromStream extracts the year from stream title/filename
+func extractYearFromStream(stream TorrentioStream) int {
+	// Search in title and name for 4-digit year
+	fullText := fmt.Sprintf("%s %s", stream.Title, stream.Name)
+	
+	// Look for years between 1900 and 2100
+	yearPattern := regexp.MustCompile(`\b(19|20)\d{2}\b`)
+	matches := yearPattern.FindAllString(fullText, -1)
+	
+	if len(matches) > 0 {
+		// Return the first year found
+		if year, err := strconv.Atoi(matches[0]); err == nil {
+			log.Printf("[YEAR-EXTRACT] Found year %d in stream: %s", year, stream.Title)
+			return year
+		}
+	}
+	
+	log.Printf("[YEAR-EXTRACT] No year found in stream: %s", stream.Title)
+	return 0
 }

@@ -163,15 +163,18 @@ func (h *Handler) applyReleaseFilters(streams []providers.TorrentioStream) []pro
 	return filtered
 }
 
-// sortStreams sorts streams by cached status first, then by size (larger first)
+// sortStreams sorts streams by quality first (2160p > 1080p > 720p > etc), then by size (larger first)
 func sortStreams(streams []providers.TorrentioStream) {
 	sort.Slice(streams, func(i, j int) bool {
-		// First: sort by cached status (cached first)
-		if streams[i].Cached != streams[j].Cached {
-			return streams[i].Cached
+		// First: sort by quality (higher resolution first)
+		qualityI := qualityToInt(streams[i].Quality)
+		qualityJ := qualityToInt(streams[j].Quality)
+		
+		if qualityI != qualityJ {
+			return qualityI > qualityJ // Higher quality first
 		}
 
-		// Second: sort by size (larger files = better quality)
+		// Second: sort by size within same quality (larger files first)
 		return streams[i].Size > streams[j].Size
 	})
 }
@@ -958,6 +961,9 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Log full metadata for debugging
+	log.Printf("[DEBUG] Movie %d (%s) metadata: %+v", id, movie.Title, movie.Metadata)
+
 	// If this movie came from Balkan VOD import, expose only Balkan VOD streams
 	if isBalkanVODMovie(movie) {
 		apiStreams := buildBalkanVODStreams(movie)
@@ -975,9 +981,14 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if imdbID == "" {
-		log.Printf("Movie %d (%s) has no IMDB ID in metadata", id, movie.Title)
+		log.Printf("[ERROR] Movie %d (%s) has no IMDB ID in metadata - cannot fetch streams", id, movie.Title)
 		respondError(w, http.StatusBadRequest, "movie has no IMDB ID")
 		return
+	}
+	
+	// Validate IMDb ID format (should be tt followed by digits)
+	if !strings.HasPrefix(imdbID, "tt") {
+		log.Printf("[WARNING] Movie %d (%s) has invalid IMDB ID format: %s", id, movie.Title, imdbID)
 	}
 
 	// Fetch live streams from providers
@@ -987,57 +998,99 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Fetching streams for movie %d (%s) with IMDB ID: %s", id, movie.Title, imdbID)
-	providerStreams, err := h.streamProvider.GetMovieStreams(imdbID)
+	log.Printf("[STREAM-FETCH] Fetching streams for movie %d (%s) with IMDB ID: %s", id, movie.Title, imdbID)
+	
+	// Extract release year for filtering
+	releaseYear := 0
+	if movie.ReleaseDate != nil && !movie.ReleaseDate.IsZero() {
+		releaseYear = movie.ReleaseDate.Year()
+	}
+	log.Printf("[STREAM-FETCH] Movie %s (%s) release year: %d", movie.Title, imdbID, releaseYear)
+	
+	// Use the new year-aware method
+	providerStreams, err := h.streamProvider.GetMovieStreamsWithYear(imdbID, releaseYear)
 	if err != nil {
-		log.Printf("Failed to get streams for movie %d (%s): %v", id, imdbID, err)
+		log.Printf("[ERROR] Failed to get streams for movie %d (%s, %s): %v", id, movie.Title, imdbID, err)
 		respondJSON(w, http.StatusOK, []interface{}{}) // Return empty array instead of error
 		return
 	}
 
-	// Filter streams by year to remove wrong movies with same title
-	if movie.ReleaseDate != nil && !movie.ReleaseDate.IsZero() {
-		movieYear := movie.ReleaseDate.Year()
-		filtered := make([]providers.TorrentioStream, 0)
-		for _, s := range providerStreams {
-			// Check if stream name/title contains a different year
-			yearPattern := regexp.MustCompile(`\b(19|20)\d{2}\b`)
-			checkStr := s.Name + " " + s.Title
-			matches := yearPattern.FindAllString(checkStr, -1)
-			
-			// If no year found in stream, keep it (benefit of doubt)
-			if len(matches) == 0 {
-				filtered = append(filtered, s)
-				continue
-			}
-			
-			// Check if any found year matches our movie year (+/- 1 year tolerance)
-			hasMatchingYear := false
-			for _, match := range matches {
-				streamYear, _ := strconv.Atoi(match)
-				if streamYear >= movieYear-1 && streamYear <= movieYear+1 {
-					hasMatchingYear = true
-					break
-				}
-			}
-			
-			if hasMatchingYear {
-				filtered = append(filtered, s)
-			} else {
-				log.Printf("Filtered out stream with wrong year: %s (expected %d)", s.Title, movieYear)
-			}
-		}
-		providerStreams = filtered
-		log.Printf("Year filter: %d streams remaining after filtering for year %d", len(providerStreams), movieYear)
+	log.Printf("[STREAM-FETCH] Retrieved %d streams before filtering for %s (%s)", len(providerStreams), movie.Title, imdbID)
+
+	// Validate streams match the requested movie by checking title
+	validatedStreams := validateMovieStreams(providerStreams, movie.Title, releaseYear)
+	if len(validatedStreams) < len(providerStreams) {
+		log.Printf("[VALIDATION] Removed %d streams with mismatched titles (kept %d)", 
+			len(providerStreams)-len(validatedStreams), len(validatedStreams))
 	}
+	providerStreams = validatedStreams
+
+	// Streams are already filtered by year from GetMovieStreamsWithYear
 
 	// Apply release filters from settings
 	providerStreams = h.applyReleaseFilters(providerStreams)
 
-	// Sort streams: by quality (4K > 1080 > 720 > 480 > Unknown), then by cached status
+	// Check Real-Debrid instant availability for TorrentsDB streams
+	// This sets the Cached field based on actual Real-Debrid cache status
+	if h.rdClient != nil && len(providerStreams) > 0 {
+		// Collect all unique info hashes
+		hashes := make([]string, 0)
+		hashMap := make(map[string]int) // hash -> stream index
+		for i, s := range providerStreams {
+			if s.InfoHash != "" && s.Source == "TorrentsDB" {
+				hashes = append(hashes, s.InfoHash)
+				hashMap[s.InfoHash] = i
+			}
+		}
+
+		// Check availability in Real-Debrid
+		if len(hashes) > 0 {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			availability, err := h.rdClient.CheckInstantAvailability(ctx, hashes)
+			cancel()
+			
+			if err == nil {
+				// Update cached status based on Real-Debrid availability
+				for hash, isAvailable := range availability {
+					if idx, exists := hashMap[hash]; exists {
+						providerStreams[idx].Cached = isAvailable
+					}
+				}
+				log.Printf("[RD-CHECK] Updated cached status for %d TorrentsDB streams", len(availability))
+			} else {
+				log.Printf("[RD-CHECK] Error checking Real-Debrid availability: %v", err)
+			}
+		}
+	}
+
+	// Log quality distribution BEFORE sorting
+	log.Printf("[SORT-DEBUG] BEFORE sorting %d streams:", len(providerStreams))
+	for i, s := range providerStreams {
+		if i < 5 { // Log first 5 streams
+			log.Printf("  [%d] Quality: %s | Size: %.2f GB | Title: %s", i, s.Quality, float64(s.Size)/(1024*1024*1024), s.Title)
+		}
+	}
+
+	// Sort streams: by quality (2160p > 1080p > 720p), then by size (larger first)
 	sortStreams(providerStreams)
 
-	log.Printf("Found %d streams for movie %d (%s) after filtering", len(providerStreams), id, movie.Title)
+	// Log quality distribution AFTER sorting
+	log.Printf("[SORT-DEBUG] AFTER sorting:")
+	for i, s := range providerStreams {
+		if i < 5 { // Log first 5 streams
+			log.Printf("  [%d] Quality: %s | Size: %.2f GB | Title: %s", i, s.Quality, float64(s.Size)/(1024*1024*1024), s.Title)
+		}
+	}
+
+	// Log cached vs non-cached breakdown
+	cachedCount := 0
+	for _, s := range providerStreams {
+		if s.Cached {
+			cachedCount++
+		}
+	}
+	log.Printf("✅ Found %d streams for movie %d (%s) → %d CACHED, %d UNCACHED", 
+		len(providerStreams), id, movie.Title, cachedCount, len(providerStreams)-cachedCount)
 
 	apiStreams := make([]map[string]interface{}, 0, len(providerStreams))
 
@@ -1051,6 +1104,14 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 		} else if strings.Contains(name, "X264") || strings.Contains(name, "H264") {
 			codec = "H.264"
 		}
+
+		// Log individual stream with cached status
+		cachedStr := "⚡ CACHED"
+		if !ps.Cached {
+			cachedStr = "⏳ UNCACHED"
+		}
+		log.Printf("[STREAM-DETAIL] %s | %s | %s | Size: %.2f GB", 
+			cachedStr, ps.Quality, ps.Title, float64(ps.Size)/(1024*1024*1024))
 
 		stream := map[string]interface{}{
 			"source":   ps.Source,
@@ -4002,15 +4063,24 @@ func buildBalkanVODSeriesStreams(series *models.Series, season, episode int) []m
 func (h *Handler) Restart(w http.ResponseWriter, r *http.Request) {
 	log.Println("[Admin] Server restart requested")
 	
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"status": "restarting",
-		"message": "Server is restarting...",
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	
+	// Send success response first
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "restarting",
+		"message": "Server is restarting... Connection will be restored in 5-10 seconds",
 	})
+	
+	// Flush the response to client before restarting
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 	
 	// Give the response time to send before restarting
 	go func() {
-		time.Sleep(500 * time.Millisecond)
-		// Exit with code 0, Docker will restart the container
+		time.Sleep(1 * time.Second)
+		log.Println("[Admin] Exiting process to trigger container restart...")
 		os.Exit(0)
 	}()
 }
@@ -4155,5 +4225,35 @@ func (h *Handler) ClearBlacklist(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{
 		"message": "Blacklist cleared",
 	})
+}
+
+// validateMovieStreams filters out streams that don't match the requested movie title
+// This prevents providers from returning unrelated movies
+func validateMovieStreams(streams []providers.TorrentioStream, movieTitle string, releaseYear int) []providers.TorrentioStream {
+	if len(streams) == 0 {
+		return streams
+	}
+
+	// Normalize movie title for comparison
+	normalizedTitle := strings.ToLower(strings.TrimSpace(movieTitle))
+	
+	validated := []providers.TorrentioStream{}
+	
+	for _, stream := range streams {
+		// Combine all text fields for matching
+		streamText := strings.ToLower(fmt.Sprintf("%s %s", stream.Title, stream.Name))
+		
+		// Check if the stream title contains the movie title as a substring
+		// This handles cases like "Django Unchained 2012" containing "Django Unchained"
+		if strings.Contains(streamText, normalizedTitle) {
+			validated = append(validated, stream)
+		} else {
+			// Log rejected streams with detailed info for debugging
+			log.Printf("[VALIDATION] ❌ Stream rejected (title mismatch): requested='%s' stream='%s'", 
+				movieTitle, stream.Title)
+		}
+	}
+	
+	return validated
 }
 

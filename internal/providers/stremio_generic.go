@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -204,6 +205,44 @@ func (g *GenericStremioProvider) convertToTorrentioStreams(genericStreams []Gene
 			size = parseSizeFromDescription(gs.Description)
 		}
 		
+		// Check if stream is cached in debrid service
+		// Look for explicit cache indicators in the name field
+		// TorrentsDB uses "[RD download]", some addons use "[RD+]" or "⚡"
+		nameLower := strings.ToLower(gs.Name)
+		cached := false
+		cacheIndicator := ""
+		
+		if strings.Contains(gs.Name, "[RD download]") {
+			cached = true
+			cacheIndicator = "[RD download]"
+		} else if strings.Contains(gs.Name, "[RD+]") {
+			cached = true
+			cacheIndicator = "[RD+]"
+		} else if strings.Contains(gs.Name, "⚡") {
+			cached = true
+			cacheIndicator = "⚡"
+		} else if strings.Contains(nameLower, "⚡ cached") {
+			cached = true
+			cacheIndicator = "⚡ cached"
+		} else if strings.Contains(nameLower, "instant available") {
+			cached = true
+			cacheIndicator = "instant available"
+		}
+		
+		// Log the cached determination for debugging - this will help us see what indicators TorrentsDB is actually sending
+		log.Printf("[CACHED-CHECK] Stream: %s | Cached: %v | Indicator Found: %s | Full Name: %s", 
+			filename, cached, cacheIndicator, gs.Name)
+		
+		// Extract quality from name, title, or filename
+		// TorrentsDB puts quality in the name field like "2160p", "1080p", etc.
+		quality := extractQuality(gs.Name)
+		if quality == "" {
+			quality = extractQuality(gs.Title)
+		}
+		if quality == "" {
+			quality = extractQuality(filename)
+		}
+		
 		stream := TorrentioStream{
 			Name:     gs.Name,
 			Title:    filename, // Use the actual filename here
@@ -212,10 +251,10 @@ func (g *GenericStremioProvider) convertToTorrentioStreams(genericStreams []Gene
 			URL:      gs.URL,
 			Source:   g.Name,
 			Size:     size,
+			Cached:   cached,
+			Quality:  quality,
 		}
 		
-		// Parse stream info for quality/codec
-		parseStreamInfoForComet(&stream)
 		streams[i] = stream
 	}
 	
