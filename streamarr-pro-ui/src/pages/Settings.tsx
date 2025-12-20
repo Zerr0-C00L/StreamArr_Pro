@@ -3211,19 +3211,34 @@ export default function Settings() {
                 {/* Connection Details */}
                 <div>
                   <h3 className="text-lg font-medium text-white mb-4">🔗 Connection Details</h3>
+                  <p className="text-sm text-slate-400 mb-4">
+                    Use these credentials in your IPTV player, not your web app password. Click "Save Changes" at the top after modifying.
+                  </p>
                   <div className="bg-[#2a2a2a] rounded-lg p-4 space-y-4">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Public Server URL (for IPTV Players)</label>
+                      <p className="text-xs text-slate-500 mb-2">Enter your server's public IP or domain name. This will be used in the connection details below.</p>
+                      <input
+                        type="text"
+                        value={settings.user_set_host || ''}
+                        onChange={(e) => updateSetting('user_set_host', e.target.value)}
+                        placeholder="e.g., 77.42.16.119 or mydomain.com"
+                        className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-sm text-slate-400 mb-1">Server URL</label>
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          value={`http://${settings.host || 'localhost'}:${settings.server_port || 8080}`}
+                          value={`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}`}
                           readOnly
                           className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm"
                         />
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}`);
+                            navigator.clipboard.writeText(`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}`);
                             setMessage('Server URL copied to clipboard');
                             setTimeout(() => setMessage(''), 2000);
                           }}
@@ -3297,11 +3312,11 @@ export default function Settings() {
                       <strong className="text-white">M3U URL (Alternative):</strong>
                       <div className="mt-1 flex gap-2">
                         <code className="flex-1 text-xs bg-[#2a2a2a] px-2 py-1 rounded overflow-x-auto">
-                          {`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/get.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}&type=m3u_plus&output=ts`}
+                          {`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}/get.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}&type=m3u_plus&output=ts`}
                         </code>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/get.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}&type=m3u_plus&output=ts`);
+                            navigator.clipboard.writeText(`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}/get.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}&type=m3u_plus&output=ts`);
                             setMessage('M3U URL copied to clipboard');
                             setTimeout(() => setMessage(''), 2000);
                           }}
@@ -3322,11 +3337,11 @@ export default function Settings() {
                   </p>
                   <div className="flex gap-2">
                     <code className="flex-1 text-xs bg-[#2a2a2a] px-2 py-1 rounded overflow-x-auto text-slate-300">
-                      {`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`}
+                      {`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`}
                     </code>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`);
+                        navigator.clipboard.writeText(`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`);
                         setMessage('EPG URL copied to clipboard');
                         setTimeout(() => setMessage(''), 2000);
                       }}
@@ -4011,13 +4026,13 @@ export default function Settings() {
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        value={`http://${settings.host || 'localhost'}:${settings.server_port || 8080}`}
+                        value={`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}`}
                         readOnly
                         className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm"
                       />
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}`);
+                          navigator.clipboard.writeText(`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}`);
                           setMessage('Server URL copied to clipboard');
                           setTimeout(() => setMessage(''), 2000);
                         }}
@@ -4175,11 +4190,11 @@ export default function Settings() {
                 </p>
                 <div className="flex gap-2">
                   <code className="flex-1 text-xs bg-[#2a2a2a] px-2 py-1 rounded overflow-x-auto text-slate-300">
-                    {`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`}
+                    {`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`}
                   </code>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`);
+                      navigator.clipboard.writeText(`http://${settings.user_set_host || settings.host || window.location.hostname}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`);
                       setMessage('EPG URL copied to clipboard');
                       setTimeout(() => setMessage(''), 2000);
                     }}
