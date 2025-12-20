@@ -204,16 +204,22 @@ log "Pulling latest changes from GitHub..."
 git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 
-# Build new server binary
+# Get version info
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Build new server binary with version info
 log "Building new server binary..."
-$GO_BIN build -o bin/server ./cmd/server || {
+$GO_BIN build -ldflags "-X main.Version=latest -X main.Commit=$COMMIT -X main.BuildDate=$BUILD_DATE" \
+    -o bin/server ./cmd/server || {
     log "ERROR: Failed to build server"
     exit 1
 }
 
-# Build new worker binary
+# Build new worker binary with version info
 log "Building new worker binary..."
-$GO_BIN build -o bin/worker ./cmd/worker || {
+$GO_BIN build -ldflags "-X main.Version=latest -X main.Commit=$COMMIT -X main.BuildDate=$BUILD_DATE" \
+    -o bin/worker ./cmd/worker || {
     log "ERROR: Failed to build worker"
     exit 1
 }
