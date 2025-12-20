@@ -176,7 +176,7 @@ interface ServiceStatus {
   items_total: number;
 }
 
-type TabType = 'account' | 'api' | 'addons' | 'quality' | 'content' | 'livetv' | 'stremio' | 'filters' | 'services' | 'xtream' | 'notifications' | 'database' | 'about';
+type TabType = 'account' | 'api' | 'addons' | 'quality' | 'content' | 'livetv' | 'stremio' | 'filters' | 'services' | 'xtream' | 'notifications' | 'database' | 'blacklist' | 'about';
 
 interface VersionInfo {
   current_version: string;
@@ -254,6 +254,18 @@ export default function Settings() {
   } | null>(null);
   const [loadingZileanStats, setLoadingZileanStats] = useState(false);
 
+  // Blacklist state
+  const [blacklist, setBlacklist] = useState<Array<{
+    id: number;
+    tmdb_id: number;
+    type: string;
+    title: string;
+    reason: string;
+    created_at: string;
+  }>>([]);
+  const [loadingBlacklist, setLoadingBlacklist] = useState(false);
+  const [removingFromBlacklist, setRemovingFromBlacklist] = useState<number | null>(null);
+
   useEffect(() => {
     fetchSettings();
     fetchChannelStats();
@@ -269,6 +281,13 @@ export default function Settings() {
       setProfileAvatar(savedAvatar);
     }
   }, []);
+
+  // Fetch blacklist when on blacklist tab
+  useEffect(() => {
+    if (activeTab === 'blacklist') {
+      fetchBlacklist();
+    }
+  }, [activeTab]);
 
   // Poll services status when on services tab
   useEffect(() => {
@@ -328,6 +347,50 @@ export default function Settings() {
     } catch (error) {
       console.error('Failed to fetch database stats:', error);
     }
+  };
+
+  const fetchBlacklist = async () => {
+    setLoadingBlacklist(true);
+    try {
+      const response = await api.get('/blacklist');
+      setBlacklist(response.data.blacklist || []);
+    } catch (error) {
+      console.error('Failed to fetch blacklist:', error);
+      setMessage('❌ Failed to load blacklist');
+      setTimeout(() => setMessage(''), 3000);
+    }
+    setLoadingBlacklist(false);
+  };
+
+  const removeFromBlacklist = async (id: number) => {
+    setRemovingFromBlacklist(id);
+    try {
+      await api.delete(`/blacklist/${id}`);
+      setMessage('✅ Item removed from blacklist');
+      setTimeout(() => setMessage(''), 3000);
+      fetchBlacklist(); // Refresh the list
+    } catch (error: any) {
+      setMessage(`❌ Failed to remove from blacklist: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setRemovingFromBlacklist(null);
+  };
+
+  const clearBlacklist = async () => {
+    if (!confirm('Are you sure you want to clear the entire blacklist? This cannot be undone.')) {
+      return;
+    }
+    setLoadingBlacklist(true);
+    try {
+      await api.post('/blacklist/clear');
+      setMessage('✅ Blacklist cleared successfully');
+      setTimeout(() => setMessage(''), 3000);
+      fetchBlacklist(); // Refresh the list
+    } catch (error: any) {
+      setMessage(`❌ Failed to clear blacklist: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setLoadingBlacklist(false);
   };
 
   const executeDbAction = async (action: string) => {
@@ -1082,6 +1145,7 @@ export default function Settings() {
     { id: 'xtream' as TabType, label: 'Xtream', icon: Server },
     { id: 'notifications' as TabType, label: 'Notifications', icon: Bell },
     { id: 'database' as TabType, label: 'Database', icon: Database },
+    { id: 'blacklist' as TabType, label: 'Blacklist', icon: Trash2 },
     { id: 'about' as TabType, label: 'About', icon: Info },
   ];
 
@@ -4065,6 +4129,97 @@ export default function Settings() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Blacklist Tab */}
+        {activeTab === 'blacklist' && (
+          <div className="space-y-6">
+            <div className="bg-[#2a2a2a]/50 border border-white/10 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-red-400 font-medium mb-2 flex items-center gap-2">
+                    <Trash2 className="h-5 w-5" />
+                    Blacklisted Items
+                  </h3>
+                  <p className="text-sm text-slate-400">
+                    Items removed from your library are blacklisted to prevent re-importing. You can remove them from the blacklist here to allow re-importing.
+                  </p>
+                </div>
+                {blacklist.length > 0 && (
+                  <button
+                    onClick={clearBlacklist}
+                    disabled={loadingBlacklist}
+                    className="px-4 py-2 bg-red-600/20 text-red-400 border border-red-600/50 rounded-lg hover:bg-red-600/30 disabled:opacity-50 transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Clear All
+                  </button>
+                )}
+              </div>
+
+              {loadingBlacklist ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader className="h-8 w-8 animate-spin text-red-600" />
+                </div>
+              ) : blacklist.length === 0 ? (
+                <div className="text-center py-12">
+                  <Trash2 className="h-16 w-16 mx-auto mb-4 text-slate-600" />
+                  <p className="text-slate-400 text-lg">No blacklisted items</p>
+                  <p className="text-slate-500 text-sm mt-2">Items you remove from your library will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {blacklist.map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-[#1e1e1e] border border-white/10 rounded-lg p-4 hover:border-white/20 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="text-white font-medium">{item.title}</h4>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              item.type === 'movie' ? 'bg-purple-600/20 text-purple-400 border border-purple-600/50' : 'bg-green-600/20 text-green-400 border border-green-600/50'
+                            }`}>
+                              {item.type === 'movie' ? 'Movie' : 'Series'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-slate-400 space-y-1">
+                            <p>
+                              <span className="text-slate-500">Reason:</span> {item.reason || 'No reason provided'}
+                            </p>
+                            <p>
+                              <span className="text-slate-500">TMDB ID:</span> {item.tmdb_id}
+                            </p>
+                            <p>
+                              <span className="text-slate-500">Blacklisted:</span> {new Date(item.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeFromBlacklist(item.id)}
+                          disabled={removingFromBlacklist === item.id}
+                          className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-lg hover:bg-blue-600/30 disabled:opacity-50 transition-colors flex items-center gap-2 whitespace-nowrap"
+                        >
+                          {removingFromBlacklist === item.id ? (
+                            <>
+                              <Loader className="h-4 w-4 animate-spin" />
+                              Removing...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4" />
+                              Allow Re-import
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
