@@ -2,18 +2,21 @@ package providers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// DMMDirectProvider queries DMM sources directly on-demand
+// DMMDirectProvider queries DMM API for pre-scraped torrents
 type DMMDirectProvider struct {
+	DMMURL           string // DMM instance URL (e.g., http://dmm:8080)
 	RealDebridAPIKey string
 	Client           *http.Client
 	Cache            map[string]*DMMCachedResponse
@@ -24,123 +27,122 @@ type DMMCachedResponse struct {
 	Timestamp time.Time
 }
 
-// NewDMMDirectProvider creates a new direct DMM provider
+// DMM API response format
+type DMMSearchResult struct {
+	Title    string  `json:"title"`
+	FileSize float64 `json:"fileSize"` // Size in MB
+	Hash     string  `json:"hash"`
+}
+
+// DMM API response format
+type DMMSearchResult struct {
+	Title    string  `json:"title"`
+	FileSize float64 `json:"fileSize"` // Size in MB
+	Hash     string  `json:"hash"`
+}
+
+type DMMAPIResponse struct {
+	Results      []DMMSearchResult `json:"results,omitempty"`
+	ErrorMessage string            `json:"errorMessage,omitempty"`
+}
+
+// NewDMMDirectProvider creates a new DMM API provider
 func NewDMMDirectProvider(rdAPIKey string) *DMMDirectProvider {
+	// Default to DMM container on same network
+	dmmURL := "http://dmm:8080"
+	
 	return &DMMDirectProvider{
+		DMMURL:           dmmURL,
 		RealDebridAPIKey: rdAPIKey,
 		Client: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: 30 * time.Second,
 		},
 		Cache: make(map[string]*DMMCachedResponse),
 	}
 }
 
-// GetMovieStreams queries DMM sources directly for a movie
+// GetMovieStreams queries DMM API for movie torrents
 func (d *DMMDirectProvider) GetMovieStreams(imdbID string) ([]TorrentioStream, error) {
 	cacheKey := fmt.Sprintf("movie_%s", imdbID)
 	
-	// Check cache first (5 minute cache)
+	// Check cache first (10 minute cache)
 	if cached, ok := d.Cache[cacheKey]; ok {
-		if time.Since(cached.Timestamp) < 5*time.Minute {
-			log.Printf("[DMM Direct] Cache hit for movie %s (%d streams)", imdbID, len(cached.Data))
+		if time.Since(cached.Timestamp) < 10*time.Minute {
+			log.Printf("[DMM API] Cache hit for movie %s (%d streams)", imdbID, len(cached.Data))
 			return cached.Data, nil
 		}
 	}
 
-	log.Printf("[DMM Direct] Fetching streams for movie %s", imdbID)
+	log.Printf("[DMM API] Fetching streams for movie %s from %s", imdbID, d.DMMURL)
 	
-	// Query multiple DMM sources in parallel
-	sources := []string{
-		fmt.Sprintf("https://torrentio.strem.fun/%s/stream/movie/%s.json", d.getRDConfig(), imdbID),
-		fmt.Sprintf("https://comet.elfhosted.com/c/realdebrid=%s/stream/movie/%s.json", url.QueryEscape(d.RealDebridAPIKey), imdbID),
+	// Generate DMM authentication token (timestamp + hash)
+	tokenWithTimestamp, tokenHash := d.generateDMMToken()
+	
+	// Query DMM API
+	url := fmt.Sprintf("%s/api/torrents/movie?imdbId=%s&dmmProblemKey=%s&solution=%s&onlyTrusted=false",
+		d.DMMURL, imdbID, tokenWithTimestamp, tokenHash)
+	
+	results, err := d.queryDMMAPI(url, "movie")
+	if err != nil {
+		log.Printf("[DMM API] Error querying DMM for movie %s: %v", imdbID, err)
+		return nil, err
 	}
 
-	allStreams := make([]TorrentioStream, 0)
-	seenHashes := make(map[string]bool)
-
-	for _, sourceURL := range sources {
-		streams, err := d.querySource(sourceURL, "movie")
-		if err != nil {
-			log.Printf("[DMM Direct] Error querying %s: %v", sourceURL, err)
-			continue
-		}
-
-		// Deduplicate by info hash
-		for _, stream := range streams {
-			if stream.InfoHash != "" && !seenHashes[stream.InfoHash] {
-				seenHashes[stream.InfoHash] = true
-				allStreams = append(allStreams, stream)
-			}
-		}
-	}
-
-	log.Printf("[DMM Direct] Found %d unique streams for movie %s", len(allStreams), imdbID)
+	log.Printf("[DMM API] Found %d streams for movie %s", len(results), imdbID)
 
 	// Cache results
 	d.Cache[cacheKey] = &DMMCachedResponse{
-		Data:      allStreams,
+		Data:      results,
 		Timestamp: time.Now(),
 	}
 
-	return allStreams, nil
+	return results, nil
 }
 
-// GetSeriesStreams queries DMM sources directly for a series episode
+// GetSeriesStreams queries DMM API for series torrents
 func (d *DMMDirectProvider) GetSeriesStreams(imdbID string, season, episode int) ([]TorrentioStream, error) {
 	cacheKey := fmt.Sprintf("series_%s_s%de%d", imdbID, season, episode)
 	
-	// Check cache first (5 minute cache)
+	// Check cache first (10 minute cache)
 	if cached, ok := d.Cache[cacheKey]; ok {
-		if time.Since(cached.Timestamp) < 5*time.Minute {
-			log.Printf("[DMM Direct] Cache hit for series %s S%dE%d (%d streams)", imdbID, season, episode, len(cached.Data))
+		if time.Since(cached.Timestamp) < 10*time.Minute {
+			log.Printf("[DMM API] Cache hit for series %s S%dE%d (%d streams)", imdbID, season, episode, len(cached.Data))
 			return cached.Data, nil
 		}
 	}
 
-	log.Printf("[DMM Direct] Fetching streams for series %s S%dE%d", imdbID, season, episode)
+	log.Printf("[DMM API] Fetching streams for series %s S%dE%d from %s", imdbID, season, episode, d.DMMURL)
 	
-	// Query multiple DMM sources
-	sources := []string{
-		fmt.Sprintf("https://torrentio.strem.fun/%s/stream/series/%s:%d:%d.json", d.getRDConfig(), imdbID, season, episode),
-		fmt.Sprintf("https://comet.elfhosted.com/c/realdebrid=%s/stream/series/%s:%d:%d.json", url.QueryEscape(d.RealDebridAPIKey), imdbID, season, episode),
+	// Generate DMM authentication token
+	tokenWithTimestamp, tokenHash := d.generateDMMToken()
+	
+	// Query DMM API for TV show season
+	url := fmt.Sprintf("%s/api/torrents/tv?imdbId=%s&seasonNum=%d&dmmProblemKey=%s&solution=%s&onlyTrusted=false",
+		d.DMMURL, imdbID, season, tokenWithTimestamp, tokenHash)
+	
+	results, err := d.queryDMMAPI(url, "series")
+	if err != nil {
+		log.Printf("[DMM API] Error querying DMM for series %s S%d: %v", imdbID, season, err)
+		return nil, err
 	}
 
-	allStreams := make([]TorrentioStream, 0)
-	seenHashes := make(map[string]bool)
-
-	for _, sourceURL := range sources {
-		streams, err := d.querySource(sourceURL, "series")
-		if err != nil {
-			log.Printf("[DMM Direct] Error querying %s: %v", sourceURL, err)
-			continue
-		}
-
-		// Deduplicate by info hash
-		for _, stream := range streams {
-			if stream.InfoHash != "" && !seenHashes[stream.InfoHash] {
-				seenHashes[stream.InfoHash] = true
-				allStreams = append(allStreams, stream)
-			}
-		}
-	}
-
-	log.Printf("[DMM Direct] Found %d unique streams for series %s S%dE%d", len(allStreams), imdbID, season, episode)
+	log.Printf("[DMM API] Found %d streams for series %s S%dE%d", len(results), imdbID, season, episode)
 
 	// Cache results
 	d.Cache[cacheKey] = &DMMCachedResponse{
-		Data:      allStreams,
+		Data:      results,
 		Timestamp: time.Now(),
 	}
 
-	return allStreams, nil
+	return results, nil
 }
 
-// querySource queries a single DMM source
-func (d *DMMDirectProvider) querySource(sourceURL, mediaType string) ([]TorrentioStream, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// queryDMMAPI queries DMM API and converts results to TorrentioStream format
+func (d *DMMDirectProvider) queryDMMAPI(url, mediaType string) ([]TorrentioStream, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", sourceURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -151,46 +153,46 @@ func (d *DMMDirectProvider) querySource(sourceURL, mediaType string) ([]Torrenti
 	}
 	defer resp.Body.Close()
 
+	// DMM returns 204 with status header when processing or requested
+	if resp.StatusCode == 204 {
+		status := resp.Header.Get("status")
+		if status == "processing" {
+			return nil, fmt.Errorf("DMM is still scraping this content, please try again in 1-2 minutes")
+		}
+		if status == "requested" {
+			return nil, fmt.Errorf("content requested for scraping, please try again later")
+		}
+		return nil, fmt.Errorf("no results available (status: %s)", status)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("DMM API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var result struct {
-		Streams []struct {
-			Name          string `json:"name"`
-			Title         string `json:"title"`
-			InfoHash      string `json:"infoHash"`
-			FileIdx       int    `json:"fileIdx"`
-			URL           string `json:"url"`
-			BehaviorHints struct {
-				Filename  string `json:"filename"`
-				VideoSize int64  `json:"videoSize"`
-			} `json:"behaviorHints"`
-		} `json:"streams"`
+	var apiResp DMMAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to decode DMM response: %v", err)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	if apiResp.ErrorMessage != "" {
+		return nil, fmt.Errorf("DMM error: %s", apiResp.ErrorMessage)
 	}
 
-	streams := make([]TorrentioStream, 0)
-	for _, s := range result.Streams {
+	// Convert DMM results to TorrentioStream format
+	streams := make([]TorrentioStream, 0, len(apiResp.Results))
+	for _, result := range apiResp.Results {
 		stream := TorrentioStream{
-			Name:     s.Name,
-			Title:    s.Title,
-			InfoHash: s.InfoHash,
-			FileIdx:  s.FileIdx,
-			URL:      s.URL,
-			Cached:   true, // DMM sources only return cached torrents
-			Source:   d.getSourceName(sourceURL),
+			Name:     result.Title,
+			Title:    result.Title,
+			InfoHash: result.Hash,
+			Cached:   true, // DMM only returns cached torrents
+			Source:   "DMM",
+			Size:     int64(result.FileSize * 1024 * 1024), // Convert MB to bytes
 		}
-		stream.BehaviorHints.Filename = s.BehaviorHints.Filename
-		stream.BehaviorHints.VideoSize = s.BehaviorHints.VideoSize
-		stream.Size = s.BehaviorHints.VideoSize
-
+		
 		// Extract quality from title
-		stream.Quality = extractQualityFromTitle(s.Title)
+		stream.Quality = extractQualityFromTitle(result.Title)
 
 		streams = append(streams, stream)
 	}
@@ -198,23 +200,16 @@ func (d *DMMDirectProvider) querySource(sourceURL, mediaType string) ([]Torrenti
 	return streams, nil
 }
 
-// getRDConfig returns Real-Debrid configuration for Torrentio
-func (d *DMMDirectProvider) getRDConfig() string {
-	if d.RealDebridAPIKey == "" {
-		return "realdebrid"
-	}
-	return fmt.Sprintf("realdebrid=%s", url.QueryEscape(d.RealDebridAPIKey))
-}
-
-// getSourceName extracts source name from URL
-func (d *DMMDirectProvider) getSourceName(sourceURL string) string {
-	if strings.Contains(sourceURL, "torrentio") {
-		return "Torrentio"
-	}
-	if strings.Contains(sourceURL, "comet") {
-		return "Comet"
-	}
-	return "DMM"
+// generateDMMToken generates authentication token for DMM API
+func (d *DMMDirectProvider) generateDMMToken() (string, string) {
+	// DMM expects: timestamp + hash of timestamp
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	
+	// Generate hash
+	hash := sha256.Sum256([]byte(timestamp))
+	hashStr := hex.EncodeToString(hash[:])
+	
+	return timestamp, hashStr
 }
 
 // extractQualityFromTitle extracts quality info from title
