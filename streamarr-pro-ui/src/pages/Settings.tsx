@@ -64,6 +64,7 @@ interface SettingsData {
   debug: boolean;
   server_port: number;
   host: string;
+  user_set_host: string; // Manual public IP/domain for IPTV connection details
   mdblist_lists: string;
   // Proxy settings
   http_proxy: string;
@@ -4800,13 +4801,12 @@ export default function Settings() {
                     <div className="mt-3">
                       <label className="block text-xs text-slate-400 mb-1">Update Channel</label>
                       <select
-                        value={settings.update_branch || 'stable'}
+                        value={settings.update_branch || 'main'}
                         onChange={(e) => updateSetting('update_branch', e.target.value)}
                         className="px-3 py-2 bg-[#1f1f1f] border border-white/10 rounded text-white text-sm"
                       >
-                        <option value="stable">stable</option>
-                        <option value="beta">beta</option>
-                        <option value="nightly">nightly</option>
+                        <option value="main">main</option>
+                        <option value="dev">dev</option>
                       </select>
                     </div>
                   </div>
@@ -4845,10 +4845,10 @@ export default function Settings() {
                   <label className="block text-sm text-slate-400 mb-2">Update Branch</label>
                   <div className="flex items-center gap-3">
                     <div className="bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-2 text-white w-40">
-                      main (Stable)
+                      {settings.update_branch || 'main'}
                     </div>
                     <span className="text-xs text-slate-500">
-                      Using stable release branch
+                      {settings.update_branch === 'dev' ? 'Using development branch (may be unstable)' : 'Using stable release branch'}
                     </span>
                   </div>
                 </div>
