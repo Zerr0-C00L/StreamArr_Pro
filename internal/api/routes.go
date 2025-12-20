@@ -201,6 +201,53 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
+// cleanupOldAssets removes orphaned asset files (old builds) from the UI dist folder
+func cleanupOldAssets(uiPath string) {
+	assetsDir := filepath.Join(uiPath, "assets")
+	indexPath := filepath.Join(uiPath, "index.html")
+	
+	// Read index.html to find currently referenced assets
+	indexContent, err := os.ReadFile(indexPath)
+	if err != nil {
+		log.Printf("[Cleanup] Cannot read index.html: %v", err)
+		return
+	}
+	
+	indexHTML := string(indexContent)
+	
+	// Read all files in assets directory
+	files, err := os.ReadDir(assetsDir)
+	if err != nil {
+		// Assets directory might not exist or be accessible
+		return
+	}
+	
+	cleaned := 0
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		
+		filename := file.Name()
+		// Only clean up index-*.js and index-*.css files (built assets)
+		if (strings.HasPrefix(filename, "index-") && (strings.HasSuffix(filename, ".js") || strings.HasSuffix(filename, ".css"))) {
+			// Check if this file is referenced in index.html
+			if !strings.Contains(indexHTML, filename) {
+				// Orphaned file - delete it
+				filePath := filepath.Join(assetsDir, filename)
+				if err := os.Remove(filePath); err == nil {
+					log.Printf("[Cleanup] Removed old asset: %s", filename)
+					cleaned++
+				}
+			}
+		}
+	}
+	
+	if cleaned > 0 {
+		log.Printf("[Cleanup] Cleaned up %d old asset file(s)", cleaned)
+	}
+}
+
 // getUIPath returns the path to the UI dist folder
 func getUIPath() string {
 	// Prefer host-mounted UI for hot-reload if enabled
@@ -208,6 +255,7 @@ func getUIPath() string {
 	hostUI := "/app/host/streamarr-pro-ui/dist"
 	if _, err := os.Stat(hostFlag); err == nil {
 		if _, err := os.Stat(filepath.Join(hostUI, "index.html")); err == nil {
+			cleanupOldAssets(hostUI)
 			return hostUI
 		}
 	}
@@ -222,6 +270,7 @@ func getUIPath() string {
     
 	for _, p := range paths {
 		if _, err := os.Stat(filepath.Join(p, "index.html")); err == nil {
+			cleanupOldAssets(p)
 			return p
 		}
 	}
