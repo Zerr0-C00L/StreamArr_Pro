@@ -188,6 +188,16 @@ function DetailModal({
     enabled: media.type === 'movie',
   });
 
+  // Fetch settings to control stream card display behavior
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const res = await streamarrApi.getSettings();
+      return res.data as any;
+    },
+  });
+  const showFullStreamNames = !!settingsData?.show_full_stream_name;
+
   // Close on escape
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -347,7 +357,7 @@ function DetailModal({
                 ) : (
                   <div className="grid gap-2">
                     {streams.map((stream: any, index: number) => (
-                      <StreamCard key={index} stream={stream} />
+                      <StreamCard key={index} stream={stream} forceFullName={showFullStreamNames} />
                     ))}
                   </div>
                 )}
@@ -417,6 +427,16 @@ function EpisodeCard({ episode, seriesImdbId }: { episode: Episode; seriesImdbId
     },
     enabled: showStreams && !!seriesImdbId,
   });
+
+  // Fetch settings to control stream card display behavior
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const res = await streamarrApi.getSettings();
+      return res.data as any;
+    },
+  });
+  const showFullStreamNames = !!settingsData?.show_full_stream_name;
 
   const handleToggle = () => {
     const newState = !showStreams;
@@ -493,7 +513,7 @@ function EpisodeCard({ episode, seriesImdbId }: { episode: Episode; seriesImdbId
             <div className="space-y-2">
               <p className="text-sm text-slate-500 mb-3 font-medium">{streams.length} streams available</p>
               {streams.slice(0, 15).map((stream: any, index: number) => (
-                <StreamCard key={index} stream={stream} compact />
+                <StreamCard key={index} stream={stream} compact forceFullName={showFullStreamNames} />
               ))}
               {streams.length > 15 && (
                 <p className="text-sm text-slate-500 text-center pt-3">
@@ -509,8 +529,11 @@ function EpisodeCard({ episode, seriesImdbId }: { episode: Episode; seriesImdbId
 }
 
 // Stream Card Component (Netflix style)
-function StreamCard({ stream, compact = false }: { stream: any; compact?: boolean }) {
-  const [showFullName, setShowFullName] = useState(false);
+function StreamCard({ stream, compact = false, forceFullName = false }: { stream: any; compact?: boolean; forceFullName?: boolean }) {
+  const [showFullName, setShowFullName] = useState(forceFullName || false);
+  useEffect(() => {
+    setShowFullName(forceFullName || false);
+  }, [forceFullName]);
   
   const getQualityColor = (quality: string) => {
     if (quality?.includes('2160') || quality?.includes('4K')) return 'bg-purple-600';
@@ -567,11 +590,15 @@ function StreamCard({ stream, compact = false }: { stream: any; compact?: boolea
         )}
         
         <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
-          {stream.size_gb && stream.size_gb > 0 && (
-            <span className="flex items-center gap-1">
-              <span>📁</span> {stream.size_gb.toFixed(1)} GB
-            </span>
-          )}
+          {(() => {
+            const sizeBytes = stream.size || stream.behaviorHints?.videoSize;
+            const sizeGB = typeof stream.size_gb === 'number' ? stream.size_gb : (sizeBytes ? (sizeBytes / (1024 * 1024 * 1024)) : undefined);
+            return sizeGB && sizeGB > 0 ? (
+              <span className="flex items-center gap-1">
+                <span>📁</span> {sizeGB.toFixed(2)} GB
+              </span>
+            ) : null;
+          })()}
           {stream.seeds && stream.seeds > 0 && (
             <span className="text-green-500 flex items-center gap-1">
               <span>🌱</span> {stream.seeds} seeds

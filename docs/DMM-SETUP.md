@@ -174,26 +174,4 @@ If DMM is unavailable, StreamArr can still query Torrentio directly by modifying
 ## Resources
 
 - **DMM GitHub**: https://github.com/debridmediamanager/debrid-media-manager
-- **Zilean (DMM Backend)**: https://github.com/ipromknight/zilean
 - **StreamArr DMM Provider**: `internal/providers/dmm_direct.go`
-
-## Configuration Summary
-
-```yaml
-# docker-compose.yml
-dmm:
-  image: ipromknight/zilean:latest
-  ports:
-    - "8081:8080"
-  environment:
-    - Zilean__Database__ConnectionString=Host=dmm-db;Database=dmm;...
-    - Zilean__Dmm__EnableEndpoint=true
-    - Zilean__Dmm__MinimumScoreMatch=0.85
-```
-
-```go
-// StreamArr DMM Provider
-DMMURL: "http://dmm:8080"  // Internal Docker network
-Cache: 10 minutes per IMDb ID
-Timeout: 25 seconds per request
-```

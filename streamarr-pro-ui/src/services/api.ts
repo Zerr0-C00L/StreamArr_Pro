@@ -49,6 +49,9 @@ export const streamarrApi = {
   // Health
   health: () => api.get('/health'),
 
+  // Settings
+  getSettings: () => api.get('/settings'),
+
   // Movies
   getMovies: (params?: { offset?: number; limit?: number; monitored?: boolean }) =>
     api.get<Movie[]>('/movies', { params }),

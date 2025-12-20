@@ -32,11 +32,6 @@ type SettingsResponse struct {
 	DuplicateVODPerProvider bool `json:"duplicate_vod_per_provider"`
 	IPTVVODSyncIntervalHours int `json:"iptv_vod_sync_interval_hours"`
 
-	// IPTV-Org Settings
-	IPTVOrgEnabled      bool     `json:"iptv_org_enabled"`
-	IPTVOrgCountries    []string `json:"iptv_org_countries"`
-	IPTVOrgLanguages    []string `json:"iptv_org_languages"`
-	IPTVOrgCategories   []string `json:"iptv_org_categories"`
 
 	// Quality Settings
 	MaxResolution          int  `json:"max_resolution"`
@@ -58,11 +53,6 @@ type SettingsResponse struct {
 	UsePremiumize       bool   `json:"use_premiumize"`
 	MediaFusionEnabled  bool   `json:"mediafusion_enabled"`
 	TorrentioProviders  string `json:"torrentio_providers"`
-
-	// Zilean Integration (deprecated, kept for backward compatibility)
-	ZileanEnabled  bool   `json:"zilean_enabled"`
-	ZileanURL      string `json:"zilean_url"`
-	ZileanAPIKey   string `json:"zilean_api_key"`
 
 	// Comet Provider Settings
 	CometEnabled           bool   `json:"comet_enabled"`

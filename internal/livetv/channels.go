@@ -52,13 +52,7 @@ type XtreamSource struct {
 	Enabled   bool   `json:"enabled"`
 }
 
-// IPTVOrgConfig holds settings for iptv-org.github.io integration
-type IPTVOrgConfig struct {
-	Enabled    bool     `json:"enabled"`
-	Countries  []string `json:"countries"`   // Country codes: us, uk, ca, etc.
-	Languages  []string `json:"languages"`   // Language codes: eng, spa, fra, etc.
-	Categories []string `json:"categories"`  // Categories: news, sports, movies, etc.
-}
+// Third-party IPTV integration removed
 
 type ChannelManager struct {
 	channels           map[string]*Channel
@@ -66,7 +60,6 @@ type ChannelManager struct {
 	sources            []ChannelSource
 	m3uSources         []M3USource
 	xtreamSources      []XtreamSource
-	iptvOrgConfig      IPTVOrgConfig
 	httpClient         *http.Client
 	validateStreams    bool
 	validationTimeout  time.Duration
@@ -138,12 +131,7 @@ func (cm *ChannelManager) SetXtreamSources(sources []XtreamSource) {
 	cm.xtreamSources = sources
 }
 
-// SetIPTVOrgConfig sets the IPTV-Org configuration
-func (cm *ChannelManager) SetIPTVOrgConfig(config IPTVOrgConfig) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	cm.iptvOrgConfig = config
-}
+// Third-party IPTV configuration setter removed
 
 // SetStreamValidation enables/disables stream URL validation
 func (cm *ChannelManager) SetStreamValidation(enabled bool) {
@@ -286,17 +274,7 @@ func (cm *ChannelManager) LoadChannels() error {
 
 	allChannels := make([]*Channel, 0)
 
-	// Load from IPTV-Org if enabled
-	if cm.iptvOrgConfig.Enabled {
-		fmt.Println("Live TV: Loading channels from IPTV-Org...")
-		iptvChannels, err := cm.loadFromIPTVOrg()
-		if err != nil {
-			fmt.Printf("Warning: Error loading IPTV-Org channels: %v\n", err)
-		} else {
-			allChannels = append(allChannels, iptvChannels...)
-			fmt.Printf("Loaded %d channels from IPTV-Org\n", len(iptvChannels))
-		}
-	}
+	// Third-party IPTV loading removed
 
 	// Load from custom M3U sources (user-configured)
 	for _, source := range cm.m3uSources {
@@ -329,8 +307,8 @@ func (cm *ChannelManager) LoadChannels() error {
 	// Check if we have any channels at all
 	if len(allChannels) == 0 {
 		fmt.Println("Live TV: No channels loaded")
-		if !cm.iptvOrgConfig.Enabled && len(cm.m3uSources) == 0 && len(cm.xtreamSources) == 0 {
-			fmt.Println("Enable IPTV-Org or add Custom M3U/Xtream Sources in Settings → Live TV")
+		if len(cm.m3uSources) == 0 && len(cm.xtreamSources) == 0 {
+			fmt.Println("Add Custom M3U/Xtream Sources in Settings → Live TV")
 		}
 		cm.channels = make(map[string]*Channel)
 		return nil
@@ -439,64 +417,7 @@ func (cm *ChannelManager) loadFromM3UURL(url string, sourceName string) ([]*Chan
 	return cm.parseM3U(string(body), sourceName)
 }
 
-// loadFromIPTVOrg loads channels from iptv-org.github.io based on config
-func (cm *ChannelManager) loadFromIPTVOrg() ([]*Channel, error) {
-	allChannels := make([]*Channel, 0)
-	
-	// Base URL for iptv-org playlists
-	baseURL := "https://iptv-org.github.io/iptv"
-	
-	// If specific categories are selected, load by category
-	if len(cm.iptvOrgConfig.Categories) > 0 {
-		for _, category := range cm.iptvOrgConfig.Categories {
-			url := fmt.Sprintf("%s/categories/%s.m3u", baseURL, category)
-			channels, err := cm.loadFromM3UURL(url, fmt.Sprintf("IPTV-org (%s)", category))
-			if err != nil {
-				fmt.Printf("Warning: Could not load IPTV-org category %s: %v\n", category, err)
-				continue
-			}
-			allChannels = append(allChannels, channels...)
-		}
-	}
-	
-	// If specific countries are selected, load by country
-	if len(cm.iptvOrgConfig.Countries) > 0 {
-		for _, country := range cm.iptvOrgConfig.Countries {
-			url := fmt.Sprintf("%s/countries/%s.m3u", baseURL, country)
-			channels, err := cm.loadFromM3UURL(url, fmt.Sprintf("IPTV-org (%s)", strings.ToUpper(country)))
-			if err != nil {
-				fmt.Printf("Warning: Could not load IPTV-org country %s: %v\n", country, err)
-				continue
-			}
-			allChannels = append(allChannels, channels...)
-		}
-	}
-	
-	// If specific languages are selected, load by language
-	if len(cm.iptvOrgConfig.Languages) > 0 {
-		for _, language := range cm.iptvOrgConfig.Languages {
-			url := fmt.Sprintf("%s/languages/%s.m3u", baseURL, language)
-			channels, err := cm.loadFromM3UURL(url, fmt.Sprintf("IPTV-org (%s)", language))
-			if err != nil {
-				fmt.Printf("Warning: Could not load IPTV-org language %s: %v\n", language, err)
-				continue
-			}
-			allChannels = append(allChannels, channels...)
-		}
-	}
-	
-	// If no specific filters, load the main index (all channels)
-	if len(cm.iptvOrgConfig.Categories) == 0 && len(cm.iptvOrgConfig.Countries) == 0 && len(cm.iptvOrgConfig.Languages) == 0 {
-		url := fmt.Sprintf("%s/index.m3u", baseURL)
-		channels, err := cm.loadFromM3UURL(url, "IPTV-org (All)")
-		if err != nil {
-			return nil, fmt.Errorf("could not load IPTV-org index: %w", err)
-		}
-		allChannels = append(allChannels, channels...)
-	}
-	
-	return allChannels, nil
-}
+// Third-party IPTV loader removed
 
 // parseM3U parses M3U content and returns channels
 func (cm *ChannelManager) parseM3U(content string, sourceName string) ([]*Channel, error) {

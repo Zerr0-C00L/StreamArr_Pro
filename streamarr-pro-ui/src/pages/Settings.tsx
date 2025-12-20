@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Key, Layers, Settings as SettingsIcon, Bell, Code, Plus, X, Tv, Server, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search } from 'lucide-react';
+import { Save, Key, Layers, Settings as SettingsIcon, Bell, Code, Plus, X, Tv, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, AlertTriangle, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search } from 'lucide-react';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
@@ -97,11 +97,6 @@ interface SettingsData {
   livetv_validate_streams: boolean;
   livetv_enabled_sources: string[];
   livetv_enabled_categories: string[];
-  // IPTV-org settings
-  iptv_org_enabled: boolean;
-  iptv_org_countries: string[];
-  iptv_org_languages: string[];
-  iptv_org_categories: string[];
   // Content filter settings
   only_released_content: boolean;
   hide_unavailable_content: boolean;
@@ -198,6 +193,68 @@ export default function Settings() {
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Dropdown option sets
+  const indexerOptions = ['bitorrent', 'therarbg', 'yts', 'eztv', 'thepiratebay', 'kickass', 'torrentgalaxy', 'magnetdl'];
+  const qualityOptions = ['4k', '1080p', '720p', '480p', 'cam', 'screener', 'brremux', 'hdr', 'dolbyvision', '3d'];
+  const languageOptions = [
+    'english', 'russian', 'italian', 'spanish', 'german', 'french', 'hindi', 'turkish', 'portuguese',
+    'polish', 'dutch', 'thai', 'vietnamese', 'indonesian', 'arabic', 'chinese', 'korean', 'japanese'
+  ];
+  const countryOptions = [
+    { code: 'US', name: 'United States' },
+    { code: 'GB', name: 'United Kingdom' },
+    { code: 'CA', name: 'Canada' },
+    { code: 'AU', name: 'Australia' },
+    { code: 'NZ', name: 'New Zealand' },
+    { code: 'IN', name: 'India' },
+    { code: 'TR', name: 'Turkey' },
+    { code: 'RU', name: 'Russia' },
+    { code: 'DE', name: 'Germany' },
+    { code: 'FR', name: 'France' },
+    { code: 'IT', name: 'Italy' },
+    { code: 'ES', name: 'Spain' },
+    { code: 'PT', name: 'Portugal' },
+    { code: 'BR', name: 'Brazil' },
+    { code: 'AR', name: 'Argentina' },
+    { code: 'MX', name: 'Mexico' },
+    { code: 'JP', name: 'Japan' },
+    { code: 'KR', name: 'South Korea' },
+    { code: 'CN', name: 'China' },
+    { code: 'HK', name: 'Hong Kong' },
+    { code: 'TW', name: 'Taiwan' },
+    { code: 'NL', name: 'Netherlands' },
+    { code: 'PL', name: 'Poland' },
+    { code: 'SE', name: 'Sweden' },
+    { code: 'NO', name: 'Norway' },
+    { code: 'DK', name: 'Denmark' },
+    { code: 'FI', name: 'Finland' },
+    { code: 'RO', name: 'Romania' },
+    { code: 'HU', name: 'Hungary' },
+    { code: 'RS', name: 'Serbia' },
+    { code: 'HR', name: 'Croatia' },
+    { code: 'BA', name: 'Bosnia & Herzegovina' },
+    { code: 'SI', name: 'Slovenia' },
+    { code: 'ME', name: 'Montenegro' }
+  ];
+  
+  // Release filter presets (pipe-separated)
+  const releaseLanguageTagOptions = [
+    'RUSSIAN','RUS','HINDI','HIN','GERMAN','GER','FRENCH','FRE','ITALIAN','ITA','SPANISH','SPA','LATINO',
+    'PORTUGUESE','POR','KOREAN','KOR','JAPANESE','JAP','CHINESE','CHI','ARABIC','ARA','TURKISH','TUR',
+    'POLISH','POL','DUTCH','DUT','THAI','VIETNAMESE','INDONESIAN'
+  ];
+  const qualityTagOptions = [
+    'REMUX','HDR','DV','Dolby Vision','3D','ATMOS','TrueHD','DTS-HD','CAM','TS','SCR','HDTS','HDCAM',
+    'TELESYNC','TELECINE','TC','DVDSCR','R5','R6'
+  ];
+  const toArray = (str?: string) => (str || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  const toPipeArray = (str?: string) => (str || '')
+    .split('|')
+    .map(s => s.trim())
+    .filter(Boolean);
   const [message, setMessage] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('account');
   const [newListUrl, setNewListUrl] = useState('');
@@ -240,27 +297,6 @@ export default function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   
-  // Account profile state
-  const [profileUsername, setProfileUsername] = useState('');
-  const [profileEmail, setProfileEmail] = useState('');
-  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [profileMessage, setProfileMessage] = useState('');
-
-  // Blacklist state
-  const [blacklist, setBlacklist] = useState<Array<{
-    id: number;
-    tmdb_id: number;
-    type: string;
-    title: string;
-    reason: string;
-    created_at: string;
-  }>>([]);
-  const [loadingBlacklist, setLoadingBlacklist] = useState(false);
-  const [removingFromBlacklist, setRemovingFromBlacklist] = useState<number | null>(null);
-
   useEffect(() => {
     fetchSettings();
     fetchChannelStats();
@@ -268,22 +304,18 @@ export default function Settings() {
     fetchDbStats();
     fetchVersionInfo();
     fetchUserProfile();
-    
-    // Load avatar from localStorage as fallback
     const savedAvatar = localStorage.getItem('profile_picture');
     if (savedAvatar) {
       setProfileAvatar(savedAvatar);
     }
   }, []);
 
-  // Fetch blacklist when on blacklist tab
   useEffect(() => {
     if (activeTab === 'blacklist') {
       fetchBlacklist();
     }
   }, [activeTab]);
 
-  // Poll services status when on services tab
   useEffect(() => {
     if (activeTab === 'services') {
       const interval = setInterval(() => {
@@ -292,155 +324,8 @@ export default function Settings() {
       return () => clearInterval(interval);
     }
   }, [activeTab]);
-
-  const fetchServices = async () => {
-    try {
-      const response = await api.get('/services');
-      const data = response.data;
-      // Sort services by name to maintain consistent order
-      const sortedServices = (data.services || []).sort((a: ServiceStatus, b: ServiceStatus) => 
-        a.name.localeCompare(b.name)
-      );
-      setServices(sortedServices);
-    } catch (error) {
-      console.error('Failed to fetch services:', error);
-    }
-  };
-
-  const triggerService = async (serviceName: string) => {
-    setTriggeringService(serviceName);
-    try {
-      await api.post(`/services/${serviceName}/trigger?name=${serviceName}`);
-      setMessage(`✅ Service "${serviceName}" triggered successfully`);
-      setTimeout(() => setMessage(''), 3000);
-      // Refresh services after a short delay
-      setTimeout(fetchServices, 500);
-    } catch (error: any) {
-      setMessage(`❌ Failed to trigger service: ${error.response?.data?.error || error.message}`);
-      setTimeout(() => setMessage(''), 5000);
-    }
-    setTriggeringService(null);
-  };
-
-  const fetchDbStats = async () => {
-    try {
-      const response = await api.get('/database/stats');
-      setDbStats(response.data);
-    } catch (error) {
-      console.error('Failed to fetch database stats:', error);
-    }
-  };
-
-  const fetchBlacklist = async () => {
-    setLoadingBlacklist(true);
-    try {
-      const response = await api.get('/blacklist');
-      setBlacklist(response.data.blacklist || []);
-    } catch (error) {
-      console.error('Failed to fetch blacklist:', error);
-      setMessage('❌ Failed to load blacklist');
-      setTimeout(() => setMessage(''), 3000);
-    }
-    setLoadingBlacklist(false);
-  };
-
-  const removeFromBlacklist = async (id: number) => {
-    setRemovingFromBlacklist(id);
-    try {
-      await api.delete(`/blacklist/${id}`);
-      setMessage('✅ Item removed from blacklist');
-      setTimeout(() => setMessage(''), 3000);
-      fetchBlacklist(); // Refresh the list
-    } catch (error: any) {
-      setMessage(`❌ Failed to remove from blacklist: ${error.response?.data?.error || error.message}`);
-      setTimeout(() => setMessage(''), 5000);
-    }
-    setRemovingFromBlacklist(null);
-  };
-
-  const clearBlacklist = async () => {
-    if (!confirm('Are you sure you want to clear the entire blacklist? This cannot be undone.')) {
-      return;
-    }
-    setLoadingBlacklist(true);
-    try {
-      await api.post('/blacklist/clear');
-      setMessage('✅ Blacklist cleared successfully');
-      setTimeout(() => setMessage(''), 3000);
-      fetchBlacklist(); // Refresh the list
-    } catch (error: any) {
-      setMessage(`❌ Failed to clear blacklist: ${error.response?.data?.error || error.message}`);
-      setTimeout(() => setMessage(''), 5000);
-    }
-    setLoadingBlacklist(false);
-  };
-
-  const executeDbAction = async (action: string) => {
-    setDbOperation(action);
-    setConfirmDialog(null);
-    try {
-      const response = await api.post(`/database/${action}`);
-      setMessage(`✅ ${response.data.message}`);
-      setTimeout(() => setMessage(''), 5000);
-      fetchDbStats();
-      // Also refresh services if we cleared something that affects them
-      fetchServices();
-    } catch (error: any) {
-      setMessage(`❌ Failed: ${error.response?.data?.error || error.message}`);
-      setTimeout(() => setMessage(''), 5000);
-    }
-    setDbOperation(null);
-  };
-
-  const fetchVersionInfo = async () => {
-    try {
-      const response = await api.get('/version');
-      const data = response.data;
-      setVersionInfo(data);
-    } catch (error) {
-      console.error('Failed to fetch version info:', error);
-    }
-  };
-
-  const checkForUpdates = async () => {
-    setCheckingUpdate(true);
-    try {
-      const response = await api.get('/version/check');
-      const data = response.data;
-      setVersionInfo(data);
-      if (data.update_available) {
-        setMessage('🎉 New update available!');
-      } else {
-        setMessage('✅ You are running the latest version');
-      }
-      setTimeout(() => setMessage(''), 5000);
-    } catch (error: any) {
-      setMessage(`❌ Failed to check for updates: ${error.response?.data?.error || error.message}`);
-      setTimeout(() => setMessage(''), 5000);
-    }
-    setCheckingUpdate(false);
-  };
-
-  const installUpdate = async () => {
-    if (!confirm('Are you sure you want to install the update? The server will restart.')) {
-      return;
-    }
-    setInstallingUpdate(true);
-    setMessage('🔄 Installing update... Server will restart shortly.');
-    try {
-      await api.post('/update/install');
-      setMessage('✅ Update started! The page will reload in 30 seconds...');
-      // Wait for server to restart and reload
-      setTimeout(() => {
-        window.location.reload();
-      }, 30000);
-    } catch (error: any) {
-      setMessage(`❌ Update failed: ${error.response?.data?.error || error.message}`);
-      setInstallingUpdate(false);
-    }
-  };
-
-  // Account profile management functions
+  
+  // Fetch user profile
   const fetchUserProfile = async () => {
     try {
       const response = await api.get('/auth/profile');
@@ -454,7 +339,6 @@ export default function Settings() {
       localStorage.setItem('username', data.username || '');
     } catch (error) {
       console.error('Failed to fetch profile:', error);
-      // Set defaults from localStorage if API fails
       const savedUsername = localStorage.getItem('username');
       if (savedUsername) {
         setProfileUsername(savedUsername);
@@ -494,6 +378,168 @@ export default function Settings() {
       setTimeout(() => setProfileMessage(''), 3000);
     }
   };
+
+  // Services helpers
+  const fetchServices = async () => {
+    try {
+      const response = await api.get('/services');
+      const data = response.data;
+      const sortedServices = (data.services || []).sort((a: ServiceStatus, b: ServiceStatus) => a.name.localeCompare(b.name));
+      setServices(sortedServices);
+    } catch (error) {
+      console.error('Failed to fetch services:', error);
+    }
+  };
+
+  const triggerService = async (serviceName: string) => {
+    setTriggeringService(serviceName);
+    try {
+      await api.post(`/services/${serviceName}/trigger?name=${serviceName}`);
+      setMessage(`✅ Service "${serviceName}" triggered successfully`);
+      setTimeout(() => setMessage(''), 3000);
+      setTimeout(fetchServices, 500);
+    } catch (error: any) {
+      setMessage(`❌ Failed to trigger service: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setTriggeringService(null);
+  };
+
+  const fetchDbStats = async () => {
+    try {
+      const response = await api.get('/database/stats');
+      setDbStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch database stats:', error);
+    }
+  };
+
+  const fetchBlacklist = async () => {
+    setLoadingBlacklist(true);
+    try {
+      const response = await api.get('/blacklist');
+      setBlacklist(response.data.blacklist || []);
+    } catch (error) {
+      console.error('Failed to fetch blacklist:', error);
+      setMessage('❌ Failed to load blacklist');
+      setTimeout(() => setMessage(''), 3000);
+    }
+    setLoadingBlacklist(false);
+  };
+
+  const removeFromBlacklist = async (id: number) => {
+    setRemovingFromBlacklist(id);
+    try {
+      await api.delete(`/blacklist/${id}`);
+      setMessage('✅ Item removed from blacklist');
+      setTimeout(() => setMessage(''), 3000);
+      fetchBlacklist();
+    } catch (error: any) {
+      setMessage(`❌ Failed to remove from blacklist: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setRemovingFromBlacklist(null);
+  };
+
+  const clearBlacklist = async () => {
+    if (!confirm('Are you sure you want to clear the entire blacklist? This cannot be undone.')) {
+      return;
+    }
+    setLoadingBlacklist(true);
+    try {
+      await api.post('/blacklist/clear');
+      setMessage('✅ Blacklist cleared successfully');
+      setTimeout(() => setMessage(''), 3000);
+      fetchBlacklist();
+    } catch (error: any) {
+      setMessage(`❌ Failed to clear blacklist: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setLoadingBlacklist(false);
+  };
+
+  const executeDbAction = async (action: string) => {
+    setDbOperation(action);
+    setConfirmDialog(null);
+    try {
+      const response = await api.post(`/database/${action}`);
+      setMessage(`✅ ${response.data.message}`);
+      setTimeout(() => setMessage(''), 5000);
+      fetchDbStats();
+      fetchServices();
+    } catch (error: any) {
+      setMessage(`❌ Failed: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setDbOperation(null);
+  };
+
+  const fetchVersionInfo = async () => {
+    try {
+      const response = await api.get('/version');
+      setVersionInfo(response.data);
+    } catch (error) {
+      console.error('Failed to fetch version info:', error);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      const response = await api.get('/version/check');
+      const data = response.data;
+      setVersionInfo(data);
+      if (data.update_available) {
+        setMessage('🎉 New update available!');
+      } else {
+        setMessage('✅ You are running the latest version');
+      }
+      setTimeout(() => setMessage(''), 5000);
+    } catch (error: any) {
+      setMessage(`❌ Failed to check for updates: ${error.response?.data?.error || error.message}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
+    setCheckingUpdate(false);
+  };
+
+  const installUpdate = async () => {
+    if (!confirm('Are you sure you want to install the update? The server will restart.')) {
+      return;
+    }
+    setInstallingUpdate(true);
+    setMessage('🔄 Installing update... Server will restart shortly.');
+    try {
+      await api.post('/update/install');
+      setMessage('✅ Update started! The page will reload in 30 seconds...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 30000);
+    } catch (error: any) {
+      setMessage(`❌ Update failed: ${error.response?.data?.error || error.message}`);
+      setInstallingUpdate(false);
+    }
+  };
+  
+  // Account profile state
+  const [profileUsername, setProfileUsername] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileMessage, setProfileMessage] = useState('');
+
+  // Blacklist state
+  const [blacklist, setBlacklist] = useState<Array<{
+    id: number;
+    tmdb_id: number;
+    type: string;
+    title: string;
+    reason: string;
+    created_at: string;
+  }>>([]);
+  const [loadingBlacklist, setLoadingBlacklist] = useState(false);
+  const [removingFromBlacklist, setRemovingFromBlacklist] = useState<number | null>(null);
 
   const changePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -1117,14 +1163,12 @@ export default function Settings() {
   const tabs = [
     { id: 'account' as TabType, label: 'Account', icon: User },
     { id: 'api' as TabType, label: 'API Keys', icon: Key },
-    { id: 'addons' as TabType, label: 'Addons', icon: Layers },
-    { id: 'quality' as TabType, label: 'Quality', icon: SettingsIcon },
+    { id: 'addons' as TabType, label: 'Providers', icon: Layers },
+    { id: 'quality' as TabType, label: 'Streams', icon: SettingsIcon },
     { id: 'content' as TabType, label: 'Content', icon: Film },
-    { id: 'livetv' as TabType, label: 'Live TV', icon: Tv },
-    { id: 'stremio' as TabType, label: 'Stremio', icon: Play },
+    { id: 'livetv' as TabType, label: 'TV & IPTV', icon: Tv },
     { id: 'filters' as TabType, label: 'Filters', icon: Filter },
     { id: 'services' as TabType, label: 'Services', icon: Activity },
-    { id: 'xtream' as TabType, label: 'Xtream', icon: Server },
     { id: 'notifications' as TabType, label: 'Notifications', icon: Bell },
     { id: 'database' as TabType, label: 'Database', icon: Database },
     { id: 'blacklist' as TabType, label: 'Blacklist', icon: Trash2 },
@@ -1698,19 +1742,23 @@ export default function Settings() {
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Indexers (comma-separated)
+                    Indexers
                   </label>
-                  <input
-                    type="text"
-                    value={settings.comet_indexers || 'bitorrent,therarbg,yts,eztv,thepiratebay'}
-                    onChange={(e) => updateSetting('comet_indexers', e.target.value)}
+                  <select
+                    multiple
+                    value={toArray(settings.comet_indexers || 'bitorrent,therarbg,yts,eztv,thepiratebay')}
+                    onChange={(e) => {
+                      const values = Array.from(e.target.selectedOptions).map(o => o.value);
+                      updateSetting('comet_indexers', values.join(','));
+                    }}
                     className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="bitorrent,therarbg,yts,eztv,thepiratebay"
                     disabled={settings.comet_enabled === false}
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Available indexers: bitorrent, therarbg, yts, eztv, thepiratebay, kickass, torrentgalaxy, magnetdl
-                  </p>
+                  >
+                    {indexerOptions.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">Tip: Hold Cmd/Ctrl to select multiple indexers</p>
                 </div>
 
                 <div className="mb-4">
@@ -1732,54 +1780,64 @@ export default function Settings() {
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Priority Languages (comma-separated)
+                    Priority Languages
                   </label>
-                  <input
-                    type="text"
-                    value={settings.comet_priority_languages || ''}
-                    onChange={(e) => updateSetting('comet_priority_languages', e.target.value)}
+                  <select
+                    multiple
+                    value={toArray(settings.comet_priority_languages)}
+                    onChange={(e) => {
+                      const values = Array.from(e.target.selectedOptions).map(o => o.value);
+                      updateSetting('comet_priority_languages', values.join(','));
+                    }}
                     className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="e.g., russian,italian,spanish"
                     disabled={settings.comet_enabled === false}
-                  />
+                  >
+                    {languageOptions.map((lang) => (
+                      <option key={lang} value={lang}>{lang}</option>
+                    ))}
+                  </select>
                   <p className="text-xs text-slate-500 mt-1">
-                    Streams with selected language dubs/subs will be prioritized at the top
+                    Selected language dubs/subs will be prioritized at the top
                   </p>
                 </div>
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Exclude Qualities/Resolutions (comma-separated)
+                    Exclude Qualities/Resolutions
                   </label>
-                  <input
-                    type="text"
-                    value={settings.comet_excluded_qualities || ''}
-                    onChange={(e) => updateSetting('comet_excluded_qualities', e.target.value)}
+                  <select
+                    multiple
+                    value={toArray(settings.comet_excluded_qualities)}
+                    onChange={(e) => {
+                      const values = Array.from(e.target.selectedOptions).map(o => o.value);
+                      updateSetting('comet_excluded_qualities', values.join(','));
+                    }}
                     className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="e.g., cam,screener,480p"
                     disabled={settings.comet_enabled === false}
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Options: 4k, 1080p, 720p, 480p, cam, screener, brremux, hdr, dolbyvision, 3d
-                  </p>
+                  >
+                    {qualityOptions.map((q) => (
+                      <option key={q} value={q}>{q}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">Use Cmd/Ctrl for multi-select</p>
                 </div>
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Max Results Per Quality
                   </label>
-                  <input
-                    type="number"
+                  <select
                     value={settings.comet_max_results || 5}
-                    onChange={(e) => updateSetting('comet_max_results', parseInt(e.target.value) || 5)}
+                    onChange={(e) => updateSetting('comet_max_results', Number(e.target.value))}
                     className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="5"
-                    min="1"
-                    max="50"
                     disabled={settings.comet_enabled === false}
-                  />
+                  >
+                    {[1,3,5,10,20,50,75,100,150].map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
                   <p className="text-xs text-slate-500 mt-1">
-                    Limit the number of results shown per quality tier (1-50)
+                    Limit the number of results shown per quality tier
                   </p>
                 </div>
 
@@ -1787,14 +1845,29 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-slate-300 mb-2">
                     Max Video Size
                   </label>
-                  <input
-                    type="text"
-                    value={settings.comet_max_size || ''}
-                    onChange={(e) => updateSetting('comet_max_size', e.target.value)}
-                    className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                    placeholder="e.g., 10GB or 10GB,2GB for movies,series"
-                    disabled={settings.comet_enabled === false}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={settings.comet_max_size || ''}
+                      onChange={(e) => updateSetting('comet_max_size', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      placeholder="e.g., 10GB or 10GB,2GB for movies,series"
+                      disabled={settings.comet_enabled === false}
+                    />
+                    <select
+                      onChange={(e) => updateSetting('comet_max_size', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                      disabled={settings.comet_enabled === false}
+                    >
+                      <option value="">Custom…</option>
+                      <option value="5GB">5GB</option>
+                      <option value="8GB">8GB</option>
+                      <option value="10GB">10GB</option>
+                      <option value="15GB">15GB</option>
+                      <option value="2GB,1GB">Movies 2GB, Series 1GB</option>
+                      <option value="8GB,4GB">Movies 8GB, Series 4GB</option>
+                    </select>
+                  </div>
                   <p className="text-xs text-slate-500 mt-1">
                     Set maximum file size (e.g., 5GB, 800MB). Use comma for different limits: movies,series
                   </p>
@@ -1802,6 +1875,193 @@ export default function Settings() {
               </div>
 
               <hr className="border-white/10" />
+
+              {/* Built-in Stremio Addon (moved from Stremio tab) */}
+              <div>
+                <div className="mb-4 p-4 bg-purple-900/30 border border-purple-800 rounded-lg">
+                  <h3 className="text-purple-400 font-medium mb-2 flex items-center gap-2">
+                    <Play className="w-5 h-5" />
+                    Stremio Addon (Built-in)
+                  </h3>
+                  <p className="text-sm text-slate-300">
+                    Enable the built-in Stremio addon to stream your library directly in Stremio. Configure which catalogs to show and customize their names.
+                  </p>
+                  <p className="text-sm text-yellow-400 mt-2">
+                    💡 Installation: In Stremio go to Add-ons → Community → Add-on Repository → Install from URL, then paste the Manifest URL from this page.
+                  </p>
+                </div>
+
+                {/* Enable Addon */}
+                <div>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.stremio_addon?.enabled || false}
+                      onChange={async (e) => {
+                        if (!settings) return;
+                        const currentAddon = settings.stremio_addon || {};
+                        const newAddon = { ...currentAddon, enabled: e.target.checked };
+                        updateSetting('stremio_addon', newAddon);
+                        try {
+                          const settingsToSave = { ...settings, stremio_addon: newAddon };
+                          await api.put('/settings', settingsToSave);
+                          setMessage(e.target.checked ? 'Stremio addon enabled' : 'Stremio addon disabled');
+                          setTimeout(() => setMessage(''), 2000);
+                        } catch (error) {
+                          console.error('Failed to save:', error);
+                          setMessage('Failed to save setting');
+                        }
+                      }}
+                      className="w-5 h-5 text-red-600 bg-gray-700 border-gray-600 rounded focus:ring-red-500"
+                    />
+                    <span className="text-white font-medium">Enable Stremio Addon</span>
+                  </label>
+                </div>
+
+                {settings.stremio_addon?.enabled && (
+                  <>
+                    {/* Addon Name */}
+                    <div>
+                      <label className="block text-sm text-slate-300 mb-2">Addon Name</label>
+                      <input
+                        type="text"
+                        value={settings.stremio_addon?.addon_name || 'StreamArr Pro'}
+                        onChange={(e) => updateSetting('stremio_addon', { ...settings.stremio_addon, addon_name: e.target.value })}
+                        placeholder="StreamArr Pro"
+                        className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">The name shown in Stremio's addon list</p>
+                    </div>
+
+                    {/* Server Host/IP */}
+                    <div>
+                      <label className="block text-sm text-slate-300 mb-2">Server Host/IP</label>
+                      <input
+                        type="text"
+                        value={settings.stremio_addon?.public_server_url || ''}
+                        onChange={(e) => updateSetting('stremio_addon', { ...settings.stremio_addon, public_server_url: e.target.value })}
+                        placeholder="e.g., streamarr.mydomain.com:8080 or 123.45.67.89:8080"
+                        className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        Your public domain or IP with port if needed. Leave empty to auto-detect.
+                      </p>
+                    </div>
+
+                    {/* Authentication Token */}
+                    <div>
+                      <label className="block text-sm text-slate-300 mb-2">Shared Access Token</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={settings.stremio_addon?.shared_token || ''}
+                          readOnly
+                          placeholder="Click 'Generate Token' to create"
+                          className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm"
+                        />
+                        <button
+                          onClick={async () => {
+                            try {
+                              const response = await api.post('/stremio/generate-token');
+                              if (!settings) return;
+                              const currentAddon = settings.stremio_addon || {};
+                              const newAddon = { ...currentAddon, enabled: true, shared_token: response.data.token };
+                              updateSetting('stremio_addon', newAddon);
+                              const settingsToSave = { ...settings, stremio_addon: newAddon };
+                              await api.put('/settings', settingsToSave);
+                              setMessage('Token generated successfully');
+                              setTimeout(() => setMessage(''), 2000);
+                            } catch (error: any) {
+                              console.error('Failed to generate token:', error);
+                              const errorMsg = error?.response?.data?.error || error?.message || 'Failed to generate token';
+                              setMessage(errorMsg);
+                            }
+                          }}
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 whitespace-nowrap"
+                        >
+                          Generate Token
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">Secure token for addon authentication. Keep this private!</p>
+                    </div>
+
+                    {/* Catalog Configuration */}
+                    <div>
+                      <h4 className="text-white font-medium mb-3">Library Catalogs</h4>
+                      <div className="space-y-3">
+                        {(settings.stremio_addon?.catalogs || []).map((catalog, index) => (
+                          <div key={catalog.id} className="bg-[#2a2a2a] rounded-lg p-4 border border-gray-700">
+                            <div className="flex items-start gap-4">
+                              <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={catalog.enabled}
+                                  onChange={(e) => {
+                                    const currentAddon = settings.stremio_addon || {};
+                                    const newCatalogs = [...(currentAddon.catalogs || [])];
+                                    newCatalogs[index] = { ...catalog, enabled: e.target.checked };
+                                    updateSetting('stremio_addon', { ...currentAddon, catalogs: newCatalogs });
+                                  }}
+                                  className="w-5 h-5 text-red-600 bg-gray-700 border-gray-600 rounded focus:ring-red-500"
+                                />
+                              </label>
+                              <div className="flex-1">
+                                <div className="mb-2">
+                                  <span className="text-sm text-slate-400 uppercase">{catalog.type}</span>
+                                </div>
+                                <input
+                                  type="text"
+                                  value={catalog.name}
+                                  onChange={(e) => {
+                                    const currentAddon = settings.stremio_addon || {};
+                                    const newCatalogs = [...(currentAddon.catalogs || [])];
+                                    newCatalogs[index] = { ...catalog, name: e.target.value };
+                                    updateSetting('stremio_addon', { ...currentAddon, catalogs: newCatalogs });
+                                  }}
+                                  placeholder="Catalog Name"
+                                  className="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">Catalog ID: {catalog.id}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2">Enable/disable catalogs and customize their names as shown in Stremio</p>
+                    </div>
+
+                    {/* Manifest URL */}
+                    {settings.stremio_addon?.shared_token && (
+                      <div className="bg-[#2a2a2a] rounded-lg p-4 border border-green-800 mt-4">
+                        <h4 className="text-green-400 font-medium mb-3 flex items-center gap-2">
+                          <CheckCircle className="w-5 h-5" />
+                          Addon Ready to Install
+                        </h4>
+                        <div className="space-y-3">
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await api.get('/stremio/manifest-url');
+                                const url = response.data.manifest_url;
+                                navigator.clipboard.writeText(url);
+                                setMessage('Manifest URL copied! Paste it in Stremio');
+                                setTimeout(() => setMessage(''), 3000);
+                              } catch (error: any) {
+                                console.error('Failed to get manifest URL:', error);
+                                const errorMsg = error?.response?.data?.error || error?.message || 'Failed to get manifest URL';
+                                setMessage(errorMsg);
+                              }
+                            }}
+                            className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                          >
+                            Copy Manifest URL
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
 
               {/* Stremio Addons */}
               <div>
@@ -1932,10 +2192,11 @@ export default function Settings() {
           </div>
         )}
 
-        {/* Quality Tab */}
+        {/* Streams Tab */}
         {activeTab === 'quality' && (
           <div className="bg-[#1e1e1e] rounded-xl p-6 border border-white/10">
             <div className="space-y-6">
+              <h3 className="text-lg font-semibold text-white">🎞️ Playback</h3>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Maximum Resolution
@@ -1956,13 +2217,15 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Max File Size (MB)
                 </label>
-                <input
-                  type="number"
+                <select
                   value={settings.max_file_size || 0}
                   onChange={(e) => updateSetting('max_file_size', Number(e.target.value))}
                   className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  placeholder="0 (unlimited)"
-                />
+                >
+                  {[0,700,1000,1500,2000,3000,5000,10000,12000,20000].map((mb) => (
+                    <option key={mb} value={mb}>{mb === 0 ? 'Unlimited' : `${mb} MB`}</option>
+                  ))}
+                </select>
                 <p className="text-xs text-slate-500 mt-1">Skip files larger than this. 0 = no limit. Useful for slow connections.</p>
               </div>
 
@@ -1997,58 +2260,9 @@ export default function Settings() {
                 </div>
                 <p className="text-xs text-slate-500 mt-1 ml-6">Display detailed stream info (codec, size, etc.) in player.</p>
               </div>
-
-              <div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="auto_add_collections"
-                    checked={settings.auto_add_collections || false}
-                    onChange={(e) => updateSetting('auto_add_collections', e.target.checked)}
-                    className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded"
-                  />
-                  <label htmlFor="auto_add_collections" className="text-sm text-slate-300">
-                    Add Entire Collection
-                  </label>
-                </div>
-                <p className="text-xs text-slate-500 mt-1 ml-6">When adding a movie that belongs to a collection (e.g., The Dark Knight Trilogy), automatically add all other movies from that collection.</p>
-              </div>
-
+              {/* Sorting Section */}
               <div className="pt-6 border-t border-white/10">
-                <h3 className="text-md font-medium text-slate-300 mb-4">Content Filters</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Minimum Year
-                    </label>
-                    <input
-                      type="number"
-                      value={settings.min_year || 1900}
-                      onChange={(e) => updateSetting('min_year', Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="1900"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Exclude movies/series released before this year.</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Minimum Runtime (minutes)
-                    </label>
-                    <input
-                      type="number"
-                      value={settings.min_runtime || 0}
-                      onChange={(e) => updateSetting('min_runtime', Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Exclude short content (trailers, clips). 60+ recommended for movies.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stream Sorting Section */}
-              <div className="pt-6 border-t border-white/10">
+                <h3 className="text-lg font-semibold text-white mb-2">↕️ Sorting</h3>
                 <h3 className="text-md font-medium text-slate-300 mb-4">🔢 Stream Sorting & Selection</h3>
                 <p className="text-xs text-slate-500 mb-4">
                   Configure how streams are sorted and which one is selected for playback.
@@ -2120,12 +2334,115 @@ export default function Settings() {
         {activeTab === 'content' && (
           <div className="bg-[#1e1e1e] rounded-xl p-6 border border-white/10">
             <div className="space-y-6">
+              {/* Localization */}
+              <div className="mb-4 p-4 bg-[#2a2a2a] border border-white/10 rounded-lg">
+                <h3 className="text-white font-medium mb-3">🌍 Localization</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Preferred Language</label>
+                    <select
+                      value={settings.language || 'english'}
+                      onChange={(e) => updateSetting('language', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {languageOptions.map((lang) => (
+                        <option key={lang} value={lang}>{lang}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">Used when fetching content metadata and stream preferences.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Movies Origin Country</label>
+                    <select
+                      value={settings.movies_origin_country || 'US'}
+                      onChange={(e) => updateSetting('movies_origin_country', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {countryOptions.map((c) => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">Bias discovery for domestic releases from this country.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Series Origin Country</label>
+                    <select
+                      value={settings.series_origin_country || 'US'}
+                      onChange={(e) => updateSetting('series_origin_country', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {countryOptions.map((c) => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">Bias discovery for TV shows from this country.</p>
+                  </div>
+                </div>
+              </div>
               <div className="mb-4 p-4 bg-blue-900/30 border border-blue-800 rounded-lg">
                 <h3 className="text-red-400 font-medium mb-2">🎬 Content Availability</h3>
                 <p className="text-sm text-slate-300">
                   Control which content appears in your IPTV apps based on stream availability.
                   The "Stream Search" background service periodically scans your library to check if streams are available.
                 </p>
+              </div>
+
+              {/* Collections */}
+              <div className="pt-4 border-t border-white/10">
+                <h3 className="text-md font-medium text-slate-300 mb-4">📦 Collections</h3>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="auto_add_collections"
+                      checked={settings.auto_add_collections || false}
+                      onChange={(e) => updateSetting('auto_add_collections', e.target.checked)}
+                      className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded"
+                    />
+                    <label htmlFor="auto_add_collections" className="text-sm text-slate-300">
+                      Add Entire Collection
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 ml-6">When adding a movie that belongs to a collection (e.g., The Dark Knight Trilogy), automatically add all other movies from that collection.</p>
+                </div>
+              </div>
+
+              {/* Content Filters moved from Streams tab */}
+              <div className="pt-4 border-t border-white/10">
+                <h3 className="text-md font-medium text-slate-300 mb-4">Content Filters</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Minimum Year
+                    </label>
+                    <select
+                      value={settings.min_year || 1900}
+                      onChange={(e) => updateSetting('min_year', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {[1900,1950,1970,1980,1990,2000,2005,2010,2015,2020,2022,2024].map((y) => (
+                        <option key={y} value={y}>{y}+</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">Exclude movies/series released before this year.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Minimum Runtime (minutes)
+                    </label>
+                    <select
+                      value={settings.min_runtime || 0}
+                      onChange={(e) => updateSetting('min_runtime', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {[0,30,45,60,75,90,120].map((m) => (
+                        <option key={m} value={m}>{m} minutes</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">Exclude short content (trailers, clips). 60+ recommended for movies.</p>
+                  </div>
+                </div>
               </div>
 
               <div className="pt-4 border-t border-white/10">
@@ -2260,7 +2577,7 @@ export default function Settings() {
           </div>
         )}
 
-        {/* Live TV Tab */}
+        {/* TV & IPTV Tab */}
         {activeTab === 'livetv' && (
           <div className="bg-[#1e1e1e] rounded-xl p-6 border border-white/10">
             <div className="space-y-6">
@@ -2343,14 +2660,16 @@ export default function Settings() {
                     <label htmlFor="iptv_vod_sync_interval_hours" className="text-sm text-slate-300">
                       IPTV VOD Sync Interval (hours)
                     </label>
-                    <input
-                      type="number"
+                    <select
                       id="iptv_vod_sync_interval_hours"
-                      min={1}
                       value={Number(settings.iptv_vod_sync_interval_hours || 6)}
-                      onChange={(e) => updateSetting('iptv_vod_sync_interval_hours', Math.max(1, parseInt(e.target.value || '6', 10)))}
-                      className="w-24 p-2 bg-[#2a2a2a] border border-white/10 rounded text-white"
-                    />
+                      onChange={(e) => updateSetting('iptv_vod_sync_interval_hours', Number(e.target.value))}
+                      className="w-40 p-2 bg-[#2a2a2a] border border-white/10 rounded text-white"
+                    >
+                      {[1,3,6,12,24,48,72,168].map(h => (
+                        <option key={h} value={h}>{h} hours</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-slate-500">Controls auto-import/cleanup cadence (default 6h)</span>
@@ -2487,6 +2806,8 @@ export default function Settings() {
                   </div>
                 )}
               </div>
+
+              
 
               {/* Custom M3U Sources */}
               <div className="p-4 bg-purple-900/20 border border-purple-800 rounded-lg">
@@ -3027,6 +3348,179 @@ export default function Settings() {
                 </div>
               )}
 
+              <hr className="border-white/10" />
+
+              {/* Xtream Codes API (moved from Xtream tab) */}
+              <div>
+                <div className="mb-4 p-4 bg-purple-900/30 border border-purple-800 rounded-lg">
+                  <h3 className="text-purple-400 font-medium mb-2">📡 Xtream Codes API</h3>
+                  <p className="text-sm text-slate-300">
+                    StreamArr exposes an Xtream Codes compatible API that can be used with IPTV players like TiviMate, XCIPTV, or OTT Navigator.
+                  </p>
+                </div>
+
+                {/* Xtream Credentials Configuration */}
+                <div>
+                  <h3 className="text-lg font-medium text-white mb-4">🔐 Xtream API Credentials</h3>
+                  <div className="bg-[#2a2a2a] rounded-lg p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-300 mb-2">Xtream Username</label>
+                        <input
+                          type="text"
+                          value={settings.xtream_username || 'streamarr'}
+                          onChange={(e) => updateSetting('xtream_username', e.target.value)}
+                          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                          placeholder="streamarr"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-300 mb-2">Xtream Password</label>
+                        <input
+                          type="text"
+                          value={settings.xtream_password || 'streamarr'}
+                          onChange={(e) => updateSetting('xtream_password', e.target.value)}
+                          className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                          placeholder="streamarr"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Use these credentials in your IPTV player, not your web app password. Click "Save Changes" at the top after modifying.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Connection Details */}
+                <div>
+                  <h3 className="text-lg font-medium text-white mb-4">🔗 Connection Details</h3>
+                  <div className="bg-[#2a2a2a] rounded-lg p-4 space-y-4">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Server URL</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={`http://${settings.host || 'localhost'}:${settings.server_port || 8080}`}
+                          readOnly
+                          className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}`);
+                            setMessage('Server URL copied to clipboard');
+                            setTimeout(() => setMessage(''), 2000);
+                          }}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Username</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={settings.xtream_username || 'streamarr'}
+                            readOnly
+                            className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(settings.xtream_username || 'streamarr');
+                              setMessage('Username copied to clipboard');
+                              setTimeout(() => setMessage(''), 2000);
+                            }}
+                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-400 mb-1">Password</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={settings.xtream_password || 'streamarr'}
+                            readOnly
+                            className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(settings.xtream_password || 'streamarr');
+                              setMessage('Password copied to clipboard');
+                              setTimeout(() => setMessage(''), 2000);
+                            }}
+                            className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* API Endpoints & Quick Setup */}
+                <div className="p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+                  <h4 className="text-red-400 font-medium mb-3">📱 Quick Setup for IPTV Players</h4>
+                  <div className="space-y-3 text-sm text-slate-300">
+                    <div>
+                      <strong className="text-white">TiviMate / XCIPTV / OTT Navigator:</strong>
+                      <ol className="list-decimal list-inside mt-1 space-y-1 ml-2">
+                        <li>Select "Xtream Codes" or "Xtream Codes API"</li>
+                        <li>Enter the Server URL, Username, and Password from above</li>
+                        <li>Save and refresh to load your channels</li>
+                      </ol>
+                    </div>
+                    <div>
+                      <strong className="text-white">M3U URL (Alternative):</strong>
+                      <div className="mt-1 flex gap-2">
+                        <code className="flex-1 text-xs bg-[#2a2a2a] px-2 py-1 rounded overflow-x-auto">
+                          {`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/get.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}&type=m3u_plus&output=ts`}
+                        </code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/get.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}&type=m3u_plus&output=ts`);
+                            setMessage('M3U URL copied to clipboard');
+                            setTimeout(() => setMessage(''), 2000);
+                          }}
+                          className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* EPG Info */}
+                <div className="p-4 bg-green-900/20 border border-green-800 rounded-lg">
+                  <h4 className="text-green-400 font-medium mb-2">📺 EPG (Electronic Program Guide)</h4>
+                  <p className="text-sm text-slate-300 mb-2">
+                    EPG data is available for Live TV channels. Use this URL in your IPTV player:
+                  </p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 text-xs bg-[#2a2a2a] px-2 py-1 rounded overflow-x-auto text-slate-300">
+                      {`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`http://${settings.host || 'localhost'}:${settings.server_port || 8080}/xmltv.php?username=${settings.xtream_username || 'streamarr'}&password=${settings.xtream_password || 'streamarr'}`);
+                        setMessage('EPG URL copied to clipboard');
+                        setTimeout(() => setMessage(''), 2000);
+                      }}
+                      className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div className="p-4 bg-yellow-900/20 border border-yellow-800 rounded-lg">
                 <h4 className="text-yellow-400 font-medium mb-2">💡 Tips</h4>
                 <ul className="text-sm text-slate-300 space-y-1 list-disc list-inside">
@@ -3274,69 +3768,129 @@ export default function Settings() {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Excluded Release Groups
-                </label>
-                <input
-                  type="text"
-                  value={settings.excluded_release_groups || ''}
-                  onChange={(e) => updateSetting('excluded_release_groups', e.target.value)}
-                  className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
-                  placeholder="TVHUB|FILM"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Block releases from specific groups. Example: <code className="bg-[#2a2a2a] px-1 rounded">TVHUB|FILM</code> blocks Russian releases like "Movie.TVHUB.FILM.mkv"
-                </p>
-              </div>
+              <details className="group">
+                <summary className="cursor-pointer flex items-center justify-between px-3 py-2 bg-[#2a2a2a] rounded-lg border border-white/10 text-slate-200">
+                  <span className="font-medium">Advanced Filters</span>
+                  <span className="text-xs text-slate-400 group-open:hidden">show</span>
+                  <span className="text-xs text-slate-400 hidden group-open:inline">hide</span>
+                </summary>
+                <div className="mt-4 space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Excluded Release Groups
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.excluded_release_groups || ''}
+                      onChange={(e) => updateSetting('excluded_release_groups', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
+                      placeholder="TVHUB|FILM"
+                    />
+                    <div className="mt-2">
+                      <label className="block text-xs text-slate-400 mb-1">Quick Select</label>
+                      <select
+                        multiple
+                        value={toPipeArray(settings.excluded_release_groups)}
+                        onChange={(e) => {
+                          const values = Array.from(e.target.selectedOptions).map(o => o.value);
+                          updateSetting('excluded_release_groups', values.join('|'));
+                        }}
+                        className="w-full px-2 py-1 bg-[#2a2a2a] border border-white/10 rounded-lg text-white text-xs focus:outline-none focus:border-blue-500"
+                      >
+                        {['TVHUB','FILM','FS','NOGRP','SAMPLE','TRAILER'].map(tag => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-500 mt-1">Use Cmd/Ctrl for multi-select</p>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Block releases from specific groups. Example: <code className="bg-[#2a2a2a] px-1 rounded">TVHUB|FILM</code> blocks Russian releases like "Movie.TVHUB.FILM.mkv"
+                    </p>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Excluded Language Tags
-                </label>
-                <input
-                  type="text"
-                  value={settings.excluded_language_tags || ''}
-                  onChange={(e) => updateSetting('excluded_language_tags', e.target.value)}
-                  className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
-                  placeholder="RUSSIAN|RUS|HINDI|HIN|GERMAN|GER|FRENCH|FRE|ITALIAN|ITA|SPANISH|SPA|LATINO"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Block releases with language indicators in filename. Example: <code className="bg-[#2a2a2a] px-1 rounded">RUSSIAN|RUS|HINDI|GERMAN</code>
-                </p>
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Excluded Language Tags
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.excluded_language_tags || ''}
+                      onChange={(e) => updateSetting('excluded_language_tags', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
+                      placeholder="RUSSIAN|RUS|HINDI|HIN|GERMAN|GER|FRENCH|FRE|ITALIAN|ITA|SPANISH|SPA|LATINO"
+                    />
+                    <div className="mt-2">
+                      <label className="block text-xs text-slate-400 mb-1">Quick Select</label>
+                      <select
+                        multiple
+                        value={toPipeArray(settings.excluded_language_tags)}
+                        onChange={(e) => {
+                          const values = Array.from(e.target.selectedOptions).map(o => o.value);
+                          updateSetting('excluded_language_tags', values.join('|'));
+                        }}
+                        className="w-full px-2 py-1 bg-[#2a2a2a] border border-white/10 rounded-lg text-white text-xs focus:outline-none focus:border-blue-500"
+                      >
+                        {releaseLanguageTagOptions.map(tag => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-500 mt-1">Hold Cmd/Ctrl to select multiple tags</p>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Block releases with language indicators in filename. Example: <code className="bg-[#2a2a2a] px-1 rounded">RUSSIAN|RUS|HINDI|GERMAN</code>
+                    </p>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Excluded Qualities
-                </label>
-                <input
-                  type="text"
-                  value={settings.excluded_qualities || ''}
-                  onChange={(e) => updateSetting('excluded_qualities', e.target.value)}
-                  className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
-                  placeholder="REMUX|HDR|DV|Dolby.?Vision|3D|CAM|TS|SCR|HDTS|HDCAM|TELESYNC|TELECINE|TC"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Block certain quality types. Example: <code className="bg-[#2a2a2a] px-1 rounded">REMUX|HDR|CAM|TS</code> blocks REMUX (too large), HDR (compatibility), CAM/TS (low quality)
-                </p>
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Excluded Qualities
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.excluded_qualities || ''}
+                      onChange={(e) => updateSetting('excluded_qualities', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
+                      placeholder="REMUX|HDR|DV|Dolby.?Vision|3D|CAM|TS|SCR|HDTS|HDCAM|TELESYNC|TELECINE|TC"
+                    />
+                    <div className="mt-2">
+                      <label className="block text-xs text-slate-400 mb-1">Quick Select</label>
+                      <select
+                        multiple
+                        value={toPipeArray(settings.excluded_qualities)}
+                        onChange={(e) => {
+                          const values = Array.from(e.target.selectedOptions).map(o => o.value);
+                          updateSetting('excluded_qualities', values.join('|'));
+                        }}
+                        className="w-full px-2 py-1 bg-[#2a2a2a] border border-white/10 rounded-lg text-white text-xs focus:outline-none focus:border-blue-500"
+                      >
+                        {qualityTagOptions.map(tag => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-500 mt-1">Use Cmd/Ctrl for multi-select</p>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Block certain quality types. Example: <code className="bg-[#2a2a2a] px-1 rounded">REMUX|HDR|CAM|TS</code> blocks REMUX (too large), HDR (compatibility), CAM/TS (low quality)
+                    </p>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Custom Exclude Patterns (Advanced)
-                </label>
-                <input
-                  type="text"
-                  value={settings.custom_exclude_patterns || ''}
-                  onChange={(e) => updateSetting('custom_exclude_patterns', e.target.value)}
-                  className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
-                  placeholder="Sample|Trailer|\\[Dual\\]"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Custom regex patterns. Example: <code className="bg-[#2a2a2a] px-1 rounded">Sample|Trailer</code> blocks sample files and trailers
-                </p>
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Custom Exclude Patterns (Advanced)
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.custom_exclude_patterns || ''}
+                      onChange={(e) => updateSetting('custom_exclude_patterns', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
+                      placeholder="Sample|Trailer|\\[Dual\\]"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Custom regex patterns. Example: <code className="bg-[#2a2a2a] px-1 rounded">Sample|Trailer</code> blocks sample files and trailers
+                    </p>
+                  </div>
+                </div>
+              </details>
 
               {/* Filter Preview */}
               <div className="pt-6 border-t border-white/10">
@@ -4278,15 +4832,16 @@ export default function Settings() {
                     <label className="block text-sm font-medium text-slate-300 mb-2">
                       Auto Cache Interval (hours)
                     </label>
-                    <input
-                      type="number"
+                    <select
                       value={settings.auto_cache_interval_hours || 6}
                       onChange={(e) => updateSetting('auto_cache_interval_hours', Number(e.target.value))}
                       className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                      min="1"
-                      max="168"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">How often to refresh library metadata and sync MDBLists (1-168 hours)</p>
+                    >
+                      {[1, 3, 6, 12, 24, 48, 72, 168].map((h) => (
+                        <option key={h} value={h}>{h} hours</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">How often to refresh library metadata and sync MDBLists</p>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -4302,6 +4857,64 @@ export default function Settings() {
                     </label>
                   </div>
                   <p className="text-xs text-slate-500 ml-6 -mt-2">Verbose logging for troubleshooting</p>
+                </div>
+              </div>
+
+              {/* Proxy Settings */}
+              <div className="bg-gray-900 rounded-lg p-4 mb-6">
+                <h4 className="text-slate-300 font-medium mb-4">Proxy</h4>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="use_http_proxy"
+                      checked={settings.use_http_proxy || false}
+                      onChange={(e) => updateSetting('use_http_proxy', e.target.checked)}
+                      className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded"
+                    />
+                    <label htmlFor="use_http_proxy" className="text-sm text-slate-300">Use HTTP Proxy</label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Proxy Address</label>
+                    <input
+                      type="text"
+                      value={settings.http_proxy || ''}
+                      onChange={(e) => updateSetting('http_proxy', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
+                      placeholder="http://user:pass@host:port"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Example: http://127.0.0.1:8080 or http://user:pass@proxy.local:3128</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Headless VidX */}
+              <div className="bg-gray-900 rounded-lg p-4 mb-6">
+                <h4 className="text-slate-300 font-medium mb-4">Headless VidX</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Service Address</label>
+                    <input
+                      type="text"
+                      value={settings.headless_vidx_address || ''}
+                      onChange={(e) => updateSetting('headless_vidx_address', e.target.value)}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 font-mono text-sm"
+                      placeholder="http://localhost:9000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Max Threads</label>
+                    <select
+                      value={settings.headless_vidx_max_threads || 4}
+                      onChange={(e) => updateSetting('headless_vidx_max_threads', Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {[1,2,4,8,16,24,32].map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">Tune concurrency for processing; higher values use more CPU.</p>
+                  </div>
                 </div>
               </div>
 
@@ -4352,6 +4965,18 @@ export default function Settings() {
                         Released: {new Date(versionInfo.latest_date).toLocaleDateString()}
                       </div>
                     )}
+                    <div className="mt-3">
+                      <label className="block text-xs text-slate-400 mb-1">Update Channel</label>
+                      <select
+                        value={settings.update_branch || 'stable'}
+                        onChange={(e) => updateSetting('update_branch', e.target.value)}
+                        className="px-3 py-2 bg-[#1f1f1f] border border-white/10 rounded text-white text-sm"
+                      >
+                        <option value="stable">stable</option>
+                        <option value="beta">beta</option>
+                        <option value="nightly">nightly</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>

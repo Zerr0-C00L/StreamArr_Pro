@@ -176,9 +176,6 @@ func (s *SettingsStore) mapToResponse(m map[string]string) *models.SettingsRespo
 		Debug:                        getBool("debug"),
 		XtreamUsername:               getStringWithDefault("xtream_username", "streamarr"),
 		XtreamPassword:               getStringWithDefault("xtream_password", "streamarr"),
-		ZileanEnabled:                getBool("zilean_enabled"),
-		ZileanURL:                    getStringWithDefault("zilean_url", "http://localhost:8181"),
-		ZileanAPIKey:                 getString("zilean_api_key"),
 	}
 }
 
@@ -227,8 +224,5 @@ func (s *SettingsStore) responseToMap(r *models.SettingsResponse) map[string]str
 		"debug":                          fmt.Sprintf("%t", r.Debug),
 		"xtream_username":                r.XtreamUsername,
 		"xtream_password":                r.XtreamPassword,
-		"zilean_enabled":                 fmt.Sprintf("%t", r.ZileanEnabled),
-		"zilean_url":                     r.ZileanURL,
-		"zilean_api_key":                 r.ZileanAPIKey,
 	}
 }

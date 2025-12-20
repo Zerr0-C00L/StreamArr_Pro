@@ -63,17 +63,7 @@ type MultiProvider struct {
 	cometProvider     *CometProvider     // Comet for real-time search
 }
 
-// GetZileanProvider returns nil (Zilean removed, using DMM instead)
-func (mp *MultiProvider) GetZileanProvider() *ZileanProvider {
-	return nil
-}
-
-// ZileanConfig kept for backward compatibility but not used
-type ZileanConfig struct {
-	Enabled bool
-	URL     string
-	APIKey  string
-}
+// Removed Zilean-related code: provider and config
 
 // CometProviderConfig for configuring Comet provider
 type CometProviderConfig struct {
@@ -83,14 +73,12 @@ type CometProviderConfig struct {
 }
 
 func NewMultiProvider(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient) *MultiProvider {
-	return NewMultiProviderWithConfig(rdAPIKey, addons, tmdbClient, nil, nil)
+	return NewMultiProviderWithConfig(rdAPIKey, addons, tmdbClient, nil)
 }
 
-func NewMultiProviderWithZilean(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient, zileanCfg *ZileanConfig) *MultiProvider {
-	return NewMultiProviderWithConfig(rdAPIKey, addons, tmdbClient, zileanCfg, nil)
-}
+// Removed NewMultiProviderWithZilean (deprecated)
 
-func NewMultiProviderWithConfig(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient, zileanCfg *ZileanConfig, cometCfg *CometProviderConfig) *MultiProvider {
+func NewMultiProviderWithConfig(rdAPIKey string, addons []StremioAddon, tmdbClient *services.TMDBClient, cometCfg *CometProviderConfig) *MultiProvider {
 	mp := &MultiProvider{
 		Providers:     make([]StreamProvider, 0),
 		ProviderNames: make([]string, 0),

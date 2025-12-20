@@ -108,21 +108,11 @@ type Settings struct {
 	LiveTVEnablePlutoTV   bool        `json:"livetv_enable_plutotv"`     // Enable built-in Pluto TV channels
 	LiveTVValidateStreams bool        `json:"livetv_validate_streams"`   // Validate stream URLs before loading channels
 	
-	// IPTV-Org Settings (https://github.com/iptv-org/iptv)
-	IPTVOrgEnabled       bool     `json:"iptv_org_enabled"`        // Enable iptv-org.github.io channels
-	IPTVOrgCountries     []string `json:"iptv_org_countries"`      // Selected country codes (e.g., ["us", "uk", "ca"])
-	IPTVOrgLanguages     []string `json:"iptv_org_languages"`      // Selected language codes (e.g., ["eng", "spa", "fra"])
-	IPTVOrgCategories    []string `json:"iptv_org_categories"`     // Selected categories (e.g., ["news", "sports", "movies"])
 	
 	// Provider Settings
 	UseRealDebrid      bool            `json:"use_realdebrid"`
 	UsePremiumize      bool            `json:"use_premiumize"`
 	StremioAddons      []StremioAddon  `json:"stremio_addons"` // Custom Stremio addons for content providers
-	
-	// Zilean DMM Integration (deprecated)
-	ZileanEnabled bool   `json:"zilean_enabled"` // Enable Zilean DMM torrent indexer
-	ZileanURL     string `json:"zilean_url"`     // Zilean API endpoint
-	ZileanAPIKey  string `json:"zilean_api_key"` // Optional Zilean API key
 	
 	// Comet Provider Settings
 	CometEnabled           bool   `json:"comet_enabled"`            // Enable Comet torrent provider
@@ -235,9 +225,6 @@ func getDefaultSettings() *Settings {
 		AutoCacheIntervalHours: 6,
 		UseRealDebrid:          true,
 		UsePremiumize:          false,
-		ZileanEnabled:          false,
-		ZileanURL:              "http://localhost:8181",
-		ZileanAPIKey:           "",
 		CometEnabled:           true,
 		CometIndexers:          "bitorrent,therarbg,yts,eztv,thepiratebay",
 		CometOnlyShowCached:    true,  // Default to only cached for faster playback
@@ -579,9 +566,6 @@ func (m *Manager) GetAll() (map[string]interface{}, error) {
 		"mdblist_api_key":              m.settings.MDBListAPIKey,
 		"use_realdebrid":               m.settings.UseRealDebrid,
 		"use_premiumize":               m.settings.UsePremiumize,
-		"zilean_enabled":               m.settings.ZileanEnabled,
-		"zilean_url":                   m.settings.ZileanURL,
-		"zilean_api_key":               m.settings.ZileanAPIKey,
 		"comet_enabled":                m.settings.CometEnabled,
 		"comet_indexers":               m.settings.CometIndexers,
 		"comet_only_show_cached":       m.settings.CometOnlyShowCached,
@@ -632,15 +616,6 @@ func (m *Manager) SetAll(updates map[string]interface{}) error {
 	}
 	if v, ok := updates["use_premiumize"].(bool); ok {
 		m.settings.UsePremiumize = v
-	}
-	if v, ok := updates["zilean_enabled"].(bool); ok {
-		m.settings.ZileanEnabled = v
-	}
-	if v, ok := updates["zilean_url"].(string); ok {
-		m.settings.ZileanURL = v
-	}
-	if v, ok := updates["zilean_api_key"].(string); ok {
-		m.settings.ZileanAPIKey = v
 	}
 	if v, ok := updates["comet_enabled"].(bool); ok {
 		m.settings.CometEnabled = v

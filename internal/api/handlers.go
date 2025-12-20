@@ -44,46 +44,6 @@ type Handler struct {
 	streamProvider  *providers.MultiProvider
 }
 
-// GetZileanStats returns statistics about Zilean
-func (h *Handler) GetZileanStats(w http.ResponseWriter, r *http.Request) {
-	// Check if Zilean is enabled
-	currentSettings := h.settingsManager.Get()
-	if !currentSettings.ZileanEnabled {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"enabled": false,
-			"status":  "disabled",
-		})
-		return
-	}
-
-	// Get Zilean provider from MultiProvider
-	zileanProvider := h.streamProvider.GetZileanProvider()
-	if zileanProvider == nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"enabled": true,
-			"status":  "not_configured",
-		})
-		return
-	}
-
-	// Get stats
-	ctx := r.Context()
-	stats, err := zileanProvider.GetStats(ctx)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get Zilean stats: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"enabled":       true,
-		"status":        stats.Status,
-		"healthy":       stats.Healthy,
-		"torrent_count": stats.TorrentCount,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
 
 func NewHandler(
 	movieStore *database.MovieStore,
@@ -2149,28 +2109,7 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Live TV: Stream validation enabled=%v", newSettings.LiveTVValidateStreams)
 		}
 
-		// Apply IPTV-org settings
-		if h.channelManager != nil {
-			h.channelManager.SetIPTVOrgConfig(livetv.IPTVOrgConfig{
-				Enabled:    newSettings.IPTVOrgEnabled,
-				Countries:  newSettings.IPTVOrgCountries,
-				Languages:  newSettings.IPTVOrgLanguages,
-				Categories: newSettings.IPTVOrgCategories,
-			})
-			if newSettings.IPTVOrgEnabled {
-				log.Printf("Live TV: IPTV-org enabled (countries: %v, languages: %v, categories: %v)",
-					newSettings.IPTVOrgCountries, newSettings.IPTVOrgLanguages, newSettings.IPTVOrgCategories)
-			} else {
-				log.Println("Live TV: IPTV-org disabled")
-			}
-
-			// Reload channels to apply IPTV-org changes
-			if err := h.channelManager.LoadChannels(); err != nil {
-				log.Printf("Warning: Failed to reload channels after IPTV-org update: %v", err)
-			} else {
-				log.Printf("Live TV: Reloaded %d channels after settings update", len(h.channelManager.GetAllChannels()))
-			}
-		}
+		// Live TV settings applied
 
 		// Trigger IPTV VOD import/cleanup in background if mode includes VOD or sources changed
 		go func(ns settings.Settings) {

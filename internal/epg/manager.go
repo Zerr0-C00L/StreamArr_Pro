@@ -44,27 +44,9 @@ func NewEPGManager() *Manager {
 }
 
 // NewEPGManagerWithSettings creates an EPG manager with country-specific sources
-func NewEPGManagerWithSettings(countries []string) *Manager {
-	manager := &Manager{
-		programs: make(map[string][]livetv.EPGProgram),
-		sources:  []EPGSource{},
-	}
-
-	// Register EPG sources with countries
-	if len(countries) > 0 {
-		manager.sources = append(manager.sources,
-			NewXMLTVSourceWithCountries(countries),
-			NewPlutoTVEPGSource(),
-		)
-	} else {
-		// Fallback to default sources
-		manager.sources = append(manager.sources,
-			NewXMLTVSource(),
-			NewPlutoTVEPGSource(),
-		)
-	}
-
-	return manager
+// NewEPGManagerWithSettings kept for backward compatibility; now ignores countries
+func NewEPGManagerWithSettings(_ []string) *Manager {
+	return NewEPGManager()
 }
 
 // GetEPG returns EPG data for a specific channel
@@ -263,10 +245,6 @@ func NewXMLTVSource() *XMLTVSource {
 		urls: []string{
 			// Serbian Forum EPG - PRIMARY SOURCE for Balkan channels (1,261 channels, 30,426 programs)
 			"http://epg.serbianforum.org/losmij/epg.xml.gz",
-			// IPTV-org EPG from GitHub - for other channels
-			"https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/iptv-org-epg/guide-ba.xml.gz",
-			"https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/iptv-org-epg/guide-hr.xml.gz",
-			"https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/iptv-org-epg/guide-rs.xml.gz",
 			// Additional EPG sources
 			"https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/epg.xml",
 			"https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/Pluto-TV/us.xml",
@@ -277,29 +255,7 @@ func NewXMLTVSource() *XMLTVSource {
 }
 
 // NewXMLTVSourceWithCountries creates an XMLTV source with dynamic country EPG
-func NewXMLTVSourceWithCountries(countries []string) *XMLTVSource {
-	urls := []string{
-		// Serbian Forum EPG - PRIMARY SOURCE for Balkan channels (1,261 channels, 30,426 programs)
-		"http://epg.serbianforum.org/losmij/epg.xml.gz",
-	}
-	
-	// Add country-specific EPG files from your GitHub repo
-	for _, country := range countries {
-		url := fmt.Sprintf("https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/iptv-org-epg/guide-%s.xml.gz", strings.ToLower(country))
-		urls = append(urls, url)
-	}
-	
-	// Add additional EPG sources
-	urls = append(urls,
-		"https://raw.githubusercontent.com/Zerr0-C00L/public-files/main/epg.xml",
-		"http://epg.streamstv.me/epg/guide-all.xml.gz",
-	)
-	
-	return &XMLTVSource{
-		urls:   urls,
-		client: &http.Client{Timeout: 60 * time.Second},
-	}
-}
+// NewXMLTVSourceWithCountries removed (country-specific XMLTV source no longer used)
 
 // AddCustomURL adds a custom EPG URL to the XMLTV source
 func (x *XMLTVSource) AddCustomURL(url string) {

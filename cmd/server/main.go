@@ -243,17 +243,6 @@ func main() {
 		log.Println("Live TV: Stream validation enabled - broken streams will be filtered")
 	}
 	
-	// Set IPTV-org configuration from settings
-	if currentSettings.IPTVOrgEnabled {
-		channelManager.SetIPTVOrgConfig(livetv.IPTVOrgConfig{
-			Enabled:    true,
-			Countries:  currentSettings.IPTVOrgCountries,
-			Languages:  currentSettings.IPTVOrgLanguages,
-			Categories: currentSettings.IPTVOrgCategories,
-		})
-		log.Printf("Live TV: IPTV-org enabled (countries: %v, languages: %v, categories: %v)", 
-			currentSettings.IPTVOrgCountries, currentSettings.IPTVOrgLanguages, currentSettings.IPTVOrgCategories)
-	}
 	
 	if err := channelManager.LoadChannels(); err != nil {
 		log.Printf("Warning: Could not load channels: %v", err)
@@ -291,9 +280,9 @@ func main() {
 		}
 	}
 
-	// Initialize EPG manager with settings
+	// Initialize EPG manager
 	settings := settingsManager.Get()
-	epgManager := epg.NewEPGManagerWithSettings(settings.IPTVOrgCountries)
+	epgManager := epg.NewEPGManager()
 	
 	// Add custom EPG URLs from M3U sources
 	log.Printf("Live TV: Checking %d M3U sources for EPG URLs", len(settings.M3USources))
@@ -342,7 +331,7 @@ func main() {
 	}
 	
 	// Create MultiProvider with Comet configuration
-	multiProvider := providers.NewMultiProviderWithConfig(cfg.RealDebridAPIKey, stremioAddons, tmdbClient, nil, cometCfg)
+	multiProvider := providers.NewMultiProviderWithConfig(cfg.RealDebridAPIKey, stremioAddons, tmdbClient, cometCfg)
 	log.Printf("✓ Stream providers enabled: %v", multiProvider.ProviderNames)
 	
 	xtreamHandler := xtream.NewXtreamHandlerWithProvider(cfg, db, tmdbClient, rdClient, channelManager, epgManager, multiProvider)

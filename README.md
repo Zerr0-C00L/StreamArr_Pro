@@ -274,7 +274,6 @@ Sort streams by:
 | Source | Channels | Region |
 |--------|----------|--------|
 | PlutoTV | varies | User-configured |
-| IPTV-org | varies | User-configured |
 | Custom M3U | varies | User-configured |
 
 ### Adding Custom Sources
@@ -283,7 +282,7 @@ Sort streams by:
 3. Click Save, then refresh channels
 
 ### EPG (Program Guide)
-EPG is automatically loaded from multiple sources. Manual refresh available in **Settings → Services**.
+EPG is automatically loaded from multiple sources (XMLTV, Pluto TV, and custom URLs from your M3U sources). Manual refresh available in **Settings → Services**.
 
 ---
 
