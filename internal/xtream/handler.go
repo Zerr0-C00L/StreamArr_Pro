@@ -341,72 +341,6 @@ func (h *XtreamHandler) saveEpisodeCache() {
 	log.Printf("Saved %d episodes to cache", len(h.episodeCache))
 }
 
-// getReleaseFilters loads release filter settings from the database
-func (h *XtreamHandler) getReleaseFilters() *providers.ReleaseFilters {
-	filters := &providers.ReleaseFilters{}
-	
-	// Query settings from database
-	rows, err := h.db.Query(`SELECT key, value FROM settings WHERE key IN ('enable_release_filters', 'excluded_release_groups', 'excluded_languages', 'excluded_qualities')`)
-	if err != nil {
-		log.Printf("Error loading release filters: %v", err)
-		return filters
-	}
-	defer rows.Close()
-	
-	for rows.Next() {
-		var key, value string
-		if err := rows.Scan(&key, &value); err != nil {
-			continue
-		}
-		switch key {
-		case "enable_release_filters":
-			filters.Enabled = value == "true"
-		case "excluded_release_groups":
-			filters.ExcludedGroups = value
-		case "excluded_languages":
-			filters.ExcludedLanguages = value
-		case "excluded_qualities":
-			filters.ExcludedQualities = value
-		}
-	}
-	
-	return filters
-}
-
-// getStreamSortOptions loads stream sorting settings from the database
-func (h *XtreamHandler) getStreamSortOptions() *providers.StreamSortOptions {
-	opts := &providers.StreamSortOptions{
-		SortOrder:  "quality,size,seeders", // default
-		SortPrefer: "best",                  // default
-	}
-	
-	rows, err := h.db.Query(`SELECT key, value FROM settings WHERE key IN ('stream_sort_order', 'stream_sort_prefer')`)
-	if err != nil {
-		log.Printf("Error loading sort options: %v", err)
-		return opts
-	}
-	defer rows.Close()
-	
-	for rows.Next() {
-		var key, value string
-		if err := rows.Scan(&key, &value); err != nil {
-			continue
-		}
-		switch key {
-		case "stream_sort_order":
-			if value != "" {
-				opts.SortOrder = value
-			}
-		case "stream_sort_prefer":
-			if value != "" {
-				opts.SortPrefer = value
-			}
-		}
-	}
-	
-	return opts
-}
-
 // getYouTubeTrailer fetches the YouTube trailer ID for a movie or series from TMDB
 func (h *XtreamHandler) getYouTubeTrailer(tmdbID int64, mediaType string) string {
 	ctx := context.Background()
@@ -1912,13 +1846,9 @@ func (h *XtreamHandler) playEpisodeByIMDB(w http.ResponseWriter, r *http.Request
 	log.Printf("[PLAY] Episode request: IMDB %s S%02dE%02d from IP %s", imdbID, seasonNum, episodeNum, r.RemoteAddr)
 	startTime := time.Now()
 	
-	// Get release filters and sort options from settings
-	filters := h.getReleaseFilters()
-	sortOpts := h.getStreamSortOptions()
-	
 	// Get stream from providers
 	log.Printf("[PLAY] Fetching streams for %s S%02dE%02d...", imdbID, seasonNum, episodeNum)
-	stream, err := h.multiProvider.GetBestStream(imdbID, &seasonNum, &episodeNum, h.cfg.MaxResolution, filters, sortOpts)
+	stream, err := h.multiProvider.GetBestStream(imdbID, &seasonNum, &episodeNum, h.cfg.MaxResolution, nil, nil)
 	elapsed := time.Since(startTime)
 	
 	if err != nil {
@@ -2059,12 +1989,8 @@ func (h *XtreamHandler) playMovie(w http.ResponseWriter, r *http.Request, vodID 
 	
 	log.Printf("[PLAY] Fetching streams for movie TMDB %d, IMDB %s...", tmdbID, imdbID.String)
 	
-	// Get release filters and sort options from settings
-	filters := h.getReleaseFilters()
-	sortOpts := h.getStreamSortOptions()
-	
 	// Get stream from providers
-	stream, err := h.multiProvider.GetBestStream(imdbID.String, nil, nil, h.cfg.MaxResolution, filters, sortOpts)
+	stream, err := h.multiProvider.GetBestStream(imdbID.String, nil, nil, h.cfg.MaxResolution, nil, nil)
 	elapsed := time.Since(startTime)
 	
 	if err != nil {
@@ -2139,12 +2065,8 @@ func (h *XtreamHandler) playEpisode(w http.ResponseWriter, r *http.Request, seri
 	
 	log.Printf("Playing series TMDB ID %d, IMDB ID %s, S%02dE%02d", tmdbID, imdbID.String, seasonNum, episodeNum)
 	
-	// Get release filters and sort options from settings
-	filters := h.getReleaseFilters()
-	sortOpts := h.getStreamSortOptions()
-	
 	// Get stream from providers
-	stream, err := h.multiProvider.GetBestStream(imdbID.String, &seasonNum, &episodeNum, h.cfg.MaxResolution, filters, sortOpts)
+	stream, err := h.multiProvider.GetBestStream(imdbID.String, &seasonNum, &episodeNum, h.cfg.MaxResolution, nil, nil)
 	if err != nil {
 		log.Printf("Error getting stream: %v", err)
 		http.Error(w, "Stream not available", http.StatusNotFound)

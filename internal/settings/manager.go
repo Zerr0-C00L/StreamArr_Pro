@@ -141,17 +141,6 @@ type Settings struct {
 	TelegramBotToken    string `json:"telegram_bot_token"`
 	TelegramChatID      string `json:"telegram_chat_id"`
 	
-	// Release Filter Settings
-	EnableReleaseFilters  bool   `json:"enable_release_filters"`   // Enable/disable release filtering
-	ExcludedReleaseGroups string `json:"excluded_release_groups"` // Pipe-separated patterns
-	ExcludedLanguageTags  string `json:"excluded_language_tags"`  // Pipe-separated patterns
-	ExcludedQualities     string `json:"excluded_qualities"`      // Pipe-separated patterns
-	CustomExcludePatterns string `json:"custom_exclude_patterns"` // Pipe-separated regex patterns
-	
-	// Stream Sorting Settings
-	StreamSortOrder  string `json:"stream_sort_order"`  // e.g., "quality,size,seeders"
-	StreamSortPrefer string `json:"stream_sort_prefer"` // "best", "smallest", or "balanced"
-	
 	// Stream Availability Settings
 	HideUnavailableContent bool `json:"hide_unavailable_content"` // Don't show movies/episodes with no streams
 	

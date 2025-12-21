@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -118,94 +117,6 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 
 func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, map[string]string{"error": message})
-}
-
-// applyReleaseFilters filters out streams that match the release filter patterns
-func (h *Handler) applyReleaseFilters(streams []providers.TorrentioStream) []providers.TorrentioStream {
-	if h.settingsManager == nil {
-		return streams
-	}
-
-	settings := h.settingsManager.Get()
-	if !settings.EnableReleaseFilters {
-		return streams
-	}
-
-	// Build exclude patterns
-	patterns := make([]string, 0)
-	if settings.ExcludedQualities != "" {
-		patterns = append(patterns, settings.ExcludedQualities)
-	}
-	if settings.ExcludedReleaseGroups != "" {
-		patterns = append(patterns, settings.ExcludedReleaseGroups)
-	}
-	if settings.ExcludedLanguageTags != "" {
-		patterns = append(patterns, settings.ExcludedLanguageTags)
-	}
-
-	if len(patterns) == 0 {
-		return streams
-	}
-
-	// Build regex pattern that matches terms separated by dots, spaces, dashes, etc.
-	combinedPattern := `(?i)(?:^|[\s.\-_\[\]()])(` + strings.Join(patterns, "|") + `)(?:$|[\s.\-_\[\]()])`
-	excludePattern, err := regexp.Compile(combinedPattern)
-	if err != nil {
-		log.Printf("Invalid release filter pattern: %v", err)
-		return streams
-	}
-
-	// Filter streams
-	filtered := make([]providers.TorrentioStream, 0)
-	for _, s := range streams {
-		checkStr := s.Name + " " + s.Title
-		if excludePattern.MatchString(checkStr) {
-			log.Printf("Filtered out stream (release filter): %s", s.Title)
-			continue
-		}
-		filtered = append(filtered, s)
-	}
-
-	log.Printf("Release filter: %d streams -> %d streams (filtered %d)", len(streams), len(filtered), len(streams)-len(filtered))
-	return filtered
-}
-
-// sortStreams sorts streams by quality first (2160p > 1080p > 720p > etc), then by size (larger first)
-func sortStreams(streams []providers.TorrentioStream) {
-	sort.Slice(streams, func(i, j int) bool {
-		// First: sort by quality (higher resolution first)
-		qualityI := qualityToInt(streams[i].Quality)
-		qualityJ := qualityToInt(streams[j].Quality)
-		
-		if qualityI != qualityJ {
-			return qualityI > qualityJ // Higher quality first
-		}
-
-		// Second: sort by size within same quality (larger files first)
-		return streams[i].Size > streams[j].Size
-	})
-}
-
-// qualityToInt converts quality string to integer for sorting (Unknown = 0)
-func qualityToInt(quality string) int {
-	q := strings.ToUpper(quality)
-	if strings.Contains(q, "4K") || strings.Contains(q, "2160") {
-		return 2160
-	}
-	if strings.Contains(q, "1080") {
-		return 1080
-	}
-	if strings.Contains(q, "720") {
-		return 720
-	}
-	if strings.Contains(q, "480") {
-		return 480
-	}
-	if strings.Contains(q, "360") {
-		return 360
-	}
-	// Unknown quality goes last
-	return 0
 }
 
 // ListMovies handles GET /api/movies
@@ -1034,9 +945,6 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 
 	// Streams are already filtered by year from GetMovieStreamsWithYear
 
-	// Apply release filters from settings
-	providerStreams = h.applyReleaseFilters(providerStreams)
-
 	// Check Real-Debrid instant availability for TorrentsDB streams
 	// This sets the Cached field based on actual Real-Debrid cache status
 	if h.rdClient != nil && len(providerStreams) > 0 {
@@ -1070,24 +978,8 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Log quality distribution BEFORE sorting
-	log.Printf("[SORT-DEBUG] BEFORE sorting %d streams:", len(providerStreams))
-	for i, s := range providerStreams {
-		if i < 5 { // Log first 5 streams
-			log.Printf("  [%d] Quality: %s | Size: %.2f GB | Title: %s", i, s.Quality, float64(s.Size)/(1024*1024*1024), s.Title)
-		}
-	}
-
-	// Sort streams: by quality (2160p > 1080p > 720p), then by size (larger first)
-	sortStreams(providerStreams)
-
-	// Log quality distribution AFTER sorting
-	log.Printf("[SORT-DEBUG] AFTER sorting:")
-	for i, s := range providerStreams {
-		if i < 5 { // Log first 5 streams
-			log.Printf("  [%d] Quality: %s | Size: %.2f GB | Title: %s", i, s.Quality, float64(s.Size)/(1024*1024*1024), s.Title)
-		}
-	}
+	// Log stream count
+	log.Printf("[STREAMS] Returning %d streams for movie %s", len(providerStreams), movie.Title)
 
 	// Log cached vs non-cached breakdown
 	cachedCount := 0
@@ -1197,13 +1089,7 @@ func (h *Handler) GetEpisodeStreams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Apply release filters from settings
-	providerStreams = h.applyReleaseFilters(providerStreams)
-
-	// Sort streams: by quality (4K > 1080 > 720 > 480 > Unknown), then by cached status
-	sortStreams(providerStreams)
-
-	log.Printf("Found %d streams for series %s S%02dE%02d after filtering", len(providerStreams), imdbID, season, episode)
+	log.Printf("Found %d streams for series %s S%02dE%02d", len(providerStreams), imdbID, season, episode)
 
 	// Convert provider streams to API response format
 	apiStreams := make([]map[string]interface{}, 0, len(providerStreams))
@@ -1622,22 +1508,9 @@ func (h *Handler) PlayEpisode(w http.ResponseWriter, r *http.Request) {
 
 	// Build exclude patterns from settings
 	var excludePatterns []string
-	if h.settingsManager != nil {
-		settings := h.settingsManager.Get()
-		if settings.EnableReleaseFilters {
-			if settings.ExcludedQualities != "" {
-				excludePatterns = append(excludePatterns, settings.ExcludedQualities)
-			}
-			if settings.ExcludedReleaseGroups != "" {
-				excludePatterns = append(excludePatterns, settings.ExcludedReleaseGroups)
-			}
-			if settings.ExcludedLanguageTags != "" {
-				excludePatterns = append(excludePatterns, settings.ExcludedLanguageTags)
-			}
-		}
-	}
+	// Filters are now handled by addon configuration
 
-	// Always find best stream with current filters applied
+	// Always find best stream
 	stream, err := h.streamStore.FindBestStreamWithFilters(ctx, "series", episode.ID, series.QualityProfile, excludePatterns)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "no streams available")
@@ -4246,6 +4119,8 @@ func validateMovieStreams(streams []providers.TorrentioStream, movieTitle string
 	normalizeForMatch := func(text string) string {
 		// Convert to lowercase
 		text = strings.ToLower(text)
+		// Replace & with 'and' to handle both "Coffee & Kareem" and "Coffee and Kareem"
+		text = strings.ReplaceAll(text, "&", "and")
 		// Replace special chars with spaces: : - . _ etc.
 		text = strings.Map(func(r rune) rune {
 			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == ' ' {

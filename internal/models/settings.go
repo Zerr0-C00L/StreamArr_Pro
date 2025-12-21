@@ -32,10 +32,7 @@ type SettingsResponse struct {
 	DuplicateVODPerProvider bool `json:"duplicate_vod_per_provider"`
 	IPTVVODSyncIntervalHours int `json:"iptv_vod_sync_interval_hours"`
 
-
-	// Quality Settings
-	MaxResolution          int  `json:"max_resolution"`
-	MaxFileSize            int  `json:"max_file_size"`
+	// Stream Settings (quality/size handled by addon configuration)
 	EnableQualityVariants  bool `json:"enable_quality_variants"`
 	ShowFullStreamName     bool `json:"show_full_stream_name"`
 
@@ -69,11 +66,7 @@ type SettingsResponse struct {
 	IncludeOnTheAir              bool `json:"include_on_the_air"`
 	IncludeLatestReleasesSeries  bool `json:"include_latest_releases_series"`
 
-	// Filters
-	EnableReleaseFilters  bool   `json:"enable_release_filters"`
-	ExcludedReleaseGroups string `json:"excluded_release_groups"`
-	ExcludedLanguages     string `json:"excluded_languages"`
-	ExcludedQualities     string `json:"excluded_qualities"`
+	// Filtering REMOVED - now handled by addon URL configuration (e.g., Torrentio debridoptions)
 
 	// Advanced
 	UserSetHost             string `json:"user_set_host"`

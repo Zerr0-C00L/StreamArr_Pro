@@ -3,7 +3,6 @@ package providers
 import (
 	"fmt"
 	"log"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,21 +34,6 @@ type StremioAddon struct {
 	Name    string `json:"name"`
 	URL     string `json:"url"`
 	Enabled bool   `json:"enabled"`
-}
-
-// ReleaseFilters contains settings for filtering out unwanted releases
-type ReleaseFilters struct {
-	Enabled           bool
-	ExcludedQualities string // e.g., "REMUX|HDR|DV|CAM|TS"
-	ExcludedGroups    string // e.g., "TVHUB|FILM"
-	ExcludedLanguages string // e.g., "RUSSIAN|RUS|HINDI"
-	ExcludedCustom    string // custom patterns
-}
-
-// StreamSortOptions contains settings for stream sorting and selection
-type StreamSortOptions struct {
-	SortOrder  string // e.g., "quality,size,seeders" - comma-separated sort fields
-	SortPrefer string // "best" (highest quality/size), "smallest" (lowest size), "balanced"
 }
 
 type StreamProvider interface {
@@ -280,72 +264,23 @@ func (mp *MultiProvider) GetBestStream(imdbID string, season, episode *int, maxQ
 		return nil, fmt.Errorf("no streams found")
 	}
 	
-	// Build exclusion regex pattern from filters
-	var excludePattern *regexp.Regexp
-	if filters != nil && filters.Enabled {
-		patterns := make([]string, 0)
-		if filters.ExcludedQualities != "" {
-			patterns = append(patterns, filters.ExcludedQualities)
-		}
-		if filters.ExcludedGroups != "" {
-			patterns = append(patterns, filters.ExcludedGroups)
-		}
-		if filters.ExcludedLanguages != "" {
-			patterns = append(patterns, filters.ExcludedLanguages)
-		}
-		if filters.ExcludedCustom != "" {
-			patterns = append(patterns, filters.ExcludedCustom)
-		}
-		
-		if len(patterns) > 0 {
-			// Use lookahead/lookbehind-like pattern that matches terms separated by
-			// dots, spaces, dashes, underscores, or at string boundaries
-			// This catches things like .DV. or .HDR. or -REMUX- in filenames
-			combinedPattern := `(?i)(?:^|[\s.\-_\[\]()])(`  + strings.Join(patterns, "|") + `)(?:$|[\s.\-_\[\]()])`
-			excludePattern, _ = regexp.Compile(combinedPattern)
-		}
-	}
-	
-	// Filter by max quality, cached status, and release filters
+	// FILTERING DISABLED - All filtering is now handled by Torrentio addon URL configuration
+	// Accept all streams regardless of quality/filters
 	filteredStreams := make([]TorrentioStream, 0)
 	for _, s := range streams {
-		// Apply release filters
-		if excludePattern != nil {
-			// Check Name, Title, and URL fields for filter matches
-			// URL decode the URL to catch encoded patterns like %5B47BT%5D -> [47BT]
-			decodedURL, _ := url.QueryUnescape(s.URL)
-			checkStr := s.Name + " " + s.Title + " " + decodedURL
-			if excludePattern.MatchString(checkStr) {
-				log.Printf("Filtered out stream (release filter): %s", truncateString(s.Name, 80))
-				continue
-			}
-		}
-		
+		// Prioritize cached streams
 		if s.Cached {
-			quality := parseQualityInt(s.Quality)
-			if quality <= maxQuality {
-				filteredStreams = append(filteredStreams, s)
-			}
+			filteredStreams = append(filteredStreams, s)
 		}
 	}
 	
 	if len(filteredStreams) == 0 {
-		// No cached streams after filtering, try uncached streams with filters
-		for _, s := range streams {
-			if excludePattern != nil {
-				decodedURL, _ := url.QueryUnescape(s.URL)
-				checkStr := s.Name + " " + s.Title + " " + decodedURL
-				if excludePattern.MatchString(checkStr) {
-					continue
-				}
-			}
-			filteredStreams = append(filteredStreams, s)
-		}
-		
-		if len(filteredStreams) == 0 {
-			return nil, fmt.Errorf("no streams available after filtering")
-		}
-		return &filteredStreams[0], nil
+		// No cached streams, accept uncached streams
+		filteredStreams = streams
+	}
+	
+	if len(filteredStreams) == 0 {
+		return nil, fmt.Errorf("no streams available after filtering")
 	}
 	
 	// Sort streams based on sort options
