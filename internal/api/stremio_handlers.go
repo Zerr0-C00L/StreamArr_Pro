@@ -696,8 +696,6 @@ func (h *Handler) StremioStreamHandler(w http.ResponseWriter, r *http.Request) {
 			streams = filterValidStreams(streams)
 			
 			// Apply release filters
-			streams = h.applyReleaseFilters(streams)
-			sortStreams(streams)
 			
 			for _, ps := range streams {
 				stream := StremioStream{
@@ -734,8 +732,6 @@ func (h *Handler) StremioStreamHandler(w http.ResponseWriter, r *http.Request) {
 			streams = filterValidStreams(streams)
 			
 			// Apply release filters
-			streams = h.applyReleaseFilters(streams)
-			sortStreams(streams)
 			
 			for _, ps := range streams {
 				stream := StremioStream{

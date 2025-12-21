@@ -1848,7 +1848,7 @@ func (h *XtreamHandler) playEpisodeByIMDB(w http.ResponseWriter, r *http.Request
 	
 	// Get stream from providers
 	log.Printf("[PLAY] Fetching streams for %s S%02dE%02d...", imdbID, seasonNum, episodeNum)
-	stream, err := h.multiProvider.GetBestStream(imdbID, &seasonNum, &episodeNum, h.cfg.MaxResolution, nil, nil)
+	stream, err := h.multiProvider.GetBestStream(imdbID, &seasonNum, &episodeNum, h.cfg.MaxResolution)
 	elapsed := time.Since(startTime)
 	
 	if err != nil {
@@ -1990,7 +1990,7 @@ func (h *XtreamHandler) playMovie(w http.ResponseWriter, r *http.Request, vodID 
 	log.Printf("[PLAY] Fetching streams for movie TMDB %d, IMDB %s...", tmdbID, imdbID.String)
 	
 	// Get stream from providers
-	stream, err := h.multiProvider.GetBestStream(imdbID.String, nil, nil, h.cfg.MaxResolution, nil, nil)
+	stream, err := h.multiProvider.GetBestStream(imdbID.String, nil, nil, h.cfg.MaxResolution)
 	elapsed := time.Since(startTime)
 	
 	if err != nil {
@@ -2066,7 +2066,7 @@ func (h *XtreamHandler) playEpisode(w http.ResponseWriter, r *http.Request, seri
 	log.Printf("Playing series TMDB ID %d, IMDB ID %s, S%02dE%02d", tmdbID, imdbID.String, seasonNum, episodeNum)
 	
 	// Get stream from providers
-	stream, err := h.multiProvider.GetBestStream(imdbID.String, &seasonNum, &episodeNum, h.cfg.MaxResolution, nil, nil)
+	stream, err := h.multiProvider.GetBestStream(imdbID.String, &seasonNum, &episodeNum, h.cfg.MaxResolution)
 	if err != nil {
 		log.Printf("Error getting stream: %v", err)
 		http.Error(w, "Stream not available", http.StatusNotFound)

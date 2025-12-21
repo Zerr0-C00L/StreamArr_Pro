@@ -1137,22 +1137,10 @@ func (h *Handler) PlayMovie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// FILTERING DISABLED - All filtering is now handled by Torrentio addon URL configuration
 	// Build exclude patterns from settings
 	var excludePatterns []string
-	if h.settingsManager != nil {
-		settings := h.settingsManager.Get()
-		if settings.EnableReleaseFilters {
-			if settings.ExcludedQualities != "" {
-				excludePatterns = append(excludePatterns, settings.ExcludedQualities)
-			}
-			if settings.ExcludedReleaseGroups != "" {
-				excludePatterns = append(excludePatterns, settings.ExcludedReleaseGroups)
-			}
-			if settings.ExcludedLanguageTags != "" {
-				excludePatterns = append(excludePatterns, settings.ExcludedLanguageTags)
-			}
-		}
-	}
+	// EnableReleaseFilters, ExcludedQualities, etc. have been removed from settings
 
 	// Find best available stream with filters
 	stream, err := h.streamStore.FindBestStreamWithFilters(ctx, "movie", id, movie.QualityProfile, excludePatterns)

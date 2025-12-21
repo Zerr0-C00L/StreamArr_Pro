@@ -246,7 +246,7 @@ func (mp *MultiProvider) GetSeriesStreams(imdbID string, season, episode int) ([
 	return allStreams, nil
 }
 
-func (mp *MultiProvider) GetBestStream(imdbID string, season, episode *int, maxQuality int, filters *ReleaseFilters, sortOpts *StreamSortOptions) (*TorrentioStream, error) {
+func (mp *MultiProvider) GetBestStream(imdbID string, season, episode *int, maxQuality int) (*TorrentioStream, error) {
 	var streams []TorrentioStream
 	var err error
 	
@@ -283,18 +283,9 @@ func (mp *MultiProvider) GetBestStream(imdbID string, season, episode *int, maxQ
 		return nil, fmt.Errorf("no streams available after filtering")
 	}
 	
-	// Sort streams based on sort options
-	sortOrder := "quality,size,seeders" // default
-	sortPrefer := "best"                 // default: highest quality, then largest size
-	
-	if sortOpts != nil {
-		if sortOpts.SortOrder != "" {
-			sortOrder = sortOpts.SortOrder
-		}
-		if sortOpts.SortPrefer != "" {
-			sortPrefer = sortOpts.SortPrefer
-		}
-	}
+	// Sort streams - default: highest quality, largest size, most seeders
+	sortOrder := "quality,size,seeders"
+	sortPrefer := "best"
 	
 	// Parse sort fields
 	sortFields := strings.Split(sortOrder, ",")
