@@ -53,6 +53,8 @@ export default function CacheMonitor() {
   const [filter, setFilter] = useState<'all' | 'available' | 'unavailable' | 'upgrades'>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -92,6 +94,57 @@ export default function CacheMonitor() {
     }
   };
 
+  const toggleSelection = (movieId: number) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(movieId)) {
+      newSelected.delete(movieId);
+    } else {
+      newSelected.add(movieId);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredMovies.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredMovies.map(m => m.movie_id)));
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) {
+      alert('No items selected');
+      return;
+    }
+
+    if (!confirm(`Delete ${selectedIds.size} cached stream(s)? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      const movieIds = Array.from(selectedIds);
+      
+      // Delete each selected movie
+      for (const movieId of movieIds) {
+        try {
+          await api.delete(`/streams/cache/${movieId}`);
+        } catch (error) {
+          console.error(`Failed to delete movie ${movieId}:`, error);
+        }
+      }
+      
+      alert(`✅ Deleted ${selectedIds.size} cached stream(s)`);
+      setSelectedIds(new Set());
+      fetchData(); // Refresh data
+    } catch (error: any) {
+      alert(`❌ Deletion failed: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
@@ -104,6 +157,8 @@ export default function CacheMonitor() {
     if (filter === 'upgrades') return movie.upgrade_available;
     return true;
   });
+
+  const isAllSelected = filteredMovies.length > 0 && selectedIds.size === filteredMovies.length;
 
   const getQualityBadgeColor = (score: number) => {
     if (score >= 80) return 'bg-green-500/20 text-green-400 border-green-500/50';
@@ -143,7 +198,17 @@ export default function CacheMonitor() {
           </h1>
           <p className="text-slate-400 mt-1">Track cached streams, quality, and upgrade status</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={deleteSelected}
+              disabled={deleting}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white flex items-center gap-2 disabled:opacity-50 font-medium"
+            >
+              <XCircle className={`w-4 h-4 ${deleting ? 'animate-spin' : ''}`} />
+              Delete Selected ({selectedIds.size})
+            </button>
+          )}
           <button
             onClick={cleanupUnreleased}
             disabled={cleaningUp}
@@ -250,6 +315,15 @@ export default function CacheMonitor() {
           <table className="w-full">
             <thead className="bg-slate-800/50 border-b border-white/10">
               <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300 w-10">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded cursor-pointer"
+                    title="Select all"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Movie</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Quality</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Resolution</th>
@@ -263,13 +337,28 @@ export default function CacheMonitor() {
             <tbody className="divide-y divide-white/5">
               {filteredMovies.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                     No cached streams found
                   </td>
                 </tr>
               ) : (
                 filteredMovies.map((movie) => (
-                  <tr key={movie.movie_id} className="hover:bg-white/5 transition-colors">
+                  <tr
+                    key={movie.movie_id}
+                    className={`transition-colors ${
+                      selectedIds.has(movie.movie_id)
+                        ? 'bg-blue-500/10'
+                        : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(movie.movie_id)}
+                        onChange={() => toggleSelection(movie.movie_id)}
+                        className="w-4 h-4 rounded cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div>
                         <p className="text-white font-medium">{movie.title}</p>
