@@ -82,7 +82,7 @@ func (s *StreamCacheStore) CacheStream(ctx context.Context, movieID int, stream 
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
 			NOW(), NOW(), 0, true, false, NOW() + INTERVAL '7 days', NOW(), NOW()
 		)
-		ON CONFLICT (movie_id) DO UPDATE SET
+		ON CONFLICT (movie_id) WHERE movie_id IS NOT NULL AND series_id IS NULL DO UPDATE SET
 			stream_url = EXCLUDED.stream_url,
 			stream_hash = EXCLUDED.stream_hash,
 			quality_score = EXCLUDED.quality_score,

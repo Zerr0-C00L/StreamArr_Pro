@@ -154,9 +154,9 @@ func (g *GenericStremioProvider) buildConfigURL(contentType, imdbID string, seas
 		}
 		configJSON, _ = json.Marshal(config)
 	} else if strings.Contains(lowerName, "torrentio") || strings.Contains(lowerURL, "torrentio") {
-		// Torrentio format - config in URL path
-		// Torrentio uses a different URL format: /providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex|realdebrid=API_KEY/stream/...
-		configPath := fmt.Sprintf("providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy|realdebrid=%s", g.RealDebridAPIKey)
+		// Torrentio format - full configuration matching your working setup
+		// Excludes: BRREMUX, HDRALL (all HDR), Dolby Vision, 3D, SCR, CAM, UNKNOWN quality
+		configPath := fmt.Sprintf("providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex|sort=qualitysize|qualityfilter=brremux,hdrall,dolbyvision,dolbyvisionwithhdr,threed,scr,cam,unknown|debridoptions=nodownloadlinks,nocatalog|realdebrid=%s", g.RealDebridAPIKey)
 		return fmt.Sprintf("%s/%s/%s", g.BaseURL, configPath, contentPath)
 	} else if strings.Contains(lowerName, "mediafusion") || strings.Contains(lowerURL, "mediafusion") {
 		// MediaFusion format

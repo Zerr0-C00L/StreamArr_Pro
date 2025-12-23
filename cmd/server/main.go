@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 
 	"github.com/Zerr0-C00L/StreamArr/internal/api"
@@ -32,6 +33,11 @@ import (
 )
 
 func main() {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: .env file not found, using environment variables")
+	}
+
 	log.Println("Starting StreamArr API Server...")
 
 	// Load initial configuration (uses DATABASE_URL from environment if set)
@@ -734,6 +740,7 @@ func main() {
 			streamService,
 			multiProvider,
 			debridService,
+			settingsManager,
 		)
 		cacheScanner.Start() // Start automatic 7-day scanning
 		log.Println("✓ Cache scanner initialized (auto-scan: 7 days)")

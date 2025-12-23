@@ -2158,70 +2158,208 @@ func (h *XtreamHandler) handleGetPlaylist(w http.ResponseWriter, r *http.Request
 
 	fmt.Fprintf(w, "#EXTM3U\n")
 
-	// Get current settings
-	var onlyCached bool
-	log.Printf("[XTREAM] handleGetPlaylist: getSettings=%v", h.getSettings != nil)
+	// Check if "Only Include Media with Cached Streams" setting is enabled
+	var onlyIncludeCached bool
+	log.Printf("[XTREAM] handleGetPlaylist: Checking 'Only Include Media with Cached Streams' setting")
 	if h.getSettings != nil {
 		if settings := h.getSettings(); settings != nil {
-			log.Printf("[XTREAM] handleGetPlaylist: settings=%+v", settings)
 			if settingsMap, ok := settings.(map[string]interface{}); ok {
+				// Check for the setting - it might be named different variations
 				if oc, ok := settingsMap["only_cached_streams"].(bool); ok {
-					onlyCached = oc
-					log.Printf("[XTREAM] handleGetPlaylist: onlyCached=%v", onlyCached)
+					onlyIncludeCached = oc
+				} else if oc, ok := settingsMap["only_include_cached_streams"].(bool); ok {
+					onlyIncludeCached = oc
 				}
+				log.Printf("[XTREAM] handleGetPlaylist: only_cached_streams=%v", onlyIncludeCached)
 			}
+		}
+	}
+
+	// Add VOD streams (movies) based on cache setting
+	if onlyIncludeCached {
+		// ONLY show cached streams from Stream Cache Monitor
+		log.Printf("[XTREAM] handleGetPlaylist: Mode=CACHED_ONLY - showing only streams from Stream Cache Monitor")
+		
+		query := `
+			SELECT DISTINCT m.tmdb_id, m.title, m.year, m.metadata, ms.quality_score
+			FROM media_streams ms
+			JOIN library_movies m ON m.id = ms.movie_id
+			WHERE ms.movie_id IS NOT NULL
+			ORDER BY m.title
+		`
+		
+		movieRows, err := h.db.Query(query)
+		if err != nil {
+			log.Printf("[XTREAM] handleGetPlaylist: Error querying cached streams: %v", err)
 		} else {
-			log.Printf("[XTREAM] handleGetPlaylist: getSettings() returned nil")
+			defer movieRows.Close()
+			cachedCount := 0
+			for movieRows.Next() {
+				var tmdbID int64
+				var title string
+				var year sql.NullInt64
+				var metadataJSON []byte
+				var qualityScore sql.NullInt64
+				if err := movieRows.Scan(&tmdbID, &title, &year, &metadataJSON, &qualityScore); err != nil {
+					continue
+				}
+
+				var metadata map[string]interface{}
+				json.Unmarshal(metadataJSON, &metadata)
+
+				logo := ""
+				if poster, ok := metadata["poster_path"].(string); ok && poster != "" {
+					logo = fmt.Sprintf("https://image.tmdb.org/t/p/w500%s", poster)
+				}
+
+				yearStr := ""
+				if year.Valid {
+					yearStr = fmt.Sprintf(" (%d)", year.Int64)
+				}
+
+				fmt.Fprintf(w, "#EXTINF:-1 tvg-id=\"movie_%d\" tvg-name=\"%s%s\" tvg-logo=\"%s\" group-title=\"Movies\",%s%s\n",
+					tmdbID, title, yearStr, logo, title, yearStr)
+				fmt.Fprintf(w, "%s/movie/%s/%s/%d.mp4\n", serverURL, username, password, tmdbID)
+				cachedCount++
+			}
+			log.Printf("[XTREAM] handleGetPlaylist: Added %d cached movie streams to playlist", cachedCount)
+		}
+		
+		// Add cached series streams only
+		log.Printf("[XTREAM] handleGetPlaylist: Adding cached series streams...")
+		seriesQuery := `
+			SELECT DISTINCT s.tmdb_id, s.title, s.year, s.metadata
+			FROM media_streams ms
+			JOIN library_series s ON s.id = ms.series_id
+			WHERE ms.series_id IS NOT NULL
+			ORDER BY s.title
+		`
+		
+		seriesRows, err := h.db.Query(seriesQuery)
+		if err != nil {
+			log.Printf("[XTREAM] handleGetPlaylist: Error querying cached series: %v", err)
+		} else {
+			defer seriesRows.Close()
+			seriesCachedCount := 0
+			for seriesRows.Next() {
+				var tmdbID int64
+				var title string
+				var year sql.NullInt64
+				var metadataJSON []byte
+				if err := seriesRows.Scan(&tmdbID, &title, &year, &metadataJSON); err != nil {
+					continue
+				}
+
+				var metadata map[string]interface{}
+				json.Unmarshal(metadataJSON, &metadata)
+
+				logo := ""
+				if poster, ok := metadata["poster_path"].(string); ok && poster != "" {
+					logo = fmt.Sprintf("https://image.tmdb.org/t/p/w500%s", poster)
+				}
+
+				yearStr := ""
+				if year.Valid {
+					yearStr = fmt.Sprintf(" (%d)", year.Int64)
+				}
+
+				fmt.Fprintf(w, "#EXTINF:-1 tvg-id=\"series_%d\" tvg-name=\"%s%s\" tvg-logo=\"%s\" group-title=\"Series\",%s%s\n",
+					tmdbID, title, yearStr, logo, title, yearStr)
+				fmt.Fprintf(w, "%s/series/%s/%s/%d.mp4\n", serverURL, username, password, tmdbID)
+				seriesCachedCount++
+			}
+			log.Printf("[XTREAM] handleGetPlaylist: Added %d cached series streams to playlist", seriesCachedCount)
 		}
 	} else {
-		log.Printf("[XTREAM] handleGetPlaylist: getSettings is nil")
-	}
+		// Show FULL library regardless of cache status
+		log.Printf("[XTREAM] handleGetPlaylist: Mode=FULL_LIBRARY - showing all monitored library content")
+		
+		query := `
+			SELECT m.tmdb_id, m.title, m.year, m.metadata
+			FROM library_movies m
+			WHERE m.monitored = true
+			ORDER BY m.title
+		`
+		
+		movieRows, err := h.db.Query(query)
+		if err != nil {
+			log.Printf("[XTREAM] handleGetPlaylist: Error querying all movies: %v", err)
+		} else {
+			defer movieRows.Close()
+			totalCount := 0
+			for movieRows.Next() {
+				var tmdbID int64
+				var title string
+				var year sql.NullInt64
+				var metadataJSON []byte
+				if err := movieRows.Scan(&tmdbID, &title, &year, &metadataJSON); err != nil {
+					continue
+				}
 
-	// Add VOD streams (movies) - using TMDB ID with filters
-	// Build dynamic query based on settings
-	query := `
-		SELECT m.tmdb_id, m.title, m.year, m.metadata
-		FROM library_movies m
-		WHERE m.monitored = true
-	`
-	
-	// Apply "Only Cached Streams" filter
-	if onlyCached {
-		query += ` AND EXISTS (SELECT 1 FROM media_streams ms WHERE ms.movie_id = m.id)`
-		log.Printf("[XTREAM] Adding cache filter to query")
-	}
-	
-	query += ` ORDER BY m.title`
-	log.Printf("[XTREAM] Final query: %s", query)
-	
-	movieRows, err := h.db.Query(query)
-	if err == nil {
-		defer movieRows.Close()
-		for movieRows.Next() {
-			var tmdbID int64
-			var title string
-			var year sql.NullInt64
-			var metadataJSON []byte
-			if err := movieRows.Scan(&tmdbID, &title, &year, &metadataJSON); err != nil {
-				continue
+				var metadata map[string]interface{}
+				json.Unmarshal(metadataJSON, &metadata)
+
+				logo := ""
+				if poster, ok := metadata["poster_path"].(string); ok && poster != "" {
+					logo = fmt.Sprintf("https://image.tmdb.org/t/p/w500%s", poster)
+				}
+
+				yearStr := ""
+				if year.Valid {
+					yearStr = fmt.Sprintf(" (%d)", year.Int64)
+				}
+
+				fmt.Fprintf(w, "#EXTINF:-1 tvg-id=\"movie_%d\" tvg-name=\"%s%s\" tvg-logo=\"%s\" group-title=\"Movies\",%s%s\n",
+					tmdbID, title, yearStr, logo, title, yearStr)
+				fmt.Fprintf(w, "%s/movie/%s/%s/%d.mp4\n", serverURL, username, password, tmdbID)
+				totalCount++
 			}
+			log.Printf("[XTREAM] handleGetPlaylist: Added %d movies from full library to playlist", totalCount)
+		}
+		
+		// Add all series from library
+		log.Printf("[XTREAM] handleGetPlaylist: Adding series from full library...")
+		seriesQuery := `
+			SELECT s.tmdb_id, s.title, s.year, s.metadata
+			FROM library_series s
+			WHERE s.monitored = true
+			ORDER BY s.title
+		`
+		
+		seriesRows, err := h.db.Query(seriesQuery)
+		if err != nil {
+			log.Printf("[XTREAM] handleGetPlaylist: Error querying all series: %v", err)
+		} else {
+			defer seriesRows.Close()
+			seriesTotalCount := 0
+			for seriesRows.Next() {
+				var tmdbID int64
+				var title string
+				var year sql.NullInt64
+				var metadataJSON []byte
+				if err := seriesRows.Scan(&tmdbID, &title, &year, &metadataJSON); err != nil {
+					continue
+				}
 
-			var metadata map[string]interface{}
-			json.Unmarshal(metadataJSON, &metadata)
+				var metadata map[string]interface{}
+				json.Unmarshal(metadataJSON, &metadata)
 
-			logo := ""
-			if poster, ok := metadata["poster_path"].(string); ok && poster != "" {
-				logo = fmt.Sprintf("https://image.tmdb.org/t/p/w500%s", poster)
+				logo := ""
+				if poster, ok := metadata["poster_path"].(string); ok && poster != "" {
+					logo = fmt.Sprintf("https://image.tmdb.org/t/p/w500%s", poster)
+				}
+
+				yearStr := ""
+				if year.Valid {
+					yearStr = fmt.Sprintf(" (%d)", year.Int64)
+				}
+
+				fmt.Fprintf(w, "#EXTINF:-1 tvg-id=\"series_%d\" tvg-name=\"%s%s\" tvg-logo=\"%s\" group-title=\"Series\",%s%s\n",
+					tmdbID, title, yearStr, logo, title, yearStr)
+				fmt.Fprintf(w, "%s/series/%s/%s/%d.mp4\n", serverURL, username, password, tmdbID)
+				seriesTotalCount++
 			}
-
-			yearStr := ""
-			if year.Valid {
-				yearStr = fmt.Sprintf(" (%d)", year.Int64)
-			}
-
-			fmt.Fprintf(w, "#EXTINF:-1 tvg-id=\"movie_%d\" tvg-name=\"%s%s\" tvg-logo=\"%s\" group-title=\"Movies\",%s%s\n",
-				tmdbID, title, yearStr, logo, title, yearStr)
-			fmt.Fprintf(w, "%s/movie/%s/%s/%d.mp4\n", serverURL, username, password, tmdbID)
+			log.Printf("[XTREAM] handleGetPlaylist: Added %d series from full library to playlist", seriesTotalCount)
 		}
 	}
 

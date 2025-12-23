@@ -984,16 +984,17 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 1: Check cache first for instant playback
+	// Phase 1: Prepare cached stream (if exists) - will be included with live results
+	var cachedStreamObj map[string]interface{}
 	if h.streamCacheStore != nil {
 		cached, err := h.streamCacheStore.GetCachedStream(ctx, int(id))
 		if err == nil && cached != nil && cached.IsAvailable {
-			log.Printf("[CACHE-HIT] ⚡ Instant cached stream for movie %d (quality: %d, checked: %v ago)",
+			log.Printf("[CACHE-HIT] ⚡ Cached stream available for movie %d (quality: %d, checked: %v ago)",
 				id, cached.QualityScore, time.Since(cached.LastChecked).Round(time.Minute))
 			
-			// Return cached stream in API format
-			cachedStream := map[string]interface{}{
-				"title":         fmt.Sprintf("[CACHED] %s %s %s", cached.Resolution, cached.HDRType, cached.AudioFormat),
+			// Prepare cached stream in API format (will be returned with live streams)
+			cachedStreamObj = map[string]interface{}{
+				"title":         fmt.Sprintf("⚡ [CACHED] %s %s %s", cached.Resolution, cached.HDRType, cached.AudioFormat),
 				"url":           cached.StreamURL,
 				"quality":       cached.Resolution,
 				"size_gb":       cached.FileSizeGB,
@@ -1003,8 +1004,6 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 				"last_checked":  cached.LastChecked,
 				"indexer":       cached.Indexer,
 			}
-			respondJSON(w, http.StatusOK, []interface{}{cachedStream})
-			return
 		}
 	}
 
@@ -1237,7 +1236,7 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 					Indexer:     ps.Source,
 				}
 				
-				// Parse stream details from torrent name for better filtering
+				// Parse stream details from torrent name for quality scoring
 				if svc, ok := h.streamService.(*streams.StreamService); ok {
 					parsed := svc.ParseStreamFromTorrentName(ts.TorrentName, "", ts.Indexer, 0)
 					ts.Resolution = parsed.Resolution
@@ -1247,15 +1246,8 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 					ts.Codec = parsed.Codec
 				}
 				
-				// Check if stream should be filtered
-				if svc, ok := h.streamService.(*streams.StreamService); ok {
-					if !svc.ShouldFilterStream(ts, settings.ExcludedReleaseGroups, settings.ExcludedQualities, settings.ExcludedLanguageTags) {
-						filteredStreams = append(filteredStreams, ps)
-					}
-				} else {
-					// No stream service, keep all streams
-					filteredStreams = append(filteredStreams, ps)
-				}
+				// Accept all streams - addon URL already filters
+				filteredStreams = append(filteredStreams, ps)
 			}
 			
 			if len(filteredStreams) < len(providerStreams) {
@@ -1328,6 +1320,18 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 			"filename": ps.Title, // Use title as filename for display
 		}
 		apiStreams = append(apiStreams, stream)
+	}
+
+	// Prepend cached stream if available (for instant playback priority)
+	if cachedStreamObj != nil {
+		log.Printf("[STREAMS] ⚡ Adding cached stream as first option for instant playback")
+		allStreams := make([]interface{}, 0, len(apiStreams)+1)
+		allStreams = append(allStreams, cachedStreamObj)
+		for _, s := range apiStreams {
+			allStreams = append(allStreams, s)
+		}
+		respondJSON(w, http.StatusOK, allStreams)
+		return
 	}
 
 	respondJSON(w, http.StatusOK, apiStreams)

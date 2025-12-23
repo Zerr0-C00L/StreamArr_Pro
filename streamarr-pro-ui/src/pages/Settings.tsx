@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Save, Layers, Settings as SettingsIcon, Code, Plus, X, Tv, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search, TrendingUp, XCircle, Calendar } from 'lucide-react';
 import axios from 'axios';
 
@@ -305,8 +305,12 @@ export default function Settings() {
     last_checked: string;
     cached_at: string;
     indexer: string;
+    media_type?: string;
+    season?: number;
+    episode?: number;
   }>>([]);
   const [cacheFilter, setCacheFilter] = useState<'all' | 'available' | 'unavailable' | 'upgrades'>('all');
+  const [cacheMediaType, setCacheMediaType] = useState<'all' | 'movies' | 'series'>('all');
   const [refreshingCache, setRefreshingCache] = useState(false);
   const [selectedCacheIds, setSelectedCacheIds] = useState<Set<number>>(new Set());
   const [deletingCache, setDeletingCache] = useState(false);
@@ -335,14 +339,14 @@ export default function Settings() {
     }
   }, []);
 
-  // Fetch cache data when cache tab is active
+  // Fetch cache data when cache tab is active or media type changes
   useEffect(() => {
     if (activeTab === 'cache') {
       fetchCacheData();
       const interval = setInterval(fetchCacheData, 30000); // Refresh every 30 seconds
       return () => clearInterval(interval);
     }
-  }, [activeTab]);
+  }, [activeTab, cacheMediaType]);
 
   // Auto-save MDBList changes
   const initialMdbListsLoaded = useRef(false);
@@ -513,9 +517,10 @@ export default function Settings() {
     try {
       setRefreshingCache(true);
       
+      const typeParam = cacheMediaType === 'all' ? '' : `?type=${cacheMediaType}`;
       const [statsRes, moviesRes] = await Promise.all([
         api.get('/streams/cache/stats'),
-        api.get('/streams/cache/list')
+        api.get(`/streams/cache/list${typeParam}`)
       ]);
       
       setCacheStats(statsRes.data || { total_cached: 0, available: 0, unavailable: 0, avg_quality_score: 0 });
@@ -529,6 +534,24 @@ export default function Settings() {
     }
   };
 
+  // Derived cache lists
+  const mediaTypeFiltered = useMemo(() => {
+    return (cachedMovies || []).filter((movie) => {
+      if (cacheMediaType === 'movies') return movie.media_type !== 'series';
+      if (cacheMediaType === 'series') return movie.media_type === 'series';
+      return true; // all
+    });
+  }, [cachedMovies, cacheMediaType]);
+
+  const displayedMovies = useMemo(() => {
+    return mediaTypeFiltered.filter((movie) => {
+      if (cacheFilter === 'available') return movie.is_available;
+      if (cacheFilter === 'unavailable') return !movie.is_available;
+      if (cacheFilter === 'upgrades') return movie.upgrade_available;
+      return true;
+    });
+  }, [mediaTypeFiltered, cacheFilter]);
+
   // Cache selection functions
   const toggleCacheSelection = (movieId: number) => {
     const newSelected = new Set(selectedCacheIds);
@@ -541,17 +564,10 @@ export default function Settings() {
   };
 
   const toggleSelectAllCache = () => {
-    const filtered = (cachedMovies || []).filter(movie => {
-      if (cacheFilter === 'available') return movie.is_available;
-      if (cacheFilter === 'unavailable') return !movie.is_available;
-      if (cacheFilter === 'upgrades') return movie.upgrade_available;
-      return true;
-    });
-    
-    if (selectedCacheIds.size === filtered.length) {
+    if (selectedCacheIds.size === displayedMovies.length) {
       setSelectedCacheIds(new Set());
     } else {
-      setSelectedCacheIds(new Set(filtered.map(m => m.movie_id)));
+      setSelectedCacheIds(new Set(displayedMovies.map(m => m.movie_id)));
     }
   };
 
@@ -583,12 +599,7 @@ export default function Settings() {
     }
   };
 
-  const isAllCacheSelected = cachedMovies.length > 0 && selectedCacheIds.size === cachedMovies.filter(movie => {
-    if (cacheFilter === 'available') return movie.is_available;
-    if (cacheFilter === 'unavailable') return !movie.is_available;
-    if (cacheFilter === 'upgrades') return movie.upgrade_available;
-    return true;
-  }).length;
+  const isAllCacheSelected = displayedMovies.length > 0 && selectedCacheIds.size === displayedMovies.length;
 
 
   // Auto-save on every setting change
@@ -2415,122 +2426,19 @@ export default function Settings() {
 
               <hr className="border-white/10" />
 
-              {/* Stream Quality Filters */}
+              {/* Stream Quality Info */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">🎯 Stream Quality Filters</h3>
-                <p className="text-sm text-slate-400 mb-4">
-                  Block specific release groups, qualities, or languages from appearing in searches and cache upgrades.
-                </p>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        type="checkbox"
-                        id="enable_release_filters"
-                        checked={settings?.enable_release_filters ?? true}
-                        onChange={(e) => updateSetting('enable_release_filters', e.target.checked)}
-                        className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded focus:ring-blue-500"
-                      />
-                      <label htmlFor="enable_release_filters" className="text-sm font-medium text-slate-300">
-                        Enable Quality Filters
-                      </label>
-                    </div>
-                  </div>
-
-                  {settings?.enable_release_filters && (
-                    <div className="space-y-4 p-4 bg-white/5 rounded-lg">
-                      <div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <input
-                            type="checkbox"
-                            id="exclude_hdr"
-                            checked={settings?.excluded_qualities?.includes('HDR') || false}
-                            onChange={(e) => {
-                              const currentQualities = settings?.excluded_qualities || '';
-                              const hdrTerms = ['HDR', 'HDR10', 'HDR10+', 'DOLBY VISION', 'DV'];
-                              
-                              if (e.target.checked) {
-                                // Add HDR terms if not present
-                                const qualitiesArray = currentQualities.split(',').map(q => q.trim()).filter(q => q);
-                                hdrTerms.forEach(term => {
-                                  if (!qualitiesArray.includes(term)) {
-                                    qualitiesArray.push(term);
-                                  }
-                                });
-                                updateSetting('excluded_qualities', qualitiesArray.join(','));
-                              } else {
-                                // Remove HDR terms
-                                const qualitiesArray = currentQualities.split(',').map(q => q.trim()).filter(q => q);
-                                const filtered = qualitiesArray.filter(q => !hdrTerms.includes(q.toUpperCase()));
-                                updateSetting('excluded_qualities', filtered.join(','));
-                              }
-                            }}
-                            className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded focus:ring-blue-500"
-                          />
-                          <label htmlFor="exclude_hdr" className="text-sm font-medium text-slate-300">
-                            🚫 Exclude ALL HDR Content (HDR10, HDR10+, Dolby Vision)
-                          </label>
-                        </div>
-                        <p className="text-xs text-slate-500 ml-6">
-                          Block all HDR/Dolby Vision streams from searches and cache upgrades. Only SDR content will be cached.
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                          Blocked Release Groups
-                        </label>
-                        <input
-                          type="text"
-                          value={settings?.excluded_release_groups || ''}
-                          onChange={(e) => updateSetting('excluded_release_groups', e.target.value)}
-                          className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                          placeholder="e.g., YIFY,RARBG,PSA,EVO"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                          Comma-separated list. Streams from these release groups will be hidden and never cached.
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                          Blocked Qualities
-                        </label>
-                        <input
-                          type="text"
-                          value={settings?.excluded_qualities || ''}
-                          onChange={(e) => updateSetting('excluded_qualities', e.target.value)}
-                          className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                          placeholder="e.g., CAM,HDTS,HDCAM,TELESYNC"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                          Comma-separated list. Poor quality formats like CAM recordings will be filtered out.
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                          Blocked Language Tags
-                        </label>
-                        <input
-                          type="text"
-                          value={settings?.excluded_language_tags || ''}
-                          onChange={(e) => updateSetting('excluded_language_tags', e.target.value)}
-                          className="w-full px-3 py-2 bg-[#2a2a2a] border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                          placeholder="e.g., HINDI,TAMIL,DUBBED,MULTI"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                          Comma-separated list. Block streams with these language tags in the filename.
-                        </p>
-                      </div>
-
-                      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-                        <p className="text-xs text-slate-400">
-                          💡 These filters apply to both initial stream searches AND cache upgrades. 
-                          Blocked streams will never be cached or used to replace existing streams.
-                        </p>
-                      </div>
-                    </div>
+                <h3 className="text-lg font-semibold text-white mb-4">🎯 Stream Quality</h3>
+                <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-4">
+                  <p className="text-sm text-slate-300 mb-2">
+                    ℹ️ Quality filtering is configured in your Stremio addon URL
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    The addon filters streams before sending them to StreamArr (e.g., excluding HDR, CAM quality). 
+                    StreamArr accepts and caches the best stream from what the addon provides.
+                  </p>
+                </div>
+              </div>
                   )}
                 </div>
               </div>
@@ -4389,6 +4297,40 @@ export default function Settings() {
               </div>
             )}
 
+            {/* Media Type Tabs */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => { setCacheMediaType('all'); fetchCacheData(); }}
+                className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  cacheMediaType === 'all' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50' 
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+                }`}
+              >
+                🎬 All Content
+              </button>
+              <button
+                onClick={() => { setCacheMediaType('movies'); fetchCacheData(); }}
+                className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  cacheMediaType === 'movies' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50' 
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+                }`}
+              >
+                🎥 Movies
+              </button>
+              <button
+                onClick={() => { setCacheMediaType('series'); fetchCacheData(); }}
+                className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                  cacheMediaType === 'series' 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50' 
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+                }`}
+              >
+                📺 Series
+              </button>
+            </div>
+
             {/* Filters */}
             <div className="flex gap-2 flex-wrap">
               <button
@@ -4397,7 +4339,7 @@ export default function Settings() {
                   cacheFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                 }`}
               >
-                All ({cachedMovies?.length || 0})
+                All ({mediaTypeFiltered.length})
               </button>
               <button
                 onClick={() => setCacheFilter('available')}
@@ -4405,7 +4347,7 @@ export default function Settings() {
                   cacheFilter === 'available' ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                 }`}
               >
-                Available ({cachedMovies?.filter(m => m.is_available).length || 0})
+                Available ({mediaTypeFiltered.filter(m => m.is_available).length})
               </button>
               <button
                 onClick={() => setCacheFilter('unavailable')}
@@ -4413,7 +4355,7 @@ export default function Settings() {
                   cacheFilter === 'unavailable' ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                 }`}
               >
-                Unavailable ({cachedMovies?.filter(m => !m.is_available).length || 0})
+                Unavailable ({mediaTypeFiltered.filter(m => !m.is_available).length})
               </button>
               <button
                 onClick={() => setCacheFilter('upgrades')}
@@ -4421,7 +4363,7 @@ export default function Settings() {
                   cacheFilter === 'upgrades' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                 }`}
               >
-                Upgrades Available ({cachedMovies?.filter(m => m.upgrade_available).length || 0})
+                Upgrades Available ({mediaTypeFiltered.filter(m => m.upgrade_available).length})
               </button>
             </div>
 
@@ -4452,7 +4394,7 @@ export default function Settings() {
                           title="Select all"
                         />
                       </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Movie</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Title</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Quality</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Resolution</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Source</th>
@@ -4464,13 +4406,6 @@ export default function Settings() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {(() => {
-                      const filtered = (cachedMovies || []).filter(movie => {
-                        if (cacheFilter === 'available') return movie.is_available;
-                        if (cacheFilter === 'unavailable') return !movie.is_available;
-                        if (cacheFilter === 'upgrades') return movie.upgrade_available;
-                        return true;
-                      });
-
                       const getQualityBadgeColor = (score: number) => {
                         if (score >= 80) return 'bg-green-500/20 text-green-400 border-green-500/50';
                         if (score >= 60) return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
@@ -4490,7 +4425,7 @@ export default function Settings() {
                         return date.toLocaleDateString();
                       };
 
-                      if (filtered.length === 0) {
+                      if (displayedMovies.length === 0) {
                         return (
                           <tr>
                             <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
@@ -4500,8 +4435,8 @@ export default function Settings() {
                         );
                       }
 
-                      return filtered.map((movie) => (
-                        <tr key={movie.movie_id} className={`transition-colors ${
+                      return displayedMovies.map((movie) => (
+                        <tr key={`${movie.media_type || 'movie'}-${movie.movie_id}-${movie.season || 0}-${movie.episode || 0}`} className={`transition-colors ${
                           selectedCacheIds.has(movie.movie_id)
                             ? 'bg-blue-500/10'
                             : 'hover:bg-white/5'
@@ -4515,9 +4450,14 @@ export default function Settings() {
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <div>
-                              <p className="text-white font-medium">{movie.title}</p>
-                              <p className="text-xs text-slate-400">{movie.year}</p>
+                            <div className="flex items-center gap-2">
+                              {movie.media_type === 'series' && (
+                                <span className="text-xs px-2 py-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">Series</span>
+                              )}
+                              <div>
+                                <p className="text-white font-medium">{movie.title}</p>
+                                <p className="text-xs text-slate-400">{movie.year}</p>
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3">

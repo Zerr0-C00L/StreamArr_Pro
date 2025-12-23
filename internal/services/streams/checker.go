@@ -240,23 +240,9 @@ func (c *StreamChecker) checkForUpgrade(ctx context.Context, current *models.Cac
 		return nil // No results
 	}
 	
-	// Apply user filters if configured
-	if c.settingsGetter != nil {
-		excludedGroups, excludedQualities, excludedLanguages, filtersEnabled := c.settingsGetter()
-		if filtersEnabled {
-			var filteredResults []models.TorrentStream
-			for _, stream := range results {
-				if !c.streamSvc.ShouldFilterStream(stream, excludedGroups, excludedQualities, excludedLanguages) {
-					filteredResults = append(filteredResults, stream)
-				}
-			}
-			results = filteredResults
-			
-			c.logger.Info("Applied quality filters to upgrade candidates",
-				"original_count", len(results),
-				"filtered_count", len(filteredResults))
-		}
-	}
+	// Accept all streams from addon - filtering handled at addon URL level
+	c.logger.Info("Received streams from addon (addon-level filtering already applied)",
+		"stream_count", len(results))
 	
 	if len(results) == 0 {
 		return nil // All streams filtered out

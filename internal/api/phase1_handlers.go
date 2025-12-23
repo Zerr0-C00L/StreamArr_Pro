@@ -114,29 +114,119 @@ func (h *Handler) GetCachedMoviesList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	log.Printf("[DEBUG] Querying cached movies from database")
-	// Query all cached streams from database with movie details
-	query := `
-		SELECT 
-			ms.movie_id,
-			m.title,
-			m.year,
-			ms.quality_score,
-			ms.resolution,
-			ms.source_type,
-			ms.hdr_type,
-			ms.audio_format,
-			ms.file_size_gb,
-			ms.is_available,
-			ms.upgrade_available,
-			ms.last_checked,
-			ms.created_at as cached_at,
-			ms.indexer
-		FROM media_streams ms
-		LEFT JOIN library_movies m ON m.id = ms.movie_id
-		ORDER BY ms.created_at DESC
-		LIMIT 1000
-	`
+	log.Printf("[DEBUG] Querying cached streams from database (movies and series)")
+	
+	// Get filter parameter (movies, series, or all)
+	mediaType := r.URL.Query().Get("type") // "movies", "series", or empty for all
+	
+	var query string
+	if mediaType == "series" {
+		// Only series
+		query = `
+			SELECT 
+				ms.series_id as id,
+				s.title || ' S' || LPAD(ms.season::text, 2, '0') || 'E' || LPAD(ms.episode::text, 2, '0') as title,
+				COALESCE(s.year, 0) as year,
+				ms.quality_score,
+				ms.resolution,
+				ms.source_type,
+				ms.hdr_type,
+				ms.audio_format,
+				ms.file_size_gb,
+				ms.is_available,
+				ms.upgrade_available,
+				ms.last_checked,
+				ms.created_at as cached_at,
+				ms.indexer,
+				'series' as media_type,
+				ms.season,
+				ms.episode
+			FROM media_streams ms
+			INNER JOIN library_series s ON s.id = ms.series_id
+			WHERE ms.series_id IS NOT NULL
+			ORDER BY ms.created_at DESC
+			LIMIT 1000
+		`
+	} else if mediaType == "movies" {
+		// Only movies
+		query = `
+			SELECT 
+				ms.movie_id as id,
+				COALESCE(m.title, 'Unknown Movie') as title,
+				COALESCE(m.year, 0) as year,
+				ms.quality_score,
+				ms.resolution,
+				ms.source_type,
+				ms.hdr_type,
+				ms.audio_format,
+				ms.file_size_gb,
+				ms.is_available,
+				ms.upgrade_available,
+				ms.last_checked,
+				ms.created_at as cached_at,
+				ms.indexer,
+				'movie' as media_type,
+				0 as season,
+				0 as episode
+			FROM media_streams ms
+			LEFT JOIN library_movies m ON m.id = ms.movie_id
+			WHERE ms.movie_id IS NOT NULL
+			ORDER BY ms.created_at DESC
+			LIMIT 1000
+		`
+	} else {
+		// Both movies and series
+		query = `
+			SELECT 
+				ms.movie_id as id,
+				COALESCE(m.title, 'Unknown Movie') as title,
+				COALESCE(m.year, 0) as year,
+				ms.quality_score,
+				ms.resolution,
+				ms.source_type,
+				ms.hdr_type,
+				ms.audio_format,
+				ms.file_size_gb,
+				ms.is_available,
+				ms.upgrade_available,
+				ms.last_checked,
+				ms.created_at as cached_at,
+				ms.indexer,
+				'movie' as media_type,
+				0 as season,
+				0 as episode
+			FROM media_streams ms
+			LEFT JOIN library_movies m ON m.id = ms.movie_id
+			WHERE ms.movie_id IS NOT NULL
+			
+			UNION ALL
+			
+			SELECT 
+				ms.series_id as id,
+				s.title || ' S' || LPAD(ms.season::text, 2, '0') || 'E' || LPAD(ms.episode::text, 2, '0') as title,
+				COALESCE(s.year, 0) as year,
+				ms.quality_score,
+				ms.resolution,
+				ms.source_type,
+				ms.hdr_type,
+				ms.audio_format,
+				ms.file_size_gb,
+				ms.is_available,
+				ms.upgrade_available,
+				ms.last_checked,
+				ms.created_at as cached_at,
+				ms.indexer,
+				'series' as media_type,
+				ms.season,
+				ms.episode
+			FROM media_streams ms
+			INNER JOIN library_series s ON s.id = ms.series_id
+			WHERE ms.series_id IS NOT NULL
+			
+			ORDER BY cached_at DESC
+			LIMIT 1000
+		`
+	}
 	
 	rows, err := h.streamCacheStore.GetDB().QueryContext(ctx, query)
 	if err != nil {
@@ -161,6 +251,9 @@ func (h *Handler) GetCachedMoviesList(w http.ResponseWriter, r *http.Request) {
 		LastChecked      string  `json:"last_checked"`
 		CachedAt         string  `json:"cached_at"`
 		Indexer          string  `json:"indexer"`
+		MediaType        string  `json:"media_type"` // "movie" or "series"
+		Season           int     `json:"season"`      // 0 for movies
+		Episode          int     `json:"episode"`     // 0 for movies
 	}
 	
 	var movies []CachedMovie
@@ -181,9 +274,12 @@ func (h *Handler) GetCachedMoviesList(w http.ResponseWriter, r *http.Request) {
 			&m.LastChecked,
 			&m.CachedAt,
 			&m.Indexer,
+			&m.MediaType,
+			&m.Season,
+			&m.Episode,
 		)
 		if err != nil {
-			log.Printf("Error scanning cached movie: %v", err)
+			log.Printf("Error scanning cached stream: %v", err)
 			continue
 		}
 		movies = append(movies, m)

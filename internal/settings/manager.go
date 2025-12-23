@@ -322,6 +322,13 @@ func (m *Manager) Load() error {
 		m.settings.XtreamPassword = xtreamPassword
 	}
 	
+	// Load OnlyCachedStreams from individual key if it exists
+	var onlyCachedStr string
+	err = m.db.QueryRow("SELECT value FROM settings WHERE key = 'only_cached_streams'").Scan(&onlyCachedStr)
+	if err == nil && onlyCachedStr != "" {
+		m.settings.OnlyCachedStreams = onlyCachedStr == "true"
+	}
+	
 	return nil
 }
 
@@ -331,6 +338,14 @@ func (m *Manager) Get() *Settings {
 	
 	// Return a copy
 	settingsCopy := *m.settings
+	
+	// Reload OnlyCachedStreams from database since it can change dynamically
+	var onlyCachedStr string
+	err := m.db.QueryRow("SELECT value FROM settings WHERE key = 'only_cached_streams'").Scan(&onlyCachedStr)
+	if err == nil && onlyCachedStr != "" {
+		settingsCopy.OnlyCachedStreams = onlyCachedStr == "true"
+	}
+	
 	return &settingsCopy
 }
 

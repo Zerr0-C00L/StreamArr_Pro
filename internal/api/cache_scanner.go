@@ -13,18 +13,20 @@ import (
 	"github.com/Zerr0-C00L/StreamArr/internal/services"
 	"github.com/Zerr0-C00L/StreamArr/internal/services/debrid"
 	"github.com/Zerr0-C00L/StreamArr/internal/services/streams"
+	"github.com/Zerr0-C00L/StreamArr/internal/settings"
 )
 
 // CacheScanner handles automatic cache maintenance and upgrades
 type CacheScanner struct {
-	movieStore    *database.MovieStore
-	seriesStore   *database.SeriesStore
-	cacheStore    *database.StreamCacheStore
-	streamService *streams.StreamService
-	provider      *providers.MultiProvider
-	debridService debrid.DebridService
-	ticker        *time.Ticker
-	stopChan      chan bool
+	movieStore      *database.MovieStore
+	seriesStore     *database.SeriesStore
+	cacheStore      *database.StreamCacheStore
+	streamService   *streams.StreamService
+	provider        *providers.MultiProvider
+	debridService   debrid.DebridService
+	settingsManager *settings.Manager
+	ticker          *time.Ticker
+	stopChan        chan bool
 }
 
 // NewCacheScanner creates a new cache scanner
@@ -35,15 +37,17 @@ func NewCacheScanner(
 	streamService *streams.StreamService,
 	provider *providers.MultiProvider,
 	debridService debrid.DebridService,
+	settingsManager *settings.Manager,
 ) *CacheScanner {
 	return &CacheScanner{
-		movieStore:    movieStore,
-		seriesStore:   seriesStore,
-		cacheStore:    cacheStore,
-		streamService: streamService,
-		provider:      provider,
-		debridService: debridService,
-		stopChan:      make(chan bool),
+		movieStore:      movieStore,
+		seriesStore:     seriesStore,
+		cacheStore:      cacheStore,
+		streamService:   streamService,
+		provider:        provider,
+		debridService:   debridService,
+		settingsManager: settingsManager,
+		stopChan:        make(chan bool),
 	}
 }
 
@@ -126,9 +130,10 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 		}
 		totalProcessed++
 		
-		// Get IMDB ID
+		// Get IMDB ID - log if missing but don't skip
 		imdbID, ok := movie.Metadata["imdb_id"].(string)
 		if !ok || imdbID == "" {
+			log.Printf("[CACHE-SCANNER] ⚠️  Movie %d (%s) missing IMDB ID - skipping", movie.ID, movie.Title)
 			skipped++
 			continue
 		}
@@ -141,11 +146,14 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 			continue
 		}
 
-		// Skip movies that already have cached streams (will be re-scanned on next scheduled run)
+		// If movie already has cached streams, check if we should upgrade
 		if existingCache != nil {
+			log.Printf("[CACHE-SCANNER] Movie %d (%s) already cached, skipping (upgrade scanning coming soon)", movie.ID, movie.Title)
 			skipped++
 			continue
 		}
+		
+		log.Printf("[CACHE-SCANNER] Movie %d (%s) has no cache, attempting to populate...", movie.ID, movie.Title)
 
 		// Get release year for Torrentio
 		releaseYear := 0
@@ -178,6 +186,9 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 		
 		log.Printf("[CACHE-SCANNER] Found %d RD-cached streams for %s", len(providerStreams), movie.Title)
 		
+		// Addon URL already filters content - accept whatever it returns
+		log.Printf("[CACHE-SCANNER] Processing %d streams from addon (addon-level filtering already applied)", len(providerStreams))
+		
 		// Find best stream (no existing cache since we skip those above)
 		var bestStream *providers.TorrentioStream
 		bestScore := 0
@@ -190,6 +201,7 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 				providerStreams[i].Source,
 				0,
 			)
+			
 			quality := streams.StreamQuality{
 				Resolution:  parsed.Resolution,
 				HDRType:     parsed.HDRType,
