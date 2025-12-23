@@ -148,21 +148,54 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 
 		// Fetch available streams from provider
 		providerStreams, err := cs.provider.GetMovieStreamsWithYear(imdbID, releaseYear)
-		if err != nil || len(providerStreams) == 0 {
+		if err != nil {
+			log.Printf("[CACHE-SCANNER] Error fetching streams for %s (%s): %v", movie.Title, imdbID, err)
 			continue
 		}
+		if len(providerStreams) == 0 {
+			if totalProcessed%50 == 0 {
+				log.Printf("[CACHE-SCANNER] No streams found for %s (%s)", movie.Title, imdbID)
+			}
+			continue
+		}
+		
+		log.Printf("[CACHE-SCANNER] Found %d streams for %s (%s)", len(providerStreams), movie.Title, imdbID)
 
 		// Check which streams are cached in RD
+		// Extract hashes from URL if InfoHash is empty (happens with Torrentio+RD)
 		hashes := make([]string, 0)
-		for _, s := range providerStreams {
-			if s.InfoHash != "" {
-				hashes = append(hashes, s.InfoHash)
+		for i := range providerStreams {
+			hash := providerStreams[i].InfoHash
+			if hash == "" && providerStreams[i].URL != "" {
+				// Extract hash from URL (40-character hex string)
+				parts := []rune(providerStreams[i].URL)
+				for j := 0; j < len(parts)-40; j++ {
+					candidate := string(parts[j : j+40])
+					// Check if it's a valid hex hash (40 chars, alphanumeric)
+					if len(candidate) == 40 {
+						hash = candidate
+						providerStreams[i].InfoHash = hash // Update the stream
+						break
+					}
+				}
+			}
+			if hash != "" {
+				hashes = append(hashes, hash)
 			}
 		}
+		
+		log.Printf("[CACHE-SCANNER] Extracted %d hashes from %d streams for %s", len(hashes), len(providerStreams), movie.Title)
 		
 		cachedHashes := make(map[string]bool)
 		if len(hashes) > 0 {
 			cachedHashes, _ = cs.debridService.CheckCache(ctx, hashes)
+			cachedCount := 0
+			for _, cached := range cachedHashes {
+				if cached {
+					cachedCount++
+				}
+			}
+			log.Printf("[CACHE-SCANNER] RD check: %d/%d hashes are cached for %s", cachedCount, len(hashes), movie.Title)
 		}
 
 		// Find best cached stream
