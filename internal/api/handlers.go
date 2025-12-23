@@ -3583,6 +3583,27 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// If branch is "tag", fetch the latest tag name
+	if branch == "tag" {
+		resp, err := http.Get("https://api.github.com/repos/Zerr0-C00L/StreamArr_Pro/tags?per_page=1")
+		if err == nil {
+			defer resp.Body.Close()
+			var tags []struct {
+				Name string `json:"name"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&tags) == nil && len(tags) > 0 {
+				branch = tags[0].Name
+				log.Printf("[Update] Using latest tag: %s", branch)
+			} else {
+				log.Println("[Update] Warning: Failed to fetch latest tag, falling back to 'main'")
+				branch = "main"
+			}
+		} else {
+			log.Printf("[Update] Warning: Failed to fetch tags: %v, falling back to 'main'", err)
+			branch = "main"
+		}
+	}
+
 	log.Println("[Update] Starting update process...")
 
 	// Check if running in Docker

@@ -722,6 +722,7 @@ func main() {
 	if streamCacheStore != nil && streamService != nil && debridService != nil && multiProvider != nil {
 		cacheScanner = api.NewCacheScanner(
 			movieStore,
+			seriesStore,
 			streamCacheStore,
 			streamService,
 			multiProvider,
