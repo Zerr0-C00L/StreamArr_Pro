@@ -171,39 +171,33 @@ func (eg *EnhancedGenerator) GenerateComplete(ctx context.Context) error {
 	return nil
 }
 
-// GenerateMoviePlaylistEnhanced with quality variants and categories
-// isMovieReleased checks if a movie has been released to digital/streaming/home video
-// If OnlyReleasedContent is disabled, always returns true
-func (eg *EnhancedGenerator) isMovieReleased(movie models.Movie) bool {
-	if !eg.cfg.OnlyReleasedContent {
-		return true // Filter disabled, include all movies
+// hasCachedStream checks if a movie has a cached stream in the Stream Cache Monitor
+// It queries using TMDB ID and joins with library_movies to find the database ID
+func (eg *EnhancedGenerator) hasCachedStream(ctx context.Context, tmdbID int) (bool, error) {
+	query := `SELECT EXISTS(
+		SELECT 1 FROM media_streams ms
+		JOIN library_movies m ON m.id = ms.movie_id
+		WHERE m.tmdb_id = $1
+	)`
+	log.Printf("DEBUG: Executing query: %s with tmdbID=%d", query, tmdbID)
+	var exists bool
+	err := eg.db.QueryRowContext(ctx, query, tmdbID).Scan(&exists)
+	if err != nil {
+		log.Printf("DEBUG: Query error: %v", err)
+		return false, err
 	}
-	
-	if movie.ReleaseDate == nil {
-		return false // No release date = not released
-	}
-	
-	// Check if theatrical release date has passed
-	now := time.Now()
-	
-	// For digital release, typically add ~90 days after theatrical release
-	// This is a conservative estimate for when movies become available digitally
-	digitalReleaseBuffer := 90 * 24 * time.Hour
-	digitalReleaseDate := movie.ReleaseDate.Add(digitalReleaseBuffer)
-	
-	return now.After(digitalReleaseDate)
+	log.Printf("DEBUG: Query result for tmdbID=%d: exists=%v", tmdbID, exists)
+	return exists, nil
 }
 
 func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) ([]MoviePlaylistEntry, error) {
 	log.Println("Generating enhanced movie playlist with quality variants...")
-	if eg.cfg.OnlyReleasedContent {
-		log.Println("OnlyReleasedContent is enabled - filtering unreleased movies")
-	}
+	log.Printf("DEBUG: OnlyCachedStreams setting: %v", eg.cfg.OnlyCachedStreams)
 	
 	entries := []MoviePlaylistEntry{}
 	addedIDs := make(map[int]bool)
 	num := 0
-	skippedUnreleased := 0
+	skippedCount := 0
 	
 	// Fetch Popular Movies
 	log.Println("Fetching popular movies...")
@@ -215,17 +209,38 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 		}
 		
 		for _, movie := range movies {
+			log.Printf("DEBUG: Processing movie: %s (TMDB ID: %d, movie.ID: %d)", movie.Title, movie.TMDBID, movie.ID)
+			
 			if addedIDs[movie.TMDBID] {
+				log.Printf("DEBUG: Movie %s already added, skipping", movie.Title)
+				skippedCount++
 				continue
 			}
 			if movie.ReleaseDate == nil || movie.ReleaseDate.Year() < eg.cfg.MinYear {
+				log.Printf("DEBUG: Movie %s has no release date or year < %d, skipping", movie.Title, eg.cfg.MinYear)
+				skippedCount++
 				continue
 			}
 			
-			// Check if movie is released (if OnlyReleasedContent is enabled)
-			if !eg.isMovieReleased(*movie) {
-				skippedUnreleased++
-				continue
+			// Check if movie has cached stream (if OnlyCachedStreams is enabled)
+			if eg.cfg.OnlyCachedStreams {
+				imdbID, ok := movie.Metadata["imdb_id"].(string)
+				if !ok || imdbID == "" {
+					log.Printf("DEBUG: Movie %s (TMDB %d) has no IMDB ID in metadata", movie.Title, movie.TMDBID)
+					skippedCount++
+					continue
+				}
+				log.Printf("DEBUG: Checking cache for movie %s (TMDB %d, IMDB %s)", movie.Title, movie.TMDBID, imdbID)
+				
+				// NOTE: movie.ID from TMDB API is actually the TMDB ID, not database ID
+				// We need to use TMDBID which is the actual TMDB ID
+				hasCachedStream, err := eg.hasCachedStream(ctx, movie.TMDBID)
+				log.Printf("DEBUG: hasCachedStream result: exists=%v, err=%v (using TMDBID=%d)", hasCachedStream, err, movie.TMDBID)
+				if err != nil || !hasCachedStream {
+					log.Printf("DEBUG: Skipping %s - no cached streams found", movie.Title)
+					skippedCount++
+					continue
+				}
 			}
 			
 			movieEntries := eg.createMovieEntries(*movie, "Popular Movies", &num)
@@ -259,10 +274,16 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 					continue
 				}
 				
-				// Check if movie is released (if OnlyReleasedContent is enabled)
-				if !eg.isMovieReleased(*movie) {
-					skippedUnreleased++
-					continue
+				// Check if movie has cached stream (if OnlyCachedStreams is enabled)
+				if eg.cfg.OnlyCachedStreams {
+					imdbID, ok := movie.Metadata["imdb_id"].(string)
+					if !ok || imdbID == "" {
+						continue
+					}
+					hasCachedStream, err := eg.hasCachedStream(ctx, int(movie.ID))
+					if err != nil || !hasCachedStream {
+						continue
+					}
 				}
 				
 				movieEntries := eg.createMovieEntries(*movie, genre.name, &num)
@@ -272,9 +293,7 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 		}
 	}
 	
-	if skippedUnreleased > 0 {
-		log.Printf("Skipped %d unreleased movies", skippedUnreleased)
-	}
+	log.Printf("DEBUG: Final stats - Total entries generated: %d, Total movies processed: %d, Skipped: %d", len(entries), len(addedIDs), skippedCount)
 	log.Printf("Generated %d total movie entries (with variants)", len(entries))
 	return entries, nil
 }

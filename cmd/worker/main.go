@@ -92,7 +92,6 @@ func main() {
 	if appSettings.MinYear > 0 {
 		cfg.MinYear = appSettings.MinYear
 	}
-	cfg.OnlyReleasedContent = appSettings.OnlyReleasedContent
 	
 	log.Println("✓ All settings loaded from database")
 

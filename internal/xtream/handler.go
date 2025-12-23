@@ -60,6 +60,7 @@ type XtreamHandler struct {
 	channelManager  *livetv.ChannelManager
 	epgManager      *epg.Manager
 	hideUnavailable func() bool
+	getSettings     func() interface{} // Dynamically get settings
 	baseURL         string
 	episodeCache    map[string]EpisodeLookup
 	episodeMu       sync.RWMutex
@@ -90,6 +91,7 @@ func NewXtreamHandlerWithProvider(cfg *config.Config, db *sql.DB, tmdb *services
 		epgManager:     epgManager,
 		baseURL:        fmt.Sprintf("http://%s:%d", cfg.Host, cfg.ServerPort),
 		episodeCache:   make(map[string]EpisodeLookup),
+		getSettings:    func() interface{} { return nil }, // Default: no settings
 	}
 	
 	// Load episode cache from file
@@ -415,6 +417,11 @@ func (h *XtreamHandler) getYouTubeTrailer(tmdbID int64, mediaType string) string
 	return ""
 }
 
+// SetSettingsGetter sets the function to dynamically fetch settings
+func (h *XtreamHandler) SetSettingsGetter(fn func() interface{}) {
+	h.getSettings = fn
+}
+
 func (h *XtreamHandler) RegisterRoutes(r *mux.Router) {
 	// Xtream Codes API endpoints
 	r.HandleFunc("/player_api.php", h.handlePlayerAPI).Methods("GET")
@@ -652,25 +659,36 @@ func (h *XtreamHandler) getVODStreams(w http.ResponseWriter, r *http.Request) {
 		hideUnavailable = h.hideUnavailable()
 	}
 	
-	// Query movies - using TMDB ID as stream_id for proper playback routing
-	// If hideUnavailable is true, show movies where available = true OR not yet checked (last_checked IS NULL)
-	// This ensures newly added movies still show in IPTV until they've been scanned
-	var query string
-	if hideUnavailable {
-		query = `
-			SELECT id, tmdb_id, title, year, metadata, COALESCE(EXTRACT(EPOCH FROM added_at), 0) as added_ts
-			FROM library_movies
-			WHERE monitored = true AND (available = true OR last_checked IS NULL)
-			ORDER BY id DESC
-		`
-	} else {
-		query = `
-			SELECT id, tmdb_id, title, year, metadata, COALESCE(EXTRACT(EPOCH FROM added_at), 0) as added_ts
-			FROM library_movies
-			WHERE monitored = true
-			ORDER BY id DESC
-		`
+	// Get current settings
+	var onlyCached bool
+	if h.getSettings != nil {
+		if settings := h.getSettings(); settings != nil {
+			if settingsMap, ok := settings.(map[string]interface{}); ok {
+				if oc, ok := settingsMap["only_cached_streams"].(bool); ok {
+					onlyCached = oc
+				}
+			}
+		}
 	}
+	
+	// Build query with filters
+	query := `
+		SELECT id, tmdb_id, title, year, metadata, COALESCE(EXTRACT(EPOCH FROM added_at), 0) as added_ts
+		FROM library_movies
+		WHERE monitored = true
+	`
+	
+	// Apply hideUnavailable filter
+	if hideUnavailable {
+		query += ` AND (available = true OR last_checked IS NULL)`
+	}
+	
+	// Apply "Only Cached Streams" filter
+	if onlyCached {
+		query += ` AND EXISTS (SELECT 1 FROM media_streams ms WHERE ms.movie_id = id)`
+	}
+	
+	query += ` ORDER BY id DESC`
 	
 	rows, err := h.db.Query(query)
 	if err != nil {
@@ -1033,13 +1051,31 @@ func (h *XtreamHandler) getSeries(w http.ResponseWriter, r *http.Request) {
 	// Get category_id filter from query params
 	categoryFilter := r.URL.Query().Get("category_id")
 	
+	// Get current settings
+	var onlyCached bool
+	if h.getSettings != nil {
+		if settings := h.getSettings(); settings != nil {
+			if settingsMap, ok := settings.(map[string]interface{}); ok {
+				if oc, ok := settingsMap["only_cached_streams"].(bool); ok {
+					onlyCached = oc
+				}
+			}
+		}
+	}
+	
 	// Query all series - using TMDB ID as series_id for proper playback routing
 	query := `
 		SELECT id, tmdb_id, title, year, metadata, COALESCE(EXTRACT(EPOCH FROM added_at), 0) as added_ts
 		FROM library_series
 		WHERE monitored = true
-		ORDER BY id DESC
 	`
+	
+	// Apply "Only Cached Streams" filter (for series, check if any episodes are cached)
+	if onlyCached {
+		query += ` AND EXISTS (SELECT 1 FROM media_streams ms WHERE ms.series_id = id)`
+	}
+	
+	query += ` ORDER BY id DESC`
 	
 	rows, err := h.db.Query(query)
 	if err != nil {
@@ -2122,13 +2158,43 @@ func (h *XtreamHandler) handleGetPlaylist(w http.ResponseWriter, r *http.Request
 
 	fmt.Fprintf(w, "#EXTM3U\n")
 
-	// Add VOD streams (movies) - using TMDB ID
-	movieRows, err := h.db.Query(`
-		SELECT tmdb_id, title, year, metadata
-		FROM library_movies
-		WHERE monitored = true
-		ORDER BY title
-	`)
+	// Get current settings
+	var onlyCached bool
+	log.Printf("[XTREAM] handleGetPlaylist: getSettings=%v", h.getSettings != nil)
+	if h.getSettings != nil {
+		if settings := h.getSettings(); settings != nil {
+			log.Printf("[XTREAM] handleGetPlaylist: settings=%+v", settings)
+			if settingsMap, ok := settings.(map[string]interface{}); ok {
+				if oc, ok := settingsMap["only_cached_streams"].(bool); ok {
+					onlyCached = oc
+					log.Printf("[XTREAM] handleGetPlaylist: onlyCached=%v", onlyCached)
+				}
+			}
+		} else {
+			log.Printf("[XTREAM] handleGetPlaylist: getSettings() returned nil")
+		}
+	} else {
+		log.Printf("[XTREAM] handleGetPlaylist: getSettings is nil")
+	}
+
+	// Add VOD streams (movies) - using TMDB ID with filters
+	// Build dynamic query based on settings
+	query := `
+		SELECT m.tmdb_id, m.title, m.year, m.metadata
+		FROM library_movies m
+		WHERE m.monitored = true
+	`
+	
+	// Apply "Only Cached Streams" filter
+	if onlyCached {
+		query += ` AND EXISTS (SELECT 1 FROM media_streams ms WHERE ms.movie_id = m.id)`
+		log.Printf("[XTREAM] Adding cache filter to query")
+	}
+	
+	query += ` ORDER BY m.title`
+	log.Printf("[XTREAM] Final query: %s", query)
+	
+	movieRows, err := h.db.Query(query)
 	if err == nil {
 		defer movieRows.Close()
 		for movieRows.Next() {

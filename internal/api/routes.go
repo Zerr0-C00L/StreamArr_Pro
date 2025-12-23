@@ -346,6 +346,7 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	api.HandleFunc("/streams/cache/upgrades", handler.GetUpgradesAvailable).Methods("GET")
 	api.HandleFunc("/streams/cache/list", handler.GetCachedMoviesList).Methods("GET")
 	api.HandleFunc("/streams/cache/scan", handler.TriggerCacheScan).Methods("POST")
+	api.HandleFunc("/streams/cache/cleanup-unreleased", handler.CleanupUnreleasedCache).Methods("POST")
 
 	// Movies
 	api.HandleFunc("/movies", handler.ListMovies).Methods("GET")

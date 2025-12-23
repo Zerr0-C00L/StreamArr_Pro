@@ -83,7 +83,7 @@ interface SettingsData {
   livetv_validate_streams: boolean;
   livetv_enabled_sources: string[];
   livetv_enabled_categories: string[];
-  only_released_content: boolean;
+  only_cached_streams: boolean;
   hide_unavailable_content: boolean;
   update_branch: string;
   xtream_username: string;
@@ -2569,17 +2569,17 @@ export default function Settings() {
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
-                        id="only_released"
-                        checked={settings?.only_released_content || false}
-                        onChange={(e) => updateSetting('only_released_content', e.target.checked)}
+                        id="only_cached_streams"
+                        checked={settings?.only_cached_streams || false}
+                        onChange={(e) => updateSetting('only_cached_streams', e.target.checked)}
                         className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded"
                       />
-                      <label htmlFor="only_released" className="text-sm font-medium text-slate-300">
-                        Only Include Released Content in Playlist
+                      <label htmlFor="only_cached_streams" className="text-sm font-medium text-slate-300">
+                        Only Include Media with Cached Streams
                       </label>
                     </div>
                     <p className="text-xs text-slate-500 mt-1 ml-6">
-                      Only include movies/series in the IPTV playlist that are already released. Unreleased items remain in your library but won't appear in the playlist.
+                      Only include movies/series in the IPTV playlist that have cached streams in Stream Cache Monitor. This ensures instant playback for all playlist items.
                     </p>
                   </div>
                 </div>

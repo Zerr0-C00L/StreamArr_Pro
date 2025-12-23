@@ -52,6 +52,7 @@ export default function CacheMonitor() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'available' | 'unavailable' | 'upgrades'>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -71,6 +72,23 @@ export default function CacheMonitor() {
       setLoading(false);
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const cleanupUnreleased = async () => {
+    if (!confirm('Remove cached streams for unreleased movies? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setCleaningUp(true);
+      const response = await api.post('/streams/cache/cleanup-unreleased');
+      alert(`✅ ${response.data.message}`);
+      fetchData(); // Refresh data
+    } catch (error: any) {
+      alert(`❌ Cleanup failed: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setCleaningUp(false);
     }
   };
 
@@ -125,14 +143,24 @@ export default function CacheMonitor() {
           </h1>
           <p className="text-slate-400 mt-1">Track cached streams, quality, and upgrade status</p>
         </div>
-        <button
-          onClick={fetchData}
-          disabled={refreshing}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white flex items-center gap-2 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={cleanupUnreleased}
+            disabled={cleaningUp}
+            className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-white flex items-center gap-2 disabled:opacity-50"
+          >
+            <XCircle className={`w-4 h-4 ${cleaningUp ? 'animate-spin' : ''}`} />
+            Cleanup Unreleased
+          </button>
+          <button
+            onClick={fetchData}
+            disabled={refreshing}
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white flex items-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

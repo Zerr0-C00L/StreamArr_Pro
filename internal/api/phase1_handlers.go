@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	
@@ -207,5 +208,27 @@ func (h *Handler) TriggerCacheScan(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{
 		"status": "started",
 		"message": "Cache scan started in background. Check logs for progress.",
+	})
+}
+
+// CleanupUnreleasedCache removes cached streams for unreleased movies
+func (h *Handler) CleanupUnreleasedCache(w http.ResponseWriter, r *http.Request) {
+	if h.cacheScanner == nil {
+		respondError(w, http.StatusServiceUnavailable, "cache scanner not enabled")
+		return
+	}
+
+	ctx := r.Context()
+	deleted, err := h.cacheScanner.CleanupUnreleasedCache(ctx)
+	if err != nil {
+		log.Printf("[CACHE-CLEANUP] Error: %v", err)
+		respondError(w, http.StatusInternalServerError, "cleanup failed")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"deleted": deleted,
+		"message": fmt.Sprintf("Cleaned up %d cached streams for unreleased movies", deleted),
 	})
 }

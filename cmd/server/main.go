@@ -160,7 +160,6 @@ func main() {
 	}
 	cfg.UserCreatePlaylist = appSettings.UserCreatePlaylist
 	cfg.IncludeAdultVOD = appSettings.IncludeAdultVOD
-	cfg.OnlyReleasedContent = appSettings.OnlyReleasedContent
 	if appSettings.AutoCacheIntervalHours > 0 {
 		cfg.AutoCacheIntervalHours = appSettings.AutoCacheIntervalHours
 	}
@@ -455,6 +454,14 @@ func main() {
 	xtreamHandler.SetHideUnavailable(func() bool {
 		s := settingsManager.Get()
 		return s.HideUnavailableContent
+	})
+
+	// Wire up dynamic settings getter for playlist filters
+	xtreamHandler.SetSettingsGetter(func() interface{} {
+		s := settingsManager.Get()
+		return map[string]interface{}{
+			"only_cached_streams":   s.OnlyCachedStreams,
+		}
 	})
 
 	// Wire up optional duplication of VOD entries per provider for broader IPTV client compatibility

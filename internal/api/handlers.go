@@ -2453,9 +2453,22 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("[Settings] UpdateSettings: StremioAddon.Enabled=%v", newSettings.StremioAddon.Enabled)
 
+		// Get old settings to detect changes
+		oldSettings := h.settingsManager.Get()
+		
 		if err := h.settingsManager.Update(&newSettings); err != nil {
 			respondError(w, http.StatusInternalServerError, "failed to update settings")
 			return
+		}
+
+		// Log playlist filter changes
+		if oldSettings.OnlyCachedStreams != newSettings.OnlyCachedStreams {
+			if newSettings.OnlyCachedStreams {
+				log.Printf("[Settings] ✅ Playlist filter enabled: Only cached streams will be included in IPTV playlists")
+			} else {
+				log.Printf("[Settings] ℹ️ Playlist filter disabled: Full library will be included in IPTV playlists")
+			}
+			log.Printf("[Settings] 📺 Users should refresh their IPTV apps to see updated playlists")
 		}
 
 		// Apply M3U source changes to channel manager immediately
@@ -3138,10 +3151,13 @@ func (h *Handler) GetDatabaseStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Count streams using CountAll method
-	if h.streamStore != nil {
-		if count, err := h.streamStore.CountAll(ctx); err == nil {
-			streamCount = int64(count)
+	// Count cached streams from media_streams table (Stream Cache Monitor)
+	if h.streamCacheStore != nil {
+		db := h.streamCacheStore.GetDB()
+		err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM media_streams").Scan(&streamCount)
+		if err != nil {
+			log.Printf("Failed to count media_streams: %v", err)
+			streamCount = 0
 		}
 	}
 

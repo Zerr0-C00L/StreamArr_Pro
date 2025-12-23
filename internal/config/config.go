@@ -51,7 +51,7 @@ type Config struct {
 	IncludeAdultVOD            bool
 	EnableQualityVariants      bool
 	ShowFullStreamName         bool
-	OnlyReleasedContent        bool
+	OnlyCachedStreams          bool   // Only include media with cached streams
 
 	// Provider Settings
 	UseRealDebrid             bool
@@ -110,6 +110,7 @@ func Load() *Config {
 		IncludeAdultVOD:        false,
 		EnableQualityVariants:  false,
 		ShowFullStreamName:     false,
+		OnlyCachedStreams:      false,
 		
 		// Provider defaults
 		UseRealDebrid:      true,
