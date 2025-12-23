@@ -150,6 +150,8 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 		providerStreams, err := cs.provider.GetMovieStreamsWithYear(imdbID, releaseYear)
 		if err != nil {
 			log.Printf("[CACHE-SCANNER] Error fetching streams for %s (%s): %v", movie.Title, imdbID, err)
+			// Add delay on error to avoid rate limiting
+			time.Sleep(5 * time.Second)
 			continue
 		}
 		if len(providerStreams) == 0 {
@@ -158,6 +160,9 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 			}
 			continue
 		}
+		
+		// Add small delay between requests to avoid rate limiting
+		time.Sleep(500 * time.Millisecond)
 		
 		log.Printf("[CACHE-SCANNER] Found %d streams for %s (%s)", len(providerStreams), movie.Title, imdbID)
 
