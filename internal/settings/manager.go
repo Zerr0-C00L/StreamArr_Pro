@@ -91,6 +91,7 @@ type Settings struct {
 	AutoCacheIntervalHours int    `json:"auto_cache_interval_hours"`
 	ImportAdultVODFromGitHub bool `json:"import_adult_vod_from_github"` // Import adult VOD content from public-files repo
 	OnlyCachedStreams      bool   `json:"only_cached_streams"` // Only include media with cached streams in Stream Cache Monitor
+	OnlyReleasedContent    bool   `json:"only_released_content"` // Only include released content in IPTV playlist
 	
 	// Balkan VOD Settings (GitHub Repos: Balkan-On-Demand + DomaciFlix)
 	BalkanVODEnabled              bool     `json:"balkan_vod_enabled"`              // Enable Balkan VOD import from GitHub
