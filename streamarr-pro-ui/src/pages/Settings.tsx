@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Layers, Settings as SettingsIcon, Code, Plus, X, Tv, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search, TrendingUp, XCircle } from 'lucide-react';
+import { Save, Layers, Settings as SettingsIcon, Code, Plus, X, Tv, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search, TrendingUp, XCircle, Calendar } from 'lucide-react';
 import axios from 'axios';
 
 // v1.2.1 - Added manual IP configuration
@@ -283,6 +283,9 @@ export default function Settings() {
   const [sourceStatuses, setSourceStatuses] = useState<Map<string, SourceStatus>>(new Map());
   const [checkingAllSources, setCheckingAllSources] = useState(false);
   const [cacheStats, setCacheStats] = useState<any>(null);
+  const [cachedMovies, setCachedMovies] = useState<any[]>([]);
+  const [cacheFilter, setCacheFilter] = useState<'all' | 'available' | 'unavailable' | 'upgrades'>('all');
+  const [refreshingCache, setRefreshingCache] = useState(false);
 
   // Initialize
   useEffect(() => {
@@ -303,7 +306,7 @@ export default function Settings() {
       fetchBlacklist();
     }
     if (activeTab === 'cache') {
-      fetchCacheStats();
+      fetchCacheData();
     }
   }, [activeTab]);
 
@@ -312,6 +315,12 @@ export default function Settings() {
       const interval = setInterval(() => {
         fetchServices();
       }, 5000);
+      return () => clearInterval(interval);
+    }
+    if (activeTab === 'cache') {
+      const interval = setInterval(() => {
+        fetchCacheData();
+      }, 30000); // Refresh every 30 seconds
       return () => clearInterval(interval);
     }
   }, [activeTab]);
@@ -620,12 +629,24 @@ export default function Settings() {
     }
   };
 
-  const fetchCacheStats = async () => {
+  const fetchCacheData = async () => {
+    setRefreshingCache(true);
     try {
-      const response = await api.get('/streams/cache/stats');
-      setCacheStats(response.data);
+      const [statsRes, moviesRes] = await Promise.all([
+        api.get('/streams/cache/stats'),
+        api.get('/streams/cache/list')
+      ]);
+      setCacheStats(statsRes.data || {
+        total_cached: 0,
+        available: 0,
+        unavailable: 0,
+        avg_quality_score: 0
+      });
+      setCachedMovies(Array.isArray(moviesRes.data) ? moviesRes.data : []);
     } catch (error) {
-      console.error('Failed to fetch cache stats:', error);
+      console.error('Failed to fetch cache data:', error);
+    } finally {
+      setRefreshingCache(false);
     }
   };
 
@@ -3577,67 +3598,230 @@ export default function Settings() {
         {/* CACHE MONITOR TAB */}
         {activeTab === 'cache' && (
           <div className="space-y-6">
-            <div className="bg-[#1e1e1e] rounded-xl p-6 border border-white/10">
-              <div className="mb-4 p-4 bg-blue-900/30 border border-blue-800 rounded-lg">
-                <h3 className="text-red-400 font-medium mb-2">💾 Stream Cache Monitor</h3>
-                <p className="text-sm text-slate-300">
-                  Monitor and manage your cached streams. View availability, quality scores, and upgrade opportunities.
-                </p>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <Database className="w-7 h-7" />
+                  Stream Cache Monitor
+                </h2>
+                <p className="text-slate-400 mt-1">Track cached streams, quality, and upgrade status</p>
               </div>
+              <button
+                onClick={fetchCacheData}
+                disabled={refreshingCache}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white flex items-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshingCache ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
 
-              {cacheStats ? (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-slate-900 p-4 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-slate-400 text-sm">Total Cached</span>
-                      <Database className="w-4 h-4 text-blue-400" />
+            {/* Stats Cards */}
+            {cacheStats && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 border border-blue-500/20 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-slate-400">Total Cached</p>
+                      <p className="text-3xl font-bold text-white mt-1">{cacheStats.total_cached}</p>
                     </div>
-                    <p className="text-2xl font-bold text-white">{cacheStats.total || 0}</p>
-                  </div>
-                  <div className="bg-slate-900 p-4 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-slate-400 text-sm">Available</span>
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                    </div>
-                    <p className="text-2xl font-bold text-green-400">{cacheStats.available || 0}</p>
-                  </div>
-                  <div className="bg-slate-900 p-4 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-slate-400 text-sm">Unavailable</span>
-                      <XCircle className="w-4 h-4 text-red-400" />
-                    </div>
-                    <p className="text-2xl font-bold text-red-400">{cacheStats.unavailable || 0}</p>
-                  </div>
-                  <div className="bg-slate-900 p-4 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-slate-400 text-sm">Avg Quality</span>
-                      <TrendingUp className="w-4 h-4 text-yellow-400" />
-                    </div>
-                    <p className="text-2xl font-bold text-yellow-400">{cacheStats.avg_quality_score?.toFixed(1) || '0.0'}</p>
+                    <Film className="w-10 h-10 text-blue-400 opacity-50" />
                   </div>
                 </div>
-              ) : (
-                <div className="bg-slate-900 p-6 rounded-lg mb-6 text-center text-slate-400">
-                  Loading cache statistics...
-                </div>
-              )}
 
-              <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-                <a
-                  href="/cache-monitor"
-                  className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
-                >
-                  <Database className="w-5 h-5" />
-                  Open Full Cache Monitor
-                </a>
-                <button
-                  onClick={fetchCacheStats}
-                  disabled={loading}
-                  className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-600 disabled:bg-slate-800 transition-colors"
-                >
-                  <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                  Refresh Stats
-                </button>
+                <div className="bg-gradient-to-br from-green-500/10 to-green-600/10 border border-green-500/20 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-slate-400">Available</p>
+                      <p className="text-3xl font-bold text-white mt-1">{cacheStats.available}</p>
+                    </div>
+                    <CheckCircle className="w-10 h-10 text-green-400 opacity-50" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-red-500/10 to-red-600/10 border border-red-500/20 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-slate-400">Unavailable</p>
+                      <p className="text-3xl font-bold text-white mt-1">{cacheStats.unavailable}</p>
+                    </div>
+                    <XCircle className="w-10 h-10 text-red-400 opacity-50" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/10 border border-purple-500/20 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-slate-400">Avg Quality</p>
+                      <p className="text-3xl font-bold text-white mt-1">{cacheStats.avg_quality_score?.toFixed(0) || '0'}</p>
+                    </div>
+                    <TrendingUp className="w-10 h-10 text-purple-400 opacity-50" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Filters */}
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setCacheFilter('all')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  cacheFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                All ({cachedMovies?.length || 0})
+              </button>
+              <button
+                onClick={() => setCacheFilter('available')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  cacheFilter === 'available' ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                Available ({cachedMovies?.filter(m => m.is_available).length || 0})
+              </button>
+              <button
+                onClick={() => setCacheFilter('unavailable')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  cacheFilter === 'unavailable' ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                Unavailable ({cachedMovies?.filter(m => !m.is_available).length || 0})
+              </button>
+              <button
+                onClick={() => setCacheFilter('upgrades')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  cacheFilter === 'upgrades' ? 'bg-purple-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                Upgrades Available ({cachedMovies?.filter(m => m.upgrade_available).length || 0})
+              </button>
+            </div>
+
+            {/* Movies Table */}
+            <div className="bg-[#1e1e1e] rounded-xl border border-white/10 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-800/50 border-b border-white/10">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Movie</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Quality</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Resolution</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Source</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Size</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Status</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Cached</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Last Check</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {(() => {
+                      const filtered = (cachedMovies || []).filter(movie => {
+                        if (cacheFilter === 'available') return movie.is_available;
+                        if (cacheFilter === 'unavailable') return !movie.is_available;
+                        if (cacheFilter === 'upgrades') return movie.upgrade_available;
+                        return true;
+                      });
+
+                      const getQualityBadgeColor = (score: number) => {
+                        if (score >= 80) return 'bg-green-500/20 text-green-400 border-green-500/50';
+                        if (score >= 60) return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
+                        if (score >= 40) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
+                        return 'bg-red-500/20 text-red-400 border-red-500/50';
+                      };
+
+                      const formatDate = (dateString: string) => {
+                        const date = new Date(dateString);
+                        const now = new Date();
+                        const diffMs = now.getTime() - date.getTime();
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        
+                        if (diffDays === 0) return 'Today';
+                        if (diffDays === 1) return 'Yesterday';
+                        if (diffDays < 7) return `${diffDays} days ago`;
+                        return date.toLocaleDateString();
+                      };
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                              No cached streams found
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map((movie) => (
+                        <tr key={movie.movie_id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="text-white font-medium">{movie.title}</p>
+                              <p className="text-xs text-slate-400">{movie.year}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${getQualityBadgeColor(movie.quality_score)}`}>
+                              Score: {movie.quality_score}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm text-white">{movie.resolution}</span>
+                              {movie.hdr_type && movie.hdr_type !== 'SDR' && (
+                                <span className="text-xs text-purple-400">{movie.hdr_type}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-sm text-white">{movie.source_type}</span>
+                              {movie.audio_format && (
+                                <span className="text-xs text-blue-400">{movie.audio_format}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-slate-300">{movie.file_size_gb.toFixed(1)} GB</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-1">
+                              {movie.is_available ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                                  <CheckCircle className="w-3 h-3" />
+                                  Available
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-red-400">
+                                  <XCircle className="w-3 h-3" />
+                                  Unavailable
+                                </span>
+                              )}
+                              {movie.upgrade_available && (
+                                <span className="inline-flex items-center gap-1 text-xs text-purple-400">
+                                  <TrendingUp className="w-3 h-3" />
+                                  Upgrade Ready
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-sm text-slate-300">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(movie.cached_at)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 text-sm text-slate-400">
+                              <Clock className="w-3 h-3" />
+                              {formatDate(movie.last_checked)}
+                            </div>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
