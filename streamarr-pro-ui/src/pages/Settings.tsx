@@ -2242,7 +2242,7 @@ export default function Settings() {
                         type="checkbox"
                         id="only_released"
                         checked={settings?.only_released_content || false}
-                        onChange={(e) => updateSetting('only_released_content', e.target.checked)}
+                        onChange={(e) => saveSettingsImmediate({ only_released_content: e.target.checked })}
                         className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded"
                       />
                       <label htmlFor="only_released" className="text-sm font-medium text-slate-300">
