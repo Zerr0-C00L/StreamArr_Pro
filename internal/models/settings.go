@@ -31,6 +31,8 @@ type SettingsResponse struct {
 	IPTVImportMode       string `json:"iptv_import_mode"` // live_only | vod_only | both
 	DuplicateVODPerProvider bool `json:"duplicate_vod_per_provider"`
 	IPTVVODSyncIntervalHours int `json:"iptv_vod_sync_interval_hours"`
+	OnlyReleasedContent  bool   `json:"only_released_content"`
+	HideUnavailableContent bool `json:"hide_unavailable_content"`
 
 	// Stream Settings (quality/size handled by addon configuration)
 	EnableQualityVariants  bool `json:"enable_quality_variants"`
