@@ -504,7 +504,7 @@ func (s *MDBListSyncService) enrichSeries(ctx context.Context) (int, error) {
 			// Mark as not found to avoid retrying
 			metadata["tmdb_not_found"] = "true"
 			notFoundJSON, _ := json.Marshal(metadata)
-			if err := s.db.ExecContext(ctx, `UPDATE library_series SET metadata = $1 WHERE id = $2`, notFoundJSON, id); err != nil {
+			if _, err := s.db.ExecContext(ctx, `UPDATE library_series SET metadata = $1 WHERE id = $2`, notFoundJSON, id); err != nil {
 				log.Printf("[MDBList] Error marking series as not found: %v", err)
 			}
 			continue
