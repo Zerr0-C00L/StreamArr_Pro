@@ -135,12 +135,6 @@ interface SourceStatus {
   checking?: boolean;
 }
 
-interface _ChannelStats {
-  total_channels: number;
-  categories: Array<{name: string; count: number}>;
-  sources: Array<{name: string; count: number}>;
-}
-
 interface ServiceStatus {
   name: string;
   description: string;
@@ -546,9 +540,9 @@ export default function Settings() {
     setLoadingBlacklist(false);
   };
 
-  const _executeDbAction = async (action: string) => {
-    setDbOperation(action);
-    setConfirmDialog(null);
+  const executeDbAction = async (action: string) => {
+    _setDbOperation(action);
+    _setConfirmDialog(null);
     try {
       const response = await api.post(`/database/${action}`);
       setMessage(`✅ ${response.data.message}`);
@@ -559,7 +553,7 @@ export default function Settings() {
       setMessage(`❌ Failed: ${error.response?.data?.error || error.message}`);
       setTimeout(() => setMessage(''), 5000);
     }
-    setDbOperation(null);
+    _setDbOperation(null);
   };
 
   const fetchVersionInfo = async () => {
@@ -1062,8 +1056,8 @@ export default function Settings() {
   };
 
   // Helper functions
-  const _showConfirmDialog = (action: string, title: string, message: string) => {
-    setConfirmDialog({ action, title, message });
+  const showConfirmDialog = (action: string, title: string, message: string) => {
+    _setConfirmDialog({ action, title, message });
   };
 
   const toggleServiceEnabled = async (serviceName: string, enabled: boolean) => {
