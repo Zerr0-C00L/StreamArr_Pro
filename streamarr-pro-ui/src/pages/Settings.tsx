@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Layers, Settings as SettingsIcon, Code, Plus, X, Tv, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search } from 'lucide-react';
+import { Save, Layers, Settings as SettingsIcon, Code, Plus, X, Tv, Activity, Play, Clock, RefreshCw, Filter, Database, Trash2, Info, Github, Download, ExternalLink, CheckCircle, AlertCircle, Film, User, Camera, Loader, Search, TrendingUp, XCircle } from 'lucide-react';
 import axios from 'axios';
 
 // v1.2.1 - Added manual IP configuration
@@ -282,6 +282,7 @@ export default function Settings() {
   const [enabledCategories, setEnabledCategories] = useState<Set<string>>(new Set());
   const [sourceStatuses, setSourceStatuses] = useState<Map<string, SourceStatus>>(new Map());
   const [checkingAllSources, setCheckingAllSources] = useState(false);
+  const [cacheStats, setCacheStats] = useState<any>(null);
 
   // Initialize
   useEffect(() => {
@@ -300,6 +301,9 @@ export default function Settings() {
   useEffect(() => {
     if (activeTab === 'services') {
       fetchBlacklist();
+    }
+    if (activeTab === 'cache') {
+      fetchCacheStats();
     }
   }, [activeTab]);
 
@@ -613,6 +617,15 @@ export default function Settings() {
     } catch (error: any) {
       setProfileMessage(`❌ ${error.response?.data?.error || 'Failed to update profile'}`);
       setTimeout(() => setProfileMessage(''), 3000);
+    }
+  };
+
+  const fetchCacheStats = async () => {
+    try {
+      const response = await api.get('/streams/cache/stats');
+      setCacheStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch cache stats:', error);
     }
   };
 
@@ -3563,25 +3576,69 @@ export default function Settings() {
 
         {/* CACHE MONITOR TAB */}
         {activeTab === 'cache' && (
-          <div className="bg-[#1e1e1e] rounded-xl p-6 border border-white/10">
-            <div className="mb-4 p-4 bg-blue-900/30 border border-blue-800 rounded-lg">
-              <h3 className="text-red-400 font-medium mb-2">💾 Stream Cache Monitor</h3>
-              <p className="text-sm text-slate-300">
-                Monitor cached streams availability. The cache monitor is available as a dedicated page.
-              </p>
-            </div>
-            <div className="flex flex-col items-center justify-center py-12 space-y-4">
-              <Database className="w-16 h-16 text-slate-400" />
-              <p className="text-slate-400 text-lg">Stream Cache Monitor</p>
-              <p className="text-slate-500 text-sm text-center max-w-md">
-                View and manage your cached streams, check availability, and monitor quality scores from the dedicated Cache Monitor page.
-              </p>
-              <a
-                href="/cache-monitor"
-                className="mt-4 px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
-              >
-                Open Cache Monitor
-              </a>
+          <div className="space-y-6">
+            <div className="bg-[#1e1e1e] rounded-xl p-6 border border-white/10">
+              <div className="mb-4 p-4 bg-blue-900/30 border border-blue-800 rounded-lg">
+                <h3 className="text-red-400 font-medium mb-2">💾 Stream Cache Monitor</h3>
+                <p className="text-sm text-slate-300">
+                  Monitor and manage your cached streams. View availability, quality scores, and upgrade opportunities.
+                </p>
+              </div>
+
+              {cacheStats ? (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-slate-900 p-4 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-slate-400 text-sm">Total Cached</span>
+                      <Database className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <p className="text-2xl font-bold text-white">{cacheStats.total || 0}</p>
+                  </div>
+                  <div className="bg-slate-900 p-4 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-slate-400 text-sm">Available</span>
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                    </div>
+                    <p className="text-2xl font-bold text-green-400">{cacheStats.available || 0}</p>
+                  </div>
+                  <div className="bg-slate-900 p-4 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-slate-400 text-sm">Unavailable</span>
+                      <XCircle className="w-4 h-4 text-red-400" />
+                    </div>
+                    <p className="text-2xl font-bold text-red-400">{cacheStats.unavailable || 0}</p>
+                  </div>
+                  <div className="bg-slate-900 p-4 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-slate-400 text-sm">Avg Quality</span>
+                      <TrendingUp className="w-4 h-4 text-yellow-400" />
+                    </div>
+                    <p className="text-2xl font-bold text-yellow-400">{cacheStats.avg_quality_score?.toFixed(1) || '0.0'}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-900 p-6 rounded-lg mb-6 text-center text-slate-400">
+                  Loading cache statistics...
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
+                <a
+                  href="/cache-monitor"
+                  className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+                >
+                  <Database className="w-5 h-5" />
+                  Open Full Cache Monitor
+                </a>
+                <button
+                  onClick={fetchCacheStats}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-white rounded-lg font-medium hover:bg-slate-600 disabled:bg-slate-800 transition-colors"
+                >
+                  <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh Stats
+                </button>
+              </div>
             </div>
           </div>
         )}
