@@ -3,7 +3,8 @@
 
 CREATE TABLE IF NOT EXISTS media_streams (
     id              SERIAL PRIMARY KEY,
-    media_id        INTEGER REFERENCES media(id) UNIQUE,  -- One stream per media
+    media_type      VARCHAR(10) NOT NULL,  -- 'movie' or 'series'
+    media_id        INTEGER NOT NULL,      -- References library_movies.id or library_series.id
     stream_url      TEXT NOT NULL,
     stream_hash     VARCHAR(64),        -- For duplicate detection
     quality_score   INTEGER,            -- 0-100 score (algorithmic, no AI)
@@ -21,7 +22,8 @@ CREATE TABLE IF NOT EXISTS media_streams (
     upgrade_available BOOLEAN DEFAULT false,
     next_check_at   TIMESTAMP DEFAULT NOW() + INTERVAL '7 days',
     created_at      TIMESTAMP DEFAULT NOW(),
-    updated_at      TIMESTAMP DEFAULT NOW()
+    updated_at      TIMESTAMP DEFAULT NOW(),
+    UNIQUE(media_type, media_id)  -- One stream per media item
 );
 
 -- Index for scheduled checks (background worker queries this)
@@ -29,7 +31,7 @@ CREATE INDEX idx_streams_next_check ON media_streams (next_check_at)
 WHERE is_available = true;
 
 -- Index for media lookup (fast retrieval on playback)
-CREATE INDEX idx_streams_media_id ON media_streams (media_id);
+CREATE INDEX idx_streams_media_type_id ON media_streams (media_type, media_id);
 
 -- Index for quality score (finding upgrade candidates)
 CREATE INDEX idx_streams_quality ON media_streams (quality_score);
