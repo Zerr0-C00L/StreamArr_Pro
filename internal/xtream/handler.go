@@ -2185,6 +2185,7 @@ func (h *XtreamHandler) handleGetPlaylist(w http.ResponseWriter, r *http.Request
 
 	// Check if "Only Include Media with Cached Streams" setting is enabled
 	var onlyIncludeCached bool
+	var onlyReleasedContent bool
 	log.Printf("[XTREAM] handleGetPlaylist: Checking 'Only Include Media with Cached Streams' setting")
 	if h.getSettings != nil {
 		if settings := h.getSettings(); settings != nil {
@@ -2195,7 +2196,10 @@ func (h *XtreamHandler) handleGetPlaylist(w http.ResponseWriter, r *http.Request
 				} else if oc, ok := settingsMap["only_include_cached_streams"].(bool); ok {
 					onlyIncludeCached = oc
 				}
-				log.Printf("[XTREAM] handleGetPlaylist: only_cached_streams=%v", onlyIncludeCached)
+				if orc, ok := settingsMap["only_released_content"].(bool); ok {
+					onlyReleasedContent = orc
+				}
+				log.Printf("[XTREAM] handleGetPlaylist: only_cached_streams=%v, only_released_content=%v", onlyIncludeCached, onlyReleasedContent)
 			}
 		}
 	}
@@ -2299,10 +2303,23 @@ func (h *XtreamHandler) handleGetPlaylist(w http.ResponseWriter, r *http.Request
 		// Show FULL library regardless of cache status
 		log.Printf("[XTREAM] handleGetPlaylist: Mode=FULL_LIBRARY - showing all monitored library content")
 		
+		// Build query with optional release date filter
 		query := `
 			SELECT m.tmdb_id, m.title, m.year, m.metadata
 			FROM library_movies m
-			WHERE m.monitored = true
+			WHERE m.monitored = true`
+		
+		if onlyReleasedContent {
+			query += `
+			  AND (
+				m.metadata->>'release_date' IS NULL 
+				OR m.metadata->>'release_date' = '' 
+				OR (m.metadata->>'release_date')::date <= CURRENT_DATE
+			  )`
+			log.Printf("[XTREAM] handleGetPlaylist: Filtering unreleased content (only_released_content=true)")
+		}
+		
+		query += `
 			ORDER BY m.title
 		`
 		
