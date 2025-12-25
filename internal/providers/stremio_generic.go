@@ -83,9 +83,16 @@ func NewGenericStremioProvider(name, baseURL, rdAPIKey string) *GenericStremioPr
 	}
 	
 	// Check for proxy configuration (for bypassing Cloudflare blocks)
-	// Set TORRENTIO_PROXY env var to use proxy for Torrentio
+	// Set TORRENTIO_PROXY env var to use proxy for Stremio addons (Torrentio, TorrentDB, etc.)
 	// Supports multiple proxies separated by comma for fallback: "http://proxy1,http://proxy2,http://proxy3"
-	if proxyEnv := os.Getenv("TORRENTIO_PROXY"); proxyEnv != "" && (strings.Contains(strings.ToLower(name), "torrentio") || strings.Contains(strings.ToLower(baseURL), "torrentio")) {
+	if proxyEnv := os.Getenv("TORRENTIO_PROXY"); proxyEnv != "" && (
+		strings.Contains(strings.ToLower(name), "torrentio") ||
+		strings.Contains(strings.ToLower(baseURL), "torrentio") ||
+		strings.Contains(strings.ToLower(name), "torrentdb") ||
+		strings.Contains(strings.ToLower(baseURL), "torrentsdb") ||
+		strings.Contains(strings.ToLower(baseURL), "torrentsdb.com") ||
+		true, // Apply proxies to all Stremio-style providers by default when env is set
+	) {
 		// Split by comma to get list of proxies
 		for _, p := range strings.Split(proxyEnv, ",") {
 			p = strings.TrimSpace(p)
