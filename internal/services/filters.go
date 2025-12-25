@@ -23,6 +23,13 @@ func IsIndianMovie(m *models.Movie) bool {
         if ol, ok := m.Metadata["original_language"].(string); ok {
             if strings.EqualFold(ol, "hi") { return true }
         }
+        // IPTV VOD category heuristics
+        if cat, ok := m.Metadata["iptv_vod_category"].(string); ok {
+            lc := strings.ToLower(cat)
+            if strings.Contains(lc, "bollywood") || strings.Contains(lc, "hindi") || strings.Contains(lc, "india") || strings.Contains(lc, "desi") {
+                return true
+            }
+        }
     }
     return false
 }
@@ -42,6 +49,13 @@ func IsIndianSeries(s *models.Series) bool {
         }
         if ol, ok := s.Metadata["original_language"].(string); ok {
             if strings.EqualFold(ol, "hi") { return true }
+        }
+        // IPTV VOD category heuristics
+        if cat, ok := s.Metadata["iptv_vod_category"].(string); ok {
+            lc := strings.ToLower(cat)
+            if strings.Contains(lc, "bollywood") || strings.Contains(lc, "hindi") || strings.Contains(lc, "india") || strings.Contains(lc, "desi") {
+                return true
+            }
         }
     }
     return false

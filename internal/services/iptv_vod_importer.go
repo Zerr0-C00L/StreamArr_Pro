@@ -230,11 +230,12 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
 }
 
 type vodItem struct {
-    Kind  string // "movie" or "series"
-    Title string
-    Year  int
-    URL   string
-    SourceName string
+    Kind         string // "movie" or "series"
+    Title        string
+    Year         int
+    URL          string
+    SourceName   string
+    CategoryName string // Optional: original group/category name (e.g., "Bollywood")
 }
 
 // ErrBlockedBollywood is returned when content is blocked by settings
@@ -323,7 +324,7 @@ func extractVODItems(r io.Reader, sourceName string, selectedCategories []string
                     title, year = splitTitleYear(currentTitle)
                 }
                 
-                items = append(items, vodItem{Kind: kind, Title: title, Year: year, URL: currentURL, SourceName: sourceName})
+                items = append(items, vodItem{Kind: kind, Title: title, Year: year, URL: currentURL, SourceName: sourceName, CategoryName: currentGroupOriginal})
             }
             currentTitle = ""
             currentGroup = ""
@@ -435,7 +436,21 @@ func importMovieBasic(ctx context.Context, store *database.MovieStore, it vodIte
     if m.Metadata == nil { m.Metadata = models.Metadata{} }
     m.Metadata["source"] = "iptv_vod"
     m.Metadata["imported_at"] = time.Now().Format(time.RFC3339)
+    if it.CategoryName != "" {
+        m.Metadata["iptv_vod_category"] = it.CategoryName
+    }
+    if it.CategoryName != "" {
+        m.Metadata["iptv_vod_category"] = it.CategoryName
+    }
     m.Metadata["iptv_vod_sources"] = []map[string]interface{}{{"name": it.SourceName, "url": it.URL}}
+    // Upsert: update existing by synthetic TMDBID, else add
+    if existing, errGet := store.GetByTMDBID(ctx, m.TMDBID); errGet == nil && existing != nil {
+        existing.Metadata = mergeMetadata(existing.Metadata, m.Metadata)
+        existing.Monitored = true
+        existing.Available = true
+        if existing.QualityProfile == "" { existing.QualityProfile = m.QualityProfile }
+        return store.Update(ctx, existing)
+    }
     return store.Add(ctx, m)
 }
 
@@ -451,7 +466,20 @@ func importSeriesBasic(ctx context.Context, store *database.SeriesStore, it vodI
     if s.Metadata == nil { s.Metadata = models.Metadata{} }
     s.Metadata["source"] = "iptv_vod"
     s.Metadata["imported_at"] = time.Now().Format(time.RFC3339)
+    if it.CategoryName != "" {
+        s.Metadata["iptv_vod_category"] = it.CategoryName
+    }
+    if it.CategoryName != "" {
+        s.Metadata["iptv_vod_category"] = it.CategoryName
+    }
     s.Metadata["iptv_vod_sources"] = []map[string]interface{}{{"name": it.SourceName, "url": it.URL}}
+    // Upsert: update existing by synthetic TMDBID, else add
+    if existing, errGet := store.GetByTMDBID(ctx, s.TMDBID); errGet == nil && existing != nil {
+        existing.Metadata = mergeMetadata(existing.Metadata, s.Metadata)
+        existing.Monitored = true
+        if existing.QualityProfile == "" { existing.QualityProfile = s.QualityProfile }
+        return store.Update(ctx, existing)
+    }
     return store.Add(ctx, s)
 }
 
@@ -792,11 +820,12 @@ func fetchXtreamVODMovies(ctx context.Context, client *http.Client, server, user
         streamURL := fmt.Sprintf("%s/movie/%s/%s/%s.%s", server, username, password, streamID, stream.ContainerExt)
         
         items = append(items, vodItem{
-            Kind:       "movie",
-            Title:      cleanTitle,
-            Year:       year,
-            URL:        streamURL,
-            SourceName: sourceName,
+            Kind:         "movie",
+            Title:        cleanTitle,
+            Year:         year,
+            URL:          streamURL,
+            SourceName:   sourceName,
+            CategoryName: categoryIDToName[stream.CategoryID],
         })
     }
     
@@ -906,11 +935,12 @@ func fetchXtreamSeries(ctx context.Context, client *http.Client, server, usernam
         seriesURL := fmt.Sprintf("%s/series/%s/%s/%s.m3u8", server, username, password, seriesID)
         
         items = append(items, vodItem{
-            Kind:       "series",
-            Title:      cleanTitle,
-            Year:       year,
-            URL:        seriesURL,
-            SourceName: sourceName,
+            Kind:         "series",
+            Title:        cleanTitle,
+            Year:         year,
+            URL:          seriesURL,
+            SourceName:   sourceName,
+            CategoryName: categoryIDToName[s.CategoryID],
         })
     }
     

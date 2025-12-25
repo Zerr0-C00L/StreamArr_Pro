@@ -154,6 +154,21 @@ func (h *Handler) ListMovies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply Bollywood filter for library listing
+	if h.settingsManager != nil {
+		st := h.settingsManager.Get()
+		if st.BlockBollywood {
+			filtered := make([]*models.Movie, 0, len(movies))
+			for _, m := range movies {
+				if !services.IsIndianMovie(m) {
+					filtered = append(filtered, m)
+				}
+			}
+			respondJSON(w, http.StatusOK, filtered)
+			return
+		}
+	}
+
 	respondJSON(w, http.StatusOK, movies)
 }
 
@@ -1235,6 +1250,21 @@ func (h *Handler) ListSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply Bollywood filter for library listing
+	if h.settingsManager != nil {
+		st := h.settingsManager.Get()
+		if st.BlockBollywood {
+			filtered := make([]*models.Series, 0, len(series))
+			for _, s := range series {
+				if !services.IsIndianSeries(s) {
+					filtered = append(filtered, s)
+				}
+			}
+			respondJSON(w, http.StatusOK, filtered)
+			return
+		}
+	}
+
 	respondJSON(w, http.StatusOK, series)
 }
 
@@ -1275,7 +1305,6 @@ func (h *Handler) AddSeries(w http.ResponseWriter, r *http.Request) {
 	// Check if series already exists in library
 	existingSeries, err := h.seriesStore.GetByTMDBID(ctx, int(req.TMDBID))
 	if err == nil && existingSeries != nil {
-		// Series already exists, return it with 200 OK
 		respondJSON(w, http.StatusOK, existingSeries)
 		return
 	}
@@ -2178,7 +2207,6 @@ func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "failed to get settings")
 		return
 	}
-
 	respondJSON(w, http.StatusOK, settings)
 }
 
