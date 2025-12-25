@@ -2310,11 +2310,17 @@ func (h *XtreamHandler) handleGetPlaylist(w http.ResponseWriter, r *http.Request
 			WHERE m.monitored = true`
 		
 		if onlyReleasedContent {
+			// Filter out movies with future release dates
+			// If no release_date in metadata, assume January 1st of the year
 			query += `
 			  AND (
-				m.metadata->>'release_date' IS NULL 
-				OR m.metadata->>'release_date' = '' 
-				OR (m.metadata->>'release_date')::date <= CURRENT_DATE
+				(m.metadata->>'release_date' IS NOT NULL 
+				 AND m.metadata->>'release_date' != '' 
+				 AND (m.metadata->>'release_date')::date <= CURRENT_DATE)
+				OR 
+				(m.metadata->>'release_date' IS NULL AND m.year < EXTRACT(YEAR FROM CURRENT_DATE))
+				OR
+				(m.metadata->>'release_date' = '' AND m.year < EXTRACT(YEAR FROM CURRENT_DATE))
 			  )`
 			log.Printf("[XTREAM] handleGetPlaylist: Filtering unreleased content (only_released_content=true)")
 		}
