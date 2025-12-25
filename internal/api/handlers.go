@@ -207,6 +207,18 @@ func (h *Handler) AddMovie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bollywood blocking (Indian-origin content)
+	if h.settingsManager != nil {
+		st := h.settingsManager.Get()
+		if st.BlockBollywood && services.IsIndianMovie(movie) {
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"success": false,
+				"error":   "content blocked by settings (bollywood)",
+			})
+			return
+		}
+	}
+
 	movie.Monitored = req.Monitored
 	movie.QualityProfile = req.QualityProfile
 
@@ -1273,6 +1285,18 @@ func (h *Handler) AddSeries(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed to fetch series from TMDB: %v", err))
 		return
+	}
+
+	// Bollywood blocking (Indian-origin content)
+	if h.settingsManager != nil {
+		st := h.settingsManager.Get()
+		if st.BlockBollywood && services.IsIndianSeries(tmdbSeries) {
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"success": false,
+				"error":   "content blocked by settings (bollywood)",
+			})
+			return
+		}
 	}
 
 	// Create series model

@@ -221,6 +221,15 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 				skippedCount++
 				continue
 			}
+
+			// Bollywood filter (discover includes original_language)
+			if eg.cfg.BlockBollywood {
+				if lang, ok := movie.Metadata["original_language"].(string); ok && strings.EqualFold(lang, "hi") {
+					log.Printf("DEBUG: Skipping Bollywood movie: %s", movie.Title)
+					skippedCount++
+					continue
+				}
+			}
 			
 			// Added stricter filtering for unreleased movies
 			if movie.ReleaseDate.After(time.Now()) {
@@ -279,6 +288,12 @@ func (eg *EnhancedGenerator) GenerateMoviePlaylistEnhanced(ctx context.Context) 
 				}
 				if movie.ReleaseDate == nil || movie.ReleaseDate.Year() < eg.cfg.MinYear {
 					continue
+				}
+				// Bollywood filter
+				if eg.cfg.BlockBollywood {
+					if lang, ok := movie.Metadata["original_language"].(string); ok && strings.EqualFold(lang, "hi") {
+						continue
+					}
 				}
 				
 				// Check if movie has cached stream (if OnlyCachedStreams is enabled)

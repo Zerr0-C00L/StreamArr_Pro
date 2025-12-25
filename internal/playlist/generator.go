@@ -61,6 +61,12 @@ func (pg *PlaylistGenerator) GenerateMoviePlaylist(ctx context.Context) ([]Simpl
 		
 		for _, movie := range movies {
 			if movie.ReleaseDate != nil && movie.ReleaseDate.Year() >= pg.cfg.MinYear {
+				// Bollywood filter based on original language (discover results)
+				if pg.cfg.BlockBollywood {
+					if lang, ok := movie.Metadata["original_language"].(string); ok && strings.EqualFold(lang, "hi") {
+						continue
+					}
+				}
 				// Check if movie has cached stream (if OnlyCachedStreams is enabled)
 				if pg.cfg.OnlyCachedStreams {
 					hasCachedStream, err := pg.hasCachedStream(ctx, movie.TMDBID)

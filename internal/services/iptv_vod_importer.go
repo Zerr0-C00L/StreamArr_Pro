@@ -4,6 +4,7 @@ import (
     "bufio"
     "context"
     "encoding/json"
+    "errors"
     "fmt"
     "io"
     "net/http"
@@ -82,11 +83,15 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
                 if cfg.IPTVVODFastImport {
                     importErr = importMovieBasic(ctx, movieStore, it)
                 } else {
-                    importErr = importMovie(ctx, tmdb, movieStore, it)
+                    importErr = importMovie(ctx, cfg, tmdb, movieStore, it)
                 }
                 if importErr != nil {
-                    fmt.Printf("Error importing movie '%s' (%d): %v\n", it.Title, it.Year, importErr)
-                    summary.Errors++
+                    if errors.Is(importErr, ErrBlockedBollywood) {
+                        summary.Skipped++
+                    } else {
+                        fmt.Printf("Error importing movie '%s' (%d): %v\n", it.Title, it.Year, importErr)
+                        summary.Errors++
+                    }
                 } else {
                     summary.MoviesImported++
                 }
@@ -115,11 +120,15 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
                 if cfg.IPTVVODFastImport {
                     importErr = importSeriesBasic(ctx, seriesStore, it)
                 } else {
-                    importErr = importSeries(ctx, tmdb, seriesStore, it)
+                    importErr = importSeries(ctx, cfg, tmdb, seriesStore, it)
                 }
                 if importErr != nil {
-                    fmt.Printf("Error importing series '%s' (%d): %v\n", it.Title, it.Year, importErr)
-                    summary.Errors++
+                    if errors.Is(importErr, ErrBlockedBollywood) {
+                        summary.Skipped++
+                    } else {
+                        fmt.Printf("Error importing series '%s' (%d): %v\n", it.Title, it.Year, importErr)
+                        summary.Errors++
+                    }
                 } else {
                     summary.SeriesImported++
                 }
@@ -187,10 +196,10 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
                     if cfg.IPTVVODFastImport {
                         err = importMovieBasic(ctx, movieStore, it)
                     } else {
-                        err = importMovie(ctx, tmdb, movieStore, it)
+                        err = importMovie(ctx, cfg, tmdb, movieStore, it)
                     }
                     if err != nil {
-                        summary.Errors++
+                        if errors.Is(err, ErrBlockedBollywood) { summary.Skipped++ } else { summary.Errors++ }
                     } else {
                         summary.MoviesImported++
                     }
@@ -199,10 +208,10 @@ func ImportIPTVVOD(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClien
                     if cfg.IPTVVODFastImport {
                         err = importSeriesBasic(ctx, seriesStore, it)
                     } else {
-                        err = importSeries(ctx, tmdb, seriesStore, it)
+                        err = importSeries(ctx, cfg, tmdb, seriesStore, it)
                     }
                     if err != nil {
-                        summary.Errors++
+                        if errors.Is(err, ErrBlockedBollywood) { summary.Skipped++ } else { summary.Errors++ }
                     } else {
                         summary.SeriesImported++
                     }
@@ -227,6 +236,9 @@ type vodItem struct {
     URL   string
     SourceName string
 }
+
+// ErrBlockedBollywood is returned when content is blocked by settings
+var ErrBlockedBollywood = errors.New("blocked_bollywood")
 
 // extractVODItems scans M3U content for VOD entries and extracts title/year hints
 func extractVODItems(r io.Reader, sourceName string, selectedCategories []string) []vodItem {
@@ -443,7 +455,7 @@ func importSeriesBasic(ctx context.Context, store *database.SeriesStore, it vodI
     return store.Add(ctx, s)
 }
 
-func importMovie(ctx context.Context, tmdb *TMDBClient, store *database.MovieStore, it vodItem) error {
+func importMovie(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClient, store *database.MovieStore, it vodItem) error {
     // Search TMDB
     movies, err := tmdb.SearchMovies(ctx, it.Title, 1)
     if err != nil || len(movies) == 0 {
@@ -469,6 +481,13 @@ func importMovie(ctx context.Context, tmdb *TMDBClient, store *database.MovieSto
     if err2 != nil {
         // fallback to basic
         m = movies[0]
+    }
+
+    // Bollywood filter
+    if cfg != nil && cfg.BlockBollywood {
+        if IsIndianMovie(m) {
+            return ErrBlockedBollywood
+        }
     }
     // Ensure monitored/available defaults
     if m.QualityProfile == "" { m.QualityProfile = "1080p" }
@@ -497,7 +516,7 @@ func importMovie(ctx context.Context, tmdb *TMDBClient, store *database.MovieSto
     return store.Add(ctx, m)
 }
 
-func importSeries(ctx context.Context, tmdb *TMDBClient, store *database.SeriesStore, it vodItem) error {
+func importSeries(ctx context.Context, cfg *isettings.Settings, tmdb *TMDBClient, store *database.SeriesStore, it vodItem) error {
     series, err := tmdb.SearchSeries(ctx, it.Title, 1)
     if err != nil || len(series) == 0 {
         return fmt.Errorf("no TMDB match for series: %s", it.Title)
@@ -519,6 +538,13 @@ func importSeries(ctx context.Context, tmdb *TMDBClient, store *database.SeriesS
     s, err2 := tmdb.GetSeries(ctx, series[0].TMDBID)
     if err2 != nil {
         s = series[0]
+    }
+
+    // Bollywood filter
+    if cfg != nil && cfg.BlockBollywood {
+        if IsIndianSeries(s) {
+            return ErrBlockedBollywood
+        }
     }
     if s.QualityProfile == "" { s.QualityProfile = "1080p" }
     s.Monitored = true

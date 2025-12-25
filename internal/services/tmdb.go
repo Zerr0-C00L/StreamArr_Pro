@@ -37,6 +37,7 @@ type tmdbMovie struct {
 	ID            int    `json:"id"`
 	Title         string `json:"title"`
 	OriginalTitle string `json:"original_title"`
+	OriginalLanguage string `json:"original_language"`
 	Overview      string `json:"overview"`
 	PosterPath    string `json:"poster_path"`
 	BackdropPath  string `json:"backdrop_path"`
@@ -46,6 +47,10 @@ type tmdbMovie struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
 	} `json:"genres"`
+	ProductionCountries []struct {
+		ISO3166_1 string `json:"iso_3166_1"`
+		Name      string `json:"name"`
+	} `json:"production_countries"`
 	VoteAverage         float64                  `json:"vote_average"`
 	VoteCount           int                      `json:"vote_count"`
 	Status              string                   `json:"status"`
@@ -83,12 +88,14 @@ type tmdbSeries struct {
 	ID              int    `json:"id"`
 	Name            string `json:"name"`
 	OriginalName    string `json:"original_name"`
+	OriginalLanguage string `json:"original_language"`
 	Overview        string `json:"overview"`
 	PosterPath      string `json:"poster_path"`
 	BackdropPath    string `json:"backdrop_path"`
 	FirstAirDate    string `json:"first_air_date"`
 	Status          string `json:"status"`
 	NumberOfSeasons int    `json:"number_of_seasons"`
+	OriginCountry   []string `json:"origin_country"`
 	Genres          []struct {
 		ID   int    `json:"id"`
 		Name string `json:"name"`
@@ -510,6 +517,14 @@ func (c *TMDBClient) convertMovie(tm *tmdbMovie) *models.Movie {
 			"vote_count":   tm.VoteCount,
 			"status":       tm.Status,
 			"imdb_id":      tm.IMDbID,
+			"original_language": tm.OriginalLanguage,
+			"production_countries": func() []string {
+				codes := make([]string, 0, len(tm.ProductionCountries))
+				for _, pc := range tm.ProductionCountries {
+					if pc.ISO3166_1 != "" { codes = append(codes, pc.ISO3166_1) }
+				}
+				return codes
+			}(),
 		},
 	}
 }
@@ -542,6 +557,8 @@ func (c *TMDBClient) convertSeries(ts *tmdbSeries) *models.Series {
 		Metadata: models.Metadata{
 			"vote_average": ts.VoteAverage,
 			"vote_count":   ts.VoteCount,
+			"original_language": ts.OriginalLanguage,
+			"origin_country":    ts.OriginCountry,
 		},
 	}
 }

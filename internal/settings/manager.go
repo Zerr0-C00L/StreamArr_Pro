@@ -92,7 +92,9 @@ type Settings struct {
 	ImportAdultVODFromGitHub bool `json:"import_adult_vod_from_github"` // Import adult VOD content from public-files repo
 	OnlyCachedStreams      bool   `json:"only_cached_streams"` // Only include media with cached streams in Stream Cache Monitor
 	OnlyReleasedContent    bool   `json:"only_released_content"` // Only include released content in IPTV playlist
-	
+
+	// Content Filters
+	BlockBollywood        bool   `json:"block_bollywood"` // Block Indian-origin (Bollywood) media from import and playlists
 	// Balkan VOD Settings (GitHub Repos: Balkan-On-Demand + DomaciFlix)
 	BalkanVODEnabled              bool     `json:"balkan_vod_enabled"`              // Enable Balkan VOD import from GitHub
 	BalkanVODAutoSync             bool     `json:"balkan_vod_auto_sync"`            // Automatically sync new content
@@ -225,6 +227,8 @@ func getDefaultSettings() *Settings {
 		DuplicateVODPerProvider: false,
 		IPTVVODFastImport:      false,
 		ImportAdultVODFromGitHub: false,
+		// Content Filters
+		BlockBollywood:        false,
 		BalkanVODEnabled:             false,    // Disabled by default - users need to enable
 		BalkanVODAutoSync:            true,     // Auto-sync when enabled
 		BalkanVODSyncIntervalHours:   24,       // Check for updates daily
@@ -615,6 +619,7 @@ func (m *Manager) GetAll() (map[string]interface{}, error) {
 		"auto_cache_interval_hours":    m.settings.AutoCacheIntervalHours,
 		"user_create_playlist":         m.settings.UserCreatePlaylist,
 		"include_adult_vod":            m.settings.IncludeAdultVOD,
+		"block_bollywood":              m.settings.BlockBollywood,
 		"debug":                        m.settings.Debug,
 		"language":                     m.settings.Language,
 		"series_origin_country":        m.settings.SeriesOriginCountry,
@@ -691,6 +696,9 @@ func (m *Manager) SetAll(updates map[string]interface{}) error {
 	}
 	if v, ok := updates["include_adult_vod"].(bool); ok {
 		m.settings.IncludeAdultVOD = v
+	}
+	if v, ok := updates["block_bollywood"].(bool); ok {
+		m.settings.BlockBollywood = v
 	}
 	if v, ok := updates["debug"].(bool); ok {
 		m.settings.Debug = v

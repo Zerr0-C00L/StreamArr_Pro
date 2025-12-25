@@ -85,6 +85,7 @@ interface SettingsData {
   livetv_enabled_categories: string[];
   only_released_content: boolean;
   hide_unavailable_content: boolean;
+  block_bollywood: boolean;
   update_branch: string;
   xtream_username: string;
   xtream_password: string;
@@ -2159,6 +2160,24 @@ export default function Settings() {
                     </div>
                     <p className="text-xs text-slate-500 mt-1 ml-6">
                       Only show movies and episodes in IPTV apps if they have at least one stream available.
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="block_bollywood"
+                        checked={settings?.block_bollywood || false}
+                        onChange={(e) => updateSetting('block_bollywood', e.target.checked)}
+                        className="w-4 h-4 bg-[#2a2a2a] border-white/10 rounded"
+                      />
+                      <label htmlFor="block_bollywood" className="text-sm font-medium text-slate-300">
+                        Block Bollywood (India-origin) Media
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 ml-6">
+                      Excludes India-origin movies and TV from imports and playlists (uses TMDB origin metadata).
                     </p>
                   </div>
 

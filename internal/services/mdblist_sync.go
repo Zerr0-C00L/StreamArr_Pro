@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"errors"
 	"regexp"
 	"strings"
 	"time"
@@ -102,8 +103,12 @@ func (s *MDBListSyncService) SyncAllLists(ctx context.Context) error {
 			processedItems++
 			GlobalScheduler.UpdateProgress(ServiceMDBListSync, listIdx, len(enabledLists), 
 				fmt.Sprintf("%s: Importing %s (%d/%d)", listConfig.Name, item.Title, processedItems, totalItems))
-			
+
 			if err := s.importMovie(ctx, item, listConfig.Name); err != nil {
+				if errors.Is(err, ErrBlockedBollywood) {
+					// treat as skip without warning
+					continue
+				}
 				// Silently skip duplicates
 				if !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate") {
 					log.Printf("    ⚠️ Error importing movie %s: %v", item.Title, err)
@@ -120,8 +125,12 @@ func (s *MDBListSyncService) SyncAllLists(ctx context.Context) error {
 			processedItems++
 			GlobalScheduler.UpdateProgress(ServiceMDBListSync, listIdx, len(enabledLists), 
 				fmt.Sprintf("%s: Importing %s (%d/%d)", listConfig.Name, item.Title, processedItems, totalItems))
-			
+
 			if err := s.importSeries(ctx, item, listConfig.Name); err != nil {
+				if errors.Is(err, ErrBlockedBollywood) {
+					// treat as skip without warning
+					continue
+				}
 				// Silently skip duplicates
 				if !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "duplicate") {
 					log.Printf("    ⚠️ Error importing series %s: %v", item.Title, err)
@@ -168,6 +177,11 @@ func (s *MDBListSyncService) importMovie(ctx context.Context, item MDBListItem, 
 			backdropPath = tmdbMovie.BackdropPath
 			if tmdbMovie.ReleaseDate != nil {
 				year = tmdbMovie.ReleaseDate.Year()
+			}
+			// Bollywood blocking via settings
+			blockStr, _ := s.getSettingValue("block_bollywood")
+			if strings.EqualFold(blockStr, "true") && IsIndianMovie(tmdbMovie) {
+				return ErrBlockedBollywood
 			}
 		}
 	}
@@ -251,6 +265,11 @@ func (s *MDBListSyncService) importSeries(ctx context.Context, item MDBListItem,
 			backdropPath = tmdbSeries.BackdropPath
 			if tmdbSeries.FirstAirDate != nil {
 				year = tmdbSeries.FirstAirDate.Year()
+			}
+			// Bollywood blocking via settings
+			blockStr, _ := s.getSettingValue("block_bollywood")
+			if strings.EqualFold(blockStr, "true") && IsIndianSeries(tmdbSeries) {
+				return ErrBlockedBollywood
 			}
 		}
 	}
