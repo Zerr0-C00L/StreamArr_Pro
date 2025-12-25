@@ -18,14 +18,13 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Get actual git commit if not provided
-RUN if [ "$COMMIT" = "unknown" ]; then \
-        export COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
-    fi && \
-    if [ "$BUILD_DATE" = "unknown" ]; then \
-        export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
-    fi && \
-    LDFLAGS="-X 'github.com/Zerr0-C00L/StreamArr/internal/api.Version=${VERSION}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.Commit=${COMMIT}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.BuildDate=${BUILD_DATE}'" && \
+# Build binaries with version info (get git commit and build date if not provided)
+RUN GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") && \
+    BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
+    ACTUAL_COMMIT=${COMMIT:-${GIT_COMMIT}} && \
+    ACTUAL_DATE=${BUILD_DATE:-${BUILD_TIME}} && \
+    echo "Building with Version: ${VERSION}, Commit: ${ACTUAL_COMMIT}, Date: ${ACTUAL_DATE}" && \
+    LDFLAGS="-X 'github.com/Zerr0-C00L/StreamArr/internal/api.Version=${VERSION}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.Commit=${ACTUAL_COMMIT}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.BuildDate=${ACTUAL_DATE}'" && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/server cmd/server/main.go && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/worker cmd/worker/main.go && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/migrate cmd/migrate/main.go
