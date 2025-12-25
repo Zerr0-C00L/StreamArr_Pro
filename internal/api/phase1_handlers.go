@@ -119,6 +119,27 @@ func (h *Handler) GetCachedMoviesList(w http.ResponseWriter, r *http.Request) {
 	// Get filter parameter (movies, series, or all)
 	mediaType := r.URL.Query().Get("type") // "movies", "series", or empty for all
 
+	// Check if only_released_content setting is enabled
+	onlyReleasedContent := false
+	if h.settingsManager != nil {
+		settings := h.settingsManager.Get()
+		onlyReleasedContent = settings.OnlyReleasedContent
+		if onlyReleasedContent {
+			log.Printf("[DEBUG] OnlyReleasedContent is enabled - filtering unreleased content")
+		}
+	}
+
+	// Build release date filter
+	releaseFilter := ""
+	if onlyReleasedContent {
+		releaseFilter = `
+			AND (
+				m.metadata->>'release_date' IS NULL 
+				OR m.metadata->>'release_date' = '' 
+				OR (m.metadata->>'release_date')::date <= CURRENT_DATE
+			)`
+	}
+
 	var query string
 	if mediaType == "series" {
 		// Only series
@@ -169,7 +190,7 @@ func (h *Handler) GetCachedMoviesList(w http.ResponseWriter, r *http.Request) {
 				0 as episode
 			FROM media_streams ms
 			LEFT JOIN library_movies m ON m.id = ms.movie_id
-			WHERE ms.movie_id IS NOT NULL
+			WHERE ms.movie_id IS NOT NULL` + releaseFilter + `
 			ORDER BY ms.created_at DESC
 		`
 	} else {
@@ -195,7 +216,7 @@ func (h *Handler) GetCachedMoviesList(w http.ResponseWriter, r *http.Request) {
 				0 as episode
 			FROM media_streams ms
 			LEFT JOIN library_movies m ON m.id = ms.movie_id
-			WHERE ms.movie_id IS NOT NULL
+			WHERE ms.movie_id IS NOT NULL` + releaseFilter + `
 			
 			UNION ALL
 			
