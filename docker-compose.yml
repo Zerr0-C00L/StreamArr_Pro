@@ -7,7 +7,7 @@ services:
         COMMIT: ${COMMIT:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}
     container_name: streamarr
-    restart: unless-stopped
+    restart: always
     ports:
       - "8080:8080"
     environment:
@@ -38,7 +38,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: streamarr-db
-    restart: unless-stopped
+    restart: always
     environment:
       - POSTGRES_USER=streamarr
       - POSTGRES_PASSWORD=streamarr
