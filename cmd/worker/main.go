@@ -3,13 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
