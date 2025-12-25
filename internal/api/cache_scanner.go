@@ -85,12 +85,6 @@ func (cs *CacheScanner) Stop() {
 func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 	log.Println("[CACHE-SCANNER] Starting library scan for upgrades and empty cache...")
 
-	// Mark service as running
-	services.GlobalScheduler.MarkRunning(services.ServiceStreamSearch)
-	defer func() {
-		services.GlobalScheduler.MarkComplete(services.ServiceStreamSearch, nil, 24*time.Hour)
-	}()
-
 	upgraded := 0
 	cached := 0
 	skipped := 0
@@ -120,13 +114,6 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 			if totalProcessed > 0 && totalProcessed%100 == 0 {
 				log.Printf("[CACHE-SCANNER] Progress: %d movies scanned (%d cached, %d upgraded, %d skipped)",
 					totalProcessed, cached, upgraded, skipped)
-				// Update service progress
-				services.GlobalScheduler.UpdateProgress(
-					services.ServiceStreamSearch,
-					totalProcessed,
-					0, // We don't know total yet, will update at end
-					fmt.Sprintf("Scanned %d movies (%d cached, %d upgraded)", totalProcessed, cached, upgraded),
-				)
 			}
 			totalProcessed++
 
@@ -283,12 +270,6 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 
 	// Now scan series (scan first episode of first season for each series as a sample)
 	log.Println("[CACHE-SCANNER] Starting series scan...")
-	services.GlobalScheduler.UpdateProgress(
-		services.ServiceStreamSearch,
-		totalProcessed,
-		totalProcessed,
-		"Starting series scan...",
-	)
 	seriesScanned, seriesCached, seriesErrors := cs.scanSeries(ctx)
 	log.Printf("[CACHE-SCANNER] Series scan complete: %d series scanned, %d cached, %d errors",
 		seriesScanned, seriesCached, seriesErrors)
@@ -328,12 +309,6 @@ func (cs *CacheScanner) scanSeries(ctx context.Context) (int, int, int) {
 
 			if scanned > 0 && scanned%100 == 0 {
 				log.Printf("[CACHE-SCANNER] Series progress: %d scanned, %d cached", scanned, cached)
-				services.GlobalScheduler.UpdateProgress(
-					services.ServiceStreamSearch,
-					0,
-					0,
-					fmt.Sprintf("Series: %d scanned, %d cached", scanned, cached),
-				)
 			}
 
 			// Get IMDB ID

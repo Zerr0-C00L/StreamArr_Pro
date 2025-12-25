@@ -170,7 +170,6 @@ const (
 	ServiceEPGUpdate      = "epg_update"
 	ServiceChannelRefresh = "channel_refresh"
 	ServiceMDBListSync    = "mdblist_sync"
-	ServiceStreamSearch   = "stream_search"
 	ServiceCollectionSync = "collection_sync"
 	ServiceEpisodeScan    = "episode_scan"
 	ServiceIPTVVODSync    = "iptv_vod_sync"
@@ -184,7 +183,6 @@ func InitializeDefaultServices() {
 	GlobalScheduler.Register(ServiceEPGUpdate, "Updates Electronic Program Guide data for Live TV", 6*time.Hour, true)
 	GlobalScheduler.Register(ServiceChannelRefresh, "Refreshes Live TV channel list from M3U sources", 1*time.Hour, true)
 	GlobalScheduler.Register(ServiceMDBListSync, "Syncs library with configured MDBList watchlists", 6*time.Hour, true)
-	GlobalScheduler.Register(ServiceStreamSearch, "Searches for streams for monitored content", 30*time.Minute, true)
 	GlobalScheduler.Register(ServiceCollectionSync, "Syncs incomplete movie collections", 24*time.Hour, true)
 	GlobalScheduler.Register(ServiceEpisodeScan, "Fetches episode metadata from TMDB for all series", 24*time.Hour, true)
 	GlobalScheduler.Register(ServiceIPTVVODSync, "Imports and cleans up IPTV VOD items", 12*time.Hour, true)

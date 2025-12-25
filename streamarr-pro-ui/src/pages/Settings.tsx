@@ -2165,10 +2165,9 @@ export default function Settings() {
                   <div className="p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
                     <p className="text-xs text-yellow-400 font-medium mb-2">💡 How It Works:</p>
                     <ul className="text-xs text-slate-400 space-y-1">
-                      <li>• The "Stream Search" service periodically checks for available streams</li>
-                      <li>• Movies and episodes are marked as available or unavailable</li>
+                      <li>• Movies and episodes are marked as available or unavailable based on stream checks</li>
                       <li>• When enabled above, unavailable content is filtered from IPTV apps</li>
-                      <li>• Streams are re-checked every 7 days for items without streams</li>
+                      <li>• Streams are checked during library updates and imports</li>
                     </ul>
                   </div>
                 </div>
