@@ -21,8 +21,8 @@ COPY . .
 # Build binaries with version info (get git commit and build date if not provided)
 RUN GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown") && \
     BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") && \
-    ACTUAL_COMMIT=${COMMIT:-${GIT_COMMIT}} && \
-    ACTUAL_DATE=${BUILD_DATE:-${BUILD_TIME}} && \
+    if [ "${COMMIT}" = "unknown" ] || [ -z "${COMMIT}" ]; then ACTUAL_COMMIT="${GIT_COMMIT}"; else ACTUAL_COMMIT="${COMMIT}"; fi && \
+    if [ "${BUILD_DATE}" = "unknown" ] || [ -z "${BUILD_DATE}" ]; then ACTUAL_DATE="${BUILD_TIME}"; else ACTUAL_DATE="${BUILD_DATE}"; fi && \
     echo "Building with Version: ${VERSION}, Commit: ${ACTUAL_COMMIT}, Date: ${ACTUAL_DATE}" && \
     LDFLAGS="-X 'github.com/Zerr0-C00L/StreamArr/internal/api.Version=${VERSION}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.Commit=${ACTUAL_COMMIT}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.BuildDate=${ACTUAL_DATE}'" && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/server cmd/server/main.go && \
