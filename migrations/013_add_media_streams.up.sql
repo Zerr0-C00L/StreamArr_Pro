@@ -27,15 +27,15 @@ CREATE TABLE IF NOT EXISTS media_streams (
 );
 
 -- Index for scheduled checks (background worker queries this)
-CREATE INDEX idx_streams_next_check ON media_streams (next_check_at) 
+CREATE INDEX IF NOT EXISTS idx_streams_next_check ON media_streams (next_check_at) 
 WHERE is_available = true;
 
 -- Index for media lookup (fast retrieval on playback)
-CREATE INDEX idx_streams_media_type_id ON media_streams (media_type, media_id);
+CREATE INDEX IF NOT EXISTS idx_streams_media_type_id ON media_streams (media_type, media_id);
 
 -- Index for quality score (finding upgrade candidates)
-CREATE INDEX idx_streams_quality ON media_streams (quality_score);
+CREATE INDEX IF NOT EXISTS idx_streams_quality ON media_streams (quality_score);
 
 -- Index for hash lookup (duplicate detection)
-CREATE INDEX idx_streams_hash ON media_streams (stream_hash) 
+CREATE INDEX IF NOT EXISTS idx_streams_hash ON media_streams (stream_hash) 
 WHERE stream_hash IS NOT NULL;
