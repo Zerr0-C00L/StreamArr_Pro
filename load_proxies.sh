@@ -11,6 +11,12 @@ fi
 # Convert proxies from "IP:PORT:USER:PASS" to "http://USER:PASS@IP:PORT" format
 PROXIES=""
 while IFS=: read -r ip port user pass; do
+    # Strip carriage returns and whitespace
+    ip=$(echo "$ip" | tr -d '\r' | xargs)
+    port=$(echo "$port" | tr -d '\r' | xargs)
+    user=$(echo "$user" | tr -d '\r' | xargs)
+    pass=$(echo "$pass" | tr -d '\r' | xargs)
+    
     # Skip empty lines
     [ -z "$ip" ] && continue
     
