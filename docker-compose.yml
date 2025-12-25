@@ -1,6 +1,11 @@
 services:
   streamarr:
-    image: ghcr.io/zerr0-c00l/streamarr-pro:v1.1.9
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-v1.1.9}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     container_name: streamarr
     restart: always
     ports:
