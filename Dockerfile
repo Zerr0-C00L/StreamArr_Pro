@@ -18,8 +18,14 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build binaries with version info
-RUN LDFLAGS="-X 'github.com/Zerr0-C00L/StreamArr/internal/api.Version=${VERSION}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.Commit=${COMMIT}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.BuildDate=${BUILD_DATE}'" && \
+# Get actual git commit if not provided
+RUN if [ "$COMMIT" = "unknown" ]; then \
+        export COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+    fi && \
+    if [ "$BUILD_DATE" = "unknown" ]; then \
+        export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+    fi && \
+    LDFLAGS="-X 'github.com/Zerr0-C00L/StreamArr/internal/api.Version=${VERSION}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.Commit=${COMMIT}' -X 'github.com/Zerr0-C00L/StreamArr/internal/api.BuildDate=${BUILD_DATE}'" && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/server cmd/server/main.go && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/worker cmd/worker/main.go && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "$LDFLAGS" -o bin/migrate cmd/migrate/main.go
