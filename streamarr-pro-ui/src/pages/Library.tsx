@@ -572,7 +572,9 @@ export default function Library() {
   const [minVotes, setMinVotes] = useState<number>(0);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
+  
+  // Dropdown states
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   
   const ITEMS_PER_PAGE = 50;
 
@@ -933,56 +935,80 @@ export default function Library() {
               {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
             </button>
 
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="px-4 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
-            >
-              {showFilters ? '✕ Hide Filters' : '⚙ Filters'}
-            </button>
-          </div>
-
-          {/* Filter Panel */}
-          {showFilters && (
-            <div className="mt-4 p-4 bg-white/5 rounded-lg border border-white/10">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {/* Genres */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">Genres</label>
-                  <select
-                    multiple
-                    value={selectedGenres}
-                    onChange={(e) => {
-                      setSelectedGenres(Array.from(e.target.selectedOptions, option => option.value));
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-2 py-2 bg-white/10 text-white rounded border border-white/20 text-sm max-h-40"
-                  >
-                    {availableFilters.genres.map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
+            {/* Genres Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'genres' ? null : 'genres')}
+                className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
+              >
+                Genres {selectedGenres.length > 0 && `(${selectedGenres.length})`}
+              </button>
+              {openDropdown === 'genres' && (
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                  {availableFilters.genres.map(g => (
+                    <label key={g} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedGenres.includes(g)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGenres([...selectedGenres, g]);
+                          } else {
+                            setSelectedGenres(selectedGenres.filter(sg => sg !== g));
+                          }
+                          setCurrentPage(1);
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-white">{g}</span>
+                    </label>
+                  ))}
                 </div>
+              )}
+            </div>
 
-                {/* Years */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">Years</label>
-                  <select
-                    multiple
-                    value={selectedYears.map(String)}
-                    onChange={(e) => {
-                      setSelectedYears(Array.from(e.target.selectedOptions, option => parseInt(option.value)));
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-2 py-2 bg-white/10 text-white rounded border border-white/20 text-sm max-h-40"
-                  >
-                    {availableFilters.years.map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
+            {/* Years Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'years' ? null : 'years')}
+                className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
+              >
+                Years {selectedYears.length > 0 && `(${selectedYears.length})`}
+              </button>
+              {openDropdown === 'years' && (
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                  {availableFilters.years.map(y => (
+                    <label key={y} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedYears.includes(y)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedYears([...selectedYears, y]);
+                          } else {
+                            setSelectedYears(selectedYears.filter(sy => sy !== y));
+                          }
+                          setCurrentPage(1);
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-white">{y}</span>
+                    </label>
+                  ))}
                 </div>
+              )}
+            </div>
 
-                {/* Minimum Rating */}
-                <div>
+            {/* Rating Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'rating' ? null : 'rating')}
+                className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
+              >
+                Rating {minRating > 0 && `(${minRating.toFixed(1)})`}
+              </button>
+              {openDropdown === 'rating' && (
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-50 w-56">
                   <label className="block text-xs font-semibold text-slate-300 mb-2">Min Rating: {minRating.toFixed(1)}</label>
                   <input
                     type="range"
@@ -997,9 +1023,19 @@ export default function Library() {
                     className="w-full"
                   />
                 </div>
+              )}
+            </div>
 
-                {/* Minimum Votes */}
-                <div>
+            {/* Votes Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'votes' ? null : 'votes')}
+                className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
+              >
+                Votes {minVotes > 0 && `(${minVotes})`}
+              </button>
+              {openDropdown === 'votes' && (
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-50 w-56">
                   <label className="block text-xs font-semibold text-slate-300 mb-2">Min Votes: {minVotes}</label>
                   <input
                     type="range"
@@ -1014,45 +1050,75 @@ export default function Library() {
                     className="w-full"
                   />
                 </div>
+              )}
+            </div>
 
-                {/* Languages */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">Languages</label>
-                  <select
-                    multiple
-                    value={selectedLanguages}
-                    onChange={(e) => {
-                      setSelectedLanguages(Array.from(e.target.selectedOptions, option => option.value));
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-2 py-2 bg-white/10 text-white rounded border border-white/20 text-sm max-h-40"
-                  >
-                    {availableFilters.languages.map(l => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
+            {/* Languages Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'languages' ? null : 'languages')}
+                className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
+              >
+                Languages {selectedLanguages.length > 0 && `(${selectedLanguages.length})`}
+              </button>
+              {openDropdown === 'languages' && (
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                  {availableFilters.languages.map(l => (
+                    <label key={l} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedLanguages.includes(l)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLanguages([...selectedLanguages, l]);
+                          } else {
+                            setSelectedLanguages(selectedLanguages.filter(sl => sl !== l));
+                          }
+                          setCurrentPage(1);
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-white">{l}</span>
+                    </label>
+                  ))}
                 </div>
+              )}
+            </div>
 
-                {/* Countries */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">Countries</label>
-                  <select
-                    multiple
-                    value={selectedCountries}
-                    onChange={(e) => {
-                      setSelectedCountries(Array.from(e.target.selectedOptions, option => option.value));
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-2 py-2 bg-white/10 text-white rounded border border-white/20 text-sm max-h-40"
-                  >
-                    {availableFilters.countries.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+            {/* Countries Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenDropdown(openDropdown === 'countries' ? null : 'countries')}
+                className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
+              >
+                Countries {selectedCountries.length > 0 && `(${selectedCountries.length})`}
+              </button>
+              {openDropdown === 'countries' && (
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                  {availableFilters.countries.map(c => (
+                    <label key={c} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedCountries.includes(c)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedCountries([...selectedCountries, c]);
+                          } else {
+                            setSelectedCountries(selectedCountries.filter(sc => sc !== c));
+                          }
+                          setCurrentPage(1);
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-white">{c}</span>
+                    </label>
+                  ))}
                 </div>
-              </div>
+              )}
+            </div>
 
-              {/* Clear Filters Button */}
+            {/* Clear Filters Button */}
+            {(selectedGenres.length > 0 || selectedYears.length > 0 || minRating > 0 || minVotes > 0 || selectedLanguages.length > 0 || selectedCountries.length > 0) && (
               <button
                 onClick={() => {
                   setSelectedGenres([]);
@@ -1063,12 +1129,12 @@ export default function Library() {
                   setSelectedCountries([]);
                   setCurrentPage(1);
                 }}
-                className="mt-4 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm transition-colors"
+                className="px-3 py-2.5 bg-red-600/20 text-red-400 rounded-lg border border-red-600/30 hover:bg-red-600/30 transition-colors text-sm font-medium"
               >
-                Clear All Filters
+                Clear Filters
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
