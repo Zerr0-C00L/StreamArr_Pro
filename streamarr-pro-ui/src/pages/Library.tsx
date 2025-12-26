@@ -556,6 +556,30 @@ function StreamCard({ stream, compact = false, forceFullName = false }: { stream
   );
 }
 
+// Language code to name mapping
+const languageNames: Record<string, string> = {
+  en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian',
+  pt: 'Portuguese', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese',
+  hi: 'Hindi', ar: 'Arabic', nl: 'Dutch', sv: 'Swedish', no: 'Norwegian',
+  da: 'Danish', fi: 'Finnish', pl: 'Polish', tr: 'Turkish', th: 'Thai',
+  vi: 'Vietnamese', id: 'Indonesian', ms: 'Malay', tl: 'Tagalog', uk: 'Ukrainian',
+  cs: 'Czech', el: 'Greek', he: 'Hebrew', hu: 'Hungarian', ro: 'Romanian',
+  sk: 'Slovak', bg: 'Bulgarian', hr: 'Croatian', sr: 'Serbian', sl: 'Slovenian',
+  et: 'Estonian', lv: 'Latvian', lt: 'Lithuanian', fa: 'Persian', bn: 'Bengali',
+  ta: 'Tamil', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada', mr: 'Marathi',
+  gu: 'Gujarati', pa: 'Punjabi', ur: 'Urdu', sw: 'Swahili', af: 'Afrikaans',
+  ca: 'Catalan', eu: 'Basque', gl: 'Galician', is: 'Icelandic', ga: 'Irish',
+  cy: 'Welsh', mt: 'Maltese', sq: 'Albanian', mk: 'Macedonian', bs: 'Bosnian',
+  lb: 'Luxembourgish', hy: 'Armenian', ka: 'Georgian', az: 'Azerbaijani',
+  kk: 'Kazakh', uz: 'Uzbek', ky: 'Kyrgyz', tg: 'Tajik', mn: 'Mongolian',
+  ne: 'Nepali', si: 'Sinhala', km: 'Khmer', lo: 'Lao', my: 'Burmese',
+  am: 'Amharic', ti: 'Tigrinya', so: 'Somali', ha: 'Hausa', yo: 'Yoruba',
+  ig: 'Igbo', zu: 'Zulu', xh: 'Xhosa', st: 'Sesotho', tn: 'Tswana',
+  cn: 'Chinese', xx: 'Unknown', nb: 'Norwegian Bokmål', nn: 'Norwegian Nynorsk'
+};
+
+const getLanguageName = (code: string) => languageNames[code] || code.toUpperCase();
+
 // Main Library Component
 export default function Library() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
@@ -641,8 +665,8 @@ export default function Library() {
   const availableFilters = useMemo(() => {
     const genres = new Set<string>();
     const years = new Set<number>();
-    const languages = new Set<string>();
-    const countries = new Set<string>();
+    const languageCodes = new Set<string>();
+    const countryMap = new Map<string, string>(); // code -> name
     let maxVotes = 0;
 
     allMedia.forEach(media => {
@@ -653,12 +677,15 @@ export default function Library() {
         years.add(media.year);
       }
       if (media.metadata?.original_language) {
-        languages.add(media.metadata.original_language);
+        languageCodes.add(media.metadata.original_language as string);
       }
       if (media.metadata?.production_countries) {
         const countries_list = media.metadata.production_countries as any[];
         countries_list.forEach(c => {
-          if (c.iso_3166_1) countries.add(c.iso_3166_1);
+          if (c.iso_3166_1) {
+            // Store country code -> name mapping
+            countryMap.set(c.iso_3166_1, c.name || c.iso_3166_1);
+          }
         });
       }
       if (media.metadata?.vote_count && media.metadata.vote_count > maxVotes) {
@@ -666,11 +693,23 @@ export default function Library() {
       }
     });
 
+    // Create language objects with code and display name
+    const languages = Array.from(languageCodes).map(code => ({
+      code,
+      name: getLanguageName(code)
+    })).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Create country objects with code and name
+    const countries = Array.from(countryMap.entries()).map(([code, name]) => ({
+      code,
+      name
+    })).sort((a, b) => a.name.localeCompare(b.name));
+
     return {
       genres: Array.from(genres).sort(),
       years: Array.from(years).sort((a, b) => b - a),
-      languages: Array.from(languages).sort(),
-      countries: Array.from(countries).sort(),
+      languages,
+      countries,
       maxVotes,
     };
   }, [allMedia]);
@@ -1078,21 +1117,21 @@ export default function Library() {
                   <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
                   <div className="absolute top-full mt-2 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[9999] max-h-96 overflow-y-auto w-56 shadow-2xl">
                     {availableFilters.languages.map(l => (
-                      <label key={l} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
+                      <label key={l.code} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
                         <input
                           type="checkbox"
-                          checked={selectedLanguages.includes(l)}
+                          checked={selectedLanguages.includes(l.code)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedLanguages([...selectedLanguages, l]);
+                              setSelectedLanguages([...selectedLanguages, l.code]);
                             } else {
-                              setSelectedLanguages(selectedLanguages.filter(sl => sl !== l));
+                              setSelectedLanguages(selectedLanguages.filter(sl => sl !== l.code));
                             }
                             setCurrentPage(1);
                           }}
                           className="w-4 h-4 accent-white"
                         />
-                        <span className="text-sm">{l}</span>
+                        <span className="text-sm">{l.name}</span>
                       </label>
                     ))}
                   </div>
@@ -1113,21 +1152,21 @@ export default function Library() {
                   <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
                   <div className="absolute top-full mt-2 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[9999] max-h-96 overflow-y-auto w-56 shadow-2xl">
                     {availableFilters.countries.map(c => (
-                      <label key={c} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
+                      <label key={c.code} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
                         <input
                           type="checkbox"
-                          checked={selectedCountries.includes(c)}
+                          checked={selectedCountries.includes(c.code)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedCountries([...selectedCountries, c]);
+                              setSelectedCountries([...selectedCountries, c.code]);
                             } else {
-                              setSelectedCountries(selectedCountries.filter(sc => sc !== c));
+                              setSelectedCountries(selectedCountries.filter(sc => sc !== c.code));
                             }
                             setCurrentPage(1);
                           }}
                           className="w-4 h-4 accent-white"
                         />
-                        <span className="text-sm">{c}</span>
+                        <span className="text-sm">{c.name}</span>
                       </label>
                     ))}
                   </div>
