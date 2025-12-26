@@ -66,9 +66,10 @@ if [ -f /.dockerenv ]; then
         
         # Use docker-compose from mounted location (already in /app/host)
         if [ -f docker-compose.yml ]; then
-            # Fetch latest code and tags
+            # Fetch latest code and tags - force update remote refs
             log "Fetching latest code and tags..."
-            git fetch --all --tags --prune 2>&1 | tee -a "$LOG_FILE"
+            git remote update origin --prune 2>&1 | tee -a "$LOG_FILE"
+            git fetch origin --tags --force 2>&1 | tee -a "$LOG_FILE"
             
             # Clean up untracked files that might conflict with checkout
             log "Cleaning up untracked files that might conflict..."
@@ -84,9 +85,10 @@ if [ -f /.dockerenv ]; then
                 git checkout "tags/$BRANCH" 2>&1 | tee -a "$LOG_FILE"
             else
                 log "Checking out branch: $BRANCH"
-                git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
+                # Force fetch the specific branch to ensure we have latest
+                git fetch origin $BRANCH:refs/remotes/origin/$BRANCH --force 2>&1 | tee -a "$LOG_FILE" || true
                 git checkout $BRANCH 2>&1 | tee -a "$LOG_FILE" || true
-                git pull origin $BRANCH 2>&1 | tee -a "$LOG_FILE"
+                git reset --hard origin/$BRANCH 2>&1 | tee -a "$LOG_FILE"
             fi
             
             # Get version info from git after ensuring we have all tags
