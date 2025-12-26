@@ -3497,7 +3497,9 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 		os.MkdirAll(hostDir+"/logs", 0755)
 
 		// Make sure script is executable
-		exec.Command("chmod", "+x", scriptPath).Run()
+		if err := exec.Command("chmod", "+x", scriptPath).Run(); err != nil {
+			log.Printf("[Update] Warning: Failed to chmod script: %v", err)
+		}
 
 		// Check for existing lock file
 		lockFile := hostDir + "/logs/update.lock"
@@ -3507,54 +3509,53 @@ func (h *Handler) InstallUpdate(w http.ResponseWriter, r *http.Request) {
 			os.Remove(lockFile)
 		}
 
-		// Restart containers first to ensure clean state
-		log.Println("[Update] Restarting containers to ensure clean state...")
-		restartCmd := exec.Command("/bin/sh", "-c",
-			fmt.Sprintf("cd %s && docker compose up -d 2>&1 | tail -10", hostDir))
-		restartCmd.Env = append(os.Environ(),
-			"HOME=/root",
-			"PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-		)
-		restartOutput, restartErr := restartCmd.CombinedOutput()
-		if restartErr != nil {
-			log.Printf("[Update] Warning: Pre-update restart failed: %v, output: %s", restartErr, string(restartOutput))
-		} else {
-			log.Printf("[Update] Containers restarted successfully")
-			// Give containers a moment to stabilize
-			time.Sleep(2 * time.Second)
+		// Create a wrapper script that runs the update and handles errors
+		wrapperScript := hostDir + "/logs/run-update.sh"
+		wrapperContent := fmt.Sprintf(`#!/bin/bash
+set -e
+cd "%s"
+exec /bin/sh "%s" "%s"
+`, hostDir, scriptPath, branch)
+		
+		if err := os.WriteFile(wrapperScript, []byte(wrapperContent), 0755); err != nil {
+			log.Printf("[Update] Warning: Failed to create wrapper script: %v", err)
 		}
 
 		// Run update script in background (detached) so it survives container stop
-		// We use nohup and & to fully detach
+		// Using screen/detach properly to ensure process survives
 		log.Println("[Update] Executing update script in background...")
-		cmd := exec.Command("/bin/sh", "-c",
-			fmt.Sprintf("cd %s && nohup /bin/sh %s %s >> %s/logs/update.log 2>&1 &", hostDir, scriptPath, branch, hostDir))
-
-		// Set environment
+		
+		cmdStr := fmt.Sprintf("cd %s && nohup /bin/sh -c '/bin/sh %s %s >> %s/logs/update.log 2>&1' > /dev/null 2>&1 &", 
+			hostDir, scriptPath, branch, hostDir)
+		
+		cmd := exec.Command("sh", "-c", cmdStr)
 		cmd.Env = append(os.Environ(),
 			"HOME=/root",
 			"PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 		)
 
-		// Capture output for debugging
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			log.Printf("[Update] Failed to start update: %v, output: %s", err, string(output))
+		// Start the process
+		if err := cmd.Start(); err != nil {
+			log.Printf("[Update] Failed to start update: %v", err)
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to start update: %v", err))
 			return
 		}
 
-		// Give the script a moment to start
-		time.Sleep(500 * time.Millisecond)
+		// Don't wait for the command, let it run in background
+		go cmd.Wait()
 
-		// Verify the lock file was created (script is running)
-		if _, err := os.Stat(lockFile); err == nil {
-			log.Println("[Update] Script started successfully (lock file created)")
+		// Give the script a moment to start
+		time.Sleep(1 * time.Second)
+
+		// Verify logs were created
+		logsFile := hostDir + "/logs/update.log"
+		if _, err := os.Stat(logsFile); err == nil {
+			log.Println("[Update] Script started successfully (update.log created)")
 		} else {
-			log.Println("[Update] Warning: Lock file not found, but script was launched")
+			log.Println("[Update] Note: update.log not yet created, but script was launched")
 		}
 
-		log.Println("[Update] Script started in background")
+		log.Println("[Update] Update script started in background")
 	} else {
 		// Non-Docker environment - use update.sh (already set at the top)
 		// updateScript is already "./scripts/update.sh"
@@ -4645,3 +4646,61 @@ func extractReleaseDateFromMetadata(url, category string) string {
 	}
 	return ""
 }
+
+// GetUpdateStatus handles GET /api/debug/update-status
+func (h *Handler) GetUpdateStatus(w http.ResponseWriter, r *http.Request) {
+	lockFile := "logs/update.lock"
+	logFile := "logs/update.log"
+	
+	// Check if update is running
+	isRunning := false
+	var lockPID string
+	
+	if lockData, err := os.ReadFile(lockFile); err == nil {
+		lockPID = strings.TrimSpace(string(lockData))
+		isRunning = true // Lock exists
+	}
+	
+	// Get log file info
+	var logSize int64
+	var logModTime string
+	var logTail string
+	
+	if logInfo, err := os.Stat(logFile); err == nil {
+		logSize = logInfo.Size()
+		logModTime = logInfo.ModTime().Format("2006-01-02 15:04:05")
+		
+		// Read last 50 lines
+		if data, err := os.ReadFile(logFile); err == nil {
+			logTail = string(data)
+			// Keep only last 2KB for the response
+			if len(logTail) > 2000 {
+				logTail = "...\n" + logTail[len(logTail)-2000:]
+			}
+		}
+	}
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"is_running":  isRunning,
+		"lock_pid":    lockPID,
+		"log_size":    logSize,
+		"log_mod_time": logModTime,
+		"log_tail":    logTail,
+	})
+}
+
+// GetUpdateLog handles GET /api/debug/update-log
+func (h *Handler) GetUpdateLog(w http.ResponseWriter, r *http.Request) {
+	logFile := "logs/update.log"
+	
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "Update log not found. Update may not have been triggered yet.")
+		return
+	}
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"log": string(data),
+	})
+}
+

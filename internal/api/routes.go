@@ -298,6 +298,10 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	api.HandleFunc("/stremio/generate-token", handler.GenerateStremioToken).Methods("POST")
 	api.HandleFunc("/stremio/manifest-url", handler.GetStremioManifestURL).Methods("GET")
 
+	// Debug endpoints (for troubleshooting updates)
+	api.HandleFunc("/debug/update-status", handler.GetUpdateStatus).Methods("GET")
+	api.HandleFunc("/debug/update-log", handler.GetUpdateLog).Methods("GET")
+
 	// Stremio Addon Endpoints (public with token auth)
 	r.HandleFunc("/stremio/manifest.json", handler.StremioManifestHandler).Methods("GET")
 	r.HandleFunc("/stremio/catalog/{type}/{id}.json", handler.StremioCatalogHandler).Methods("GET")
