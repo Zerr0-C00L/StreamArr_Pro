@@ -156,6 +156,16 @@ export const streamarrApi = {
   getStats: () =>
     api.get('/stats'),
 
+  // Collections
+  getCollections: (params?: { offset?: number; limit?: number }) =>
+    api.get('/collections', { params }),
+  
+  getCollection: (id: number) =>
+    api.get(`/collections/${id}`),
+  
+  syncCollection: (id: number) =>
+    api.post(`/collections/${id}/sync`),
+
   // Blacklist
   removeAndBlacklist: (type: 'movie' | 'series', id: number, reason?: string) =>
     api.post(`/${type}/${id}/remove-and-blacklist`, { reason }),

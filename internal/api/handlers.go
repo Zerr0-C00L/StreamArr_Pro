@@ -2672,7 +2672,8 @@ func (h *Handler) GetCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid collection ID")
 		return
@@ -2702,7 +2703,8 @@ func (h *Handler) SyncCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid collection ID")
 		return
@@ -2742,7 +2744,8 @@ func (h *Handler) GetCollectionMovies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid collection ID")
 		return

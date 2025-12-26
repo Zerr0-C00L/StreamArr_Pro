@@ -5,9 +5,9 @@ import { streamarrApi, tmdbImageUrl } from '../services/api';
 import { 
   ChevronLeft, ChevronRight, ArrowLeft, X,
   Tv, Film, Loader2, ChevronDown, Search, Trash2, Star, Calendar,
-  CheckSquare, Square, XCircle
+  CheckSquare, Square, XCircle, Library as LibraryIcon, RefreshCw
 } from 'lucide-react';
-import type { Movie, Series, Episode } from '../types';
+import type { Movie, Series, Episode, Collection } from '../types';
 
 type MediaItem = {
   id: number;
@@ -557,9 +557,288 @@ function StreamCard({ stream, compact = false, forceFullName = false }: { stream
   );
 }
 
+// Collection Card Component
+function CollectionCard({ 
+  collection, 
+  onClick 
+}: { 
+  collection: Collection; 
+  onClick: () => void;
+}) {
+  const progress = collection.total_movies 
+    ? Math.round((collection.movies_in_library || 0) / collection.total_movies * 100) 
+    : 0;
+  
+  return (
+    <div 
+      onClick={onClick}
+      className="group cursor-pointer"
+    >
+      <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-slate-800 mb-2 
+                     group-hover:ring-2 ring-white transition-all">
+        {collection.poster_path ? (
+          <img
+            src={tmdbImageUrl(collection.poster_path, 'w342')}
+            alt={collection.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-800">
+            <LibraryIcon className="w-12 h-12 text-slate-600" />
+          </div>
+        )}
+        
+        {/* Collection Badge */}
+        <div className="absolute top-2 left-2">
+          <span className="px-2 py-1 rounded text-xs font-bold bg-cyan-600 text-white">
+            COLLECTION
+          </span>
+        </div>
+
+        {/* Progress indicator */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+          <div className="flex items-center justify-between text-xs text-white mb-1">
+            <span>{collection.movies_in_library || 0}/{collection.total_movies || 0}</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="w-full bg-slate-700 rounded-full h-1.5">
+            <div 
+              className={`h-1.5 rounded-full transition-all ${
+                progress === 100 ? 'bg-green-500' : 'bg-cyan-500'
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <h3 className="text-white text-sm font-medium line-clamp-2 group-hover:text-slate-300 transition-colors">
+        {collection.name}
+      </h3>
+    </div>
+  );
+}
+
+// Collection Detail Modal
+function CollectionDetailModal({ 
+  collection, 
+  onClose 
+}: { 
+  collection: Collection; 
+  onClose: () => void;
+}) {
+  const [syncing, setSyncing] = useState(false);
+
+  // Fetch collection details with movies
+  const { data: collectionData, isLoading, refetch } = useQuery({
+    queryKey: ['collection', collection.id],
+    queryFn: async () => {
+      const response = await streamarrApi.getCollection(collection.id);
+      return response.data;
+    },
+  });
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await streamarrApi.syncCollection(collection.id);
+      await refetch();
+      alert('Collection synced! Missing movies have been added to your library.');
+    } catch (error) {
+      console.error('Failed to sync collection:', error);
+      alert('Failed to sync collection. Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Close on escape
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
+
+  const movies = collectionData?.movies || [];
+  const progress = collection.total_movies 
+    ? Math.round((collection.movies_in_library || 0) / collection.total_movies * 100) 
+    : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-[#141414] overflow-y-auto">
+      {/* Hero section */}
+      <div className="relative min-h-[60vh] w-full">
+        {/* Background image */}
+        <div className="absolute inset-0">
+          {collection.backdrop_path ? (
+            <img
+              src={tmdbImageUrl(collection.backdrop_path, 'original')}
+              alt={collection.name}
+              className="w-full h-full object-cover"
+            />
+          ) : collection.poster_path ? (
+            <img
+              src={tmdbImageUrl(collection.poster_path, 'original')}
+              alt={collection.name}
+              className="w-full h-full object-cover object-top"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-950" />
+          )}
+          {/* Gradient overlays */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-[#141414]/60 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-[#141414]/30" />
+          <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[#141414] to-transparent" />
+        </div>
+
+        {/* Back button */}
+        <button
+          onClick={onClose}
+          className="absolute top-6 left-6 z-30 flex items-center gap-2 px-4 py-2 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-sm transition-all group"
+        >
+          <ArrowLeft className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
+          <span className="text-white font-medium">Back</span>
+        </button>
+
+        {/* Content info */}
+        <div className="absolute bottom-16 left-0 right-0 px-8 md:px-16 lg:px-20">
+          <div className="max-w-3xl">
+            {/* Type badge */}
+            <div className="flex items-center gap-3 mb-4">
+              <span className="px-3 py-1 rounded-md text-sm font-bold uppercase tracking-wide bg-cyan-600 text-white">
+                Collection
+              </span>
+              <span className={`px-3 py-1 rounded-md text-sm font-bold ${
+                progress === 100 ? 'bg-green-600' : 'bg-slate-600'
+              } text-white`}>
+                {progress}% Complete
+              </span>
+            </div>
+
+            {/* Title */}
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-white mb-6 drop-shadow-2xl leading-tight">
+              {collection.name}
+            </h1>
+
+            {/* Progress bar */}
+            <div className="mb-6 max-w-md">
+              <div className="flex items-center justify-between text-sm text-slate-300 mb-2">
+                <span>{collection.movies_in_library || 0} of {collection.total_movies || 0} movies in library</span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div 
+                  className={`h-2 rounded-full transition-all ${
+                    progress === 100 ? 'bg-green-500' : 'bg-cyan-500'
+                  }`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Overview */}
+            {collection.overview && (
+              <p className="text-slate-200 text-lg md:text-xl leading-relaxed mb-8 line-clamp-4">
+                {collection.overview}
+              </p>
+            )}
+
+            {/* Action buttons */}
+            {progress < 100 && (
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" 
+                >
+                  {syncing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-5 h-5" />
+                      Add Missing Movies
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Movies in collection */}
+      <div className="relative z-10 px-8 md:px-16 lg:px-20 pb-20 -mt-8 bg-[#141414]">
+        <h2 className="text-2xl font-bold text-white mb-6">Movies in Collection</h2>
+        
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-10 h-10 animate-spin text-cyan-600" />
+          </div>
+        ) : movies.length === 0 ? (
+          <div className="text-center py-16 text-slate-400">
+            <Film className="w-16 h-16 mx-auto mb-4 text-slate-600" />
+            <p className="text-lg">No movies found in this collection</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
+            {movies.map((movie: any) => (
+              <div key={movie.id || movie.tmdb_id} className="group">
+                <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-slate-800 mb-2">
+                  {movie.poster_path ? (
+                    <img
+                      src={tmdbImageUrl(movie.poster_path, 'w342')}
+                      alt={movie.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Film className="w-12 h-12 text-slate-600" />
+                    </div>
+                  )}
+                  
+                  {/* In Library badge */}
+                  <div className="absolute top-2 right-2">
+                    {movie.in_library ? (
+                      <span className="px-2 py-1 rounded text-xs font-bold bg-green-600 text-white">
+                        ✓ In Library
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 rounded text-xs font-bold bg-slate-600 text-white">
+                        Missing
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Year */}
+                  {movie.release_date && (
+                    <div className="absolute bottom-2 left-2 bg-black/80 px-2 py-1 rounded backdrop-blur-sm">
+                      <span className="text-white text-xs font-medium">
+                        {new Date(movie.release_date).getFullYear()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <h3 className="text-white text-sm font-medium line-clamp-2">
+                  {movie.title}
+                </h3>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Main Library Component
 export default function Library() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
+  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentPage, setCurrentPage] = useState(1);
@@ -600,7 +879,15 @@ export default function Library() {
     queryFn: () => streamarrApi.getSeries({ limit: 10000, sort: sortBy, order: sortOrder }).then(res => Array.isArray(res.data) ? res.data : []),
   });
 
-  const isLoading = moviesLoading || seriesLoading;
+  // Fetch collections
+  const { data: collectionsData, isLoading: collectionsLoading } = useQuery({
+    queryKey: ['collections'],
+    queryFn: () => streamarrApi.getCollections({ limit: 1000 }).then(res => res.data),
+    enabled: currentView === 'collections',
+  });
+  const collections: Collection[] = collectionsData?.collections || [];
+
+  const isLoading = currentView === 'collections' ? collectionsLoading : (moviesLoading || seriesLoading);
 
   // Transform data to MediaItems
   const allMedia: MediaItem[] = useMemo(() => {
@@ -817,6 +1104,7 @@ export default function Library() {
     'recently-added-series': 'Recently Added Series',
     'movies': 'Movies',
     'series': 'TV Shows',
+    'collections': 'Collections',
   };
 
   // Selection helpers
@@ -1101,6 +1389,7 @@ export default function Library() {
             { key: 'recently-added-series', label: 'Recent Series' },
             { key: 'movies', label: 'Movies' },
             { key: 'series', label: 'TV Shows' },
+            { key: 'collections', label: '📦 Collections' },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -1124,12 +1413,39 @@ export default function Library() {
       <div className="relative z-0 px-12 pb-12">
         <div className="mb-4">
           <h2 className="text-2xl font-bold text-white mb-2">{viewTitles[currentView]}</h2>
-          <p className="text-slate-400">
-            Showing {startIndex + 1}-{Math.min(endIndex, filteredMedia.length)} of {filteredMedia.length} items
-          </p>
+          {currentView === 'collections' ? (
+            <p className="text-slate-400">
+              {collections.length} collection{collections.length !== 1 ? 's' : ''}
+            </p>
+          ) : (
+            <p className="text-slate-400">
+              Showing {startIndex + 1}-{Math.min(endIndex, filteredMedia.length)} of {filteredMedia.length} items
+            </p>
+          )}
         </div>
 
-        {currentItems.length > 0 ? (
+        {/* Collections View */}
+        {currentView === 'collections' ? (
+          collections.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-8">
+              {collections.map((collection) => (
+                <CollectionCard
+                  key={collection.id}
+                  collection={collection}
+                  onClick={() => setSelectedCollection(collection)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-20">
+              <LibraryIcon className="w-16 h-16 mx-auto mb-4 text-slate-600" />
+              <p className="text-slate-400 text-xl">No collections found</p>
+              <p className="text-slate-500 text-sm mt-2">
+                Collections are automatically created when you add movies that belong to a collection
+              </p>
+            </div>
+          )
+        ) : currentItems.length > 0 ? (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-8">
               {currentItems.map((item) => (
@@ -1270,6 +1586,14 @@ export default function Library() {
         <DetailModal 
           media={selectedMedia} 
           onClose={() => setSelectedMedia(null)} 
+        />
+      )}
+
+      {/* Collection Detail Modal */}
+      {selectedCollection && (
+        <CollectionDetailModal 
+          collection={selectedCollection} 
+          onClose={() => setSelectedCollection(null)} 
         />
       )}
 
