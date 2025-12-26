@@ -1,98 +1,105 @@
 # StreamArr Pro
 
 <p align="center">
-  <img src="streamarr-pro-ui/public/logo.png" alt="StreamArr Pro" width="120">
+  <img src="streamarr-pro-ui/public/logo.png" alt="StreamArr Pro" width="150">
 </p>
 
 <p align="center">
-  <b>Self-hosted media server with Netflix-style UI for Movies, Series & Live TV</b>
+  <b>🎬 Self-hosted Media Server with Netflix-style UI</b>
 </p>
 
 <p align="center">
-  Integrates with user-configured providers (e.g., Stremio-compatible addons) and optional premium caching services for personal streaming.<br>
-  Exposes Xtream-compatible endpoints for use with IPTV apps.
+  A powerful, self-hosted media management system that combines a beautiful Netflix-inspired interface<br>
+  with Stremio-compatible streaming providers. Perfect for organizing your Movies, TV Shows & Live TV.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Zerr0-C00L/StreamArr/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/Download-ZIP-blue?style=for-the-badge&logo=github" alt="Download"></a>
-  <a href="#-docker-installation"><img src="https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker" alt="Docker"></a>
-  <a href="https://ko-fi.com/zeroq"><img src="https://img.shields.io/badge/Support-Ko--fi-ff5f5f?style=for-the-badge&logo=ko-fi" alt="Ko-fi"></a>
+  <a href="https://github.com/Zerr0-C00L/StreamArr_Pro/releases"><img src="https://img.shields.io/github/v/release/Zerr0-C00L/StreamArr_Pro?style=for-the-badge&logo=github&color=blue" alt="Release"></a>
+  <a href="#-quick-start"><img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker" alt="Docker"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go" alt="Go"></a>
+  <a href="#"><img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react" alt="React"></a>
+  <a href="https://ko-fi.com/zeroq"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi" alt="Ko-fi"></a>
 </p>
 
 ---
 
 ## 📸 Screenshots
 
-<img width="1470" height="956" alt="Screenshot 2025-12-15 at 7 14 02 am" src="https://github.com/user-attachments/assets/1f38d243-c68c-4b89-9a4d-dd3e63517ab4" />
-<img width="1470" height="956" alt="Screenshot 2025-12-15 at 7 13 45 am" src="https://github.com/user-attachments/assets/a80802ca-4c8e-49d7-a463-71cc5968b817" />
-<img width="1470" height="956" alt="Screenshot 2025-12-15 at 7 14 14 am" src="https://github.com/user-attachments/assets/ad8219d7-da4c-404c-8f76-43e9b5b19937" />
-<img width="1470" height="956" alt="Screenshot 2025-12-15 at 7 14 43 am" src="https://github.com/user-attachments/assets/b06b7f24-fb5a-4940-ba1b-0d76c469749d" />
-<img width="1470" height="956" alt="Screenshot 2025-12-15 at 7 15 02 am" src="https://github.com/user-attachments/assets/c1ec1d3d-ff43-43c5-b719-0bd28e804cb2" />
-<img width="1470" height="956" alt="Screenshot 2025-12-15 at 7 15 13 am" src="https://github.com/user-attachments/assets/737a5b6f-20d7-47d3-a55e-3f751fa0af0f" />
+<table>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/1f38d243-c68c-4b89-9a4d-dd3e63517ab4" alt="Dashboard" width="400"/></td>
+    <td><img src="https://github.com/user-attachments/assets/a80802ca-4c8e-49d7-a463-71cc5968b817" alt="Library" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/ad8219d7-da4c-404c-8f76-43e9b5b19937" alt="Movie Details" width="400"/></td>
+    <td><img src="https://github.com/user-attachments/assets/b06b7f24-fb5a-4940-ba1b-0d76c469749d" alt="Discover" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/c1ec1d3d-ff43-43c5-b719-0bd28e804cb2" alt="Live TV" width="400"/></td>
+    <td><img src="https://github.com/user-attachments/assets/737a5b6f-20d7-47d3-a55e-3f751fa0af0f" alt="Settings" width="400"/></td>
+  </tr>
+</table>
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-### 🎬 Content Management
-| Feature | Description |
-|---------|-------------|
-| **Movies & Series** | Add any movie or TV series from TMDB with full metadata, posters, backdrops, and descriptions |
-| **Episode Browser** | Browse all seasons and episodes with air dates, thumbnails, and per-episode stream fetching |
-| **Collections** | Auto-detect movie collections (Marvel, Star Wars, etc.) and optionally add all movies in the collection |
-| **MDBList Sync** | Auto-import from your MDBList watchlists, trending lists, and custom lists |
-| **Smart Search** | Search TMDB for content, see what's trending, and discover popular movies/series |
+### 🎬 Media Library
+- **Comprehensive Content** — Add movies & TV shows from TMDB with full metadata, posters, and descriptions
+- **Smart Collections** — Auto-detect franchises (Marvel, Star Wars, etc.) and add entire collections
+- **MDBList Integration** — Auto-sync with your watchlists, trending lists, and custom lists
+- **Advanced Filtering** — Filter by genre, year, rating, language with multi-select dropdowns
+- **Sorting Options** — Sort by title, date added, release date, rating, runtime, and more
+- **Bulk Management** — Mass select and delete items from your library
+- **Calendar View** — Track upcoming movie releases and episode air dates
 
-### 📺 Streaming
-| Feature | Description |
-|---------|-------------|
-| **Stremio-Compatible Providers** | Supports user-added providers (e.g., Torrentio, Comet, MediaFusion) |
-| **Premium Caching** | Optional integration with caching services to accelerate access to user-available sources |
-| **Multi-Provider** | Configure multiple addons with automatic fallback if one fails |
-| **Stream Selection** | See all available streams with quality, size, codec, seeders, and actual filename |
-| **Quality Filters** | Filter by resolution (4K, 1080p, 720p), exclude CAM/TS, filter languages |
+### 📺 Streaming Engine
+- **Multi-Provider Support** — Works with Torrentio, Comet, MediaFusion, and other Stremio addons
+- **Premium Debrid** — Real-Debrid, Premiumize, and AllDebrid integration for cached streams
+- **Smart Fallback** — Automatically tries multiple providers until finding available streams
+- **Stream Selection** — View quality, file size, codec, seeders, and cache status
+- **Quality Filters** — Filter by resolution, exclude CAM/TS, set max file size
 
 ### 📡 Live TV
-| Feature | Description |
-|---------|-------------|
-| **Live TV via M3U** | Use your own M3U playlists and IPTV sources |
-| **EPG Support** | Electronic Program Guide when available from configured sources |
-| **Custom M3U** | Add your own M3U playlists and IPTV sources |
-| **Source & Category Filters** | Enable/disable sources and categories (Sports, News, Movies, Entertainment, Kids, etc.) |
+- **M3U Playlist Support** — Import your own IPTV sources
+- **EPG Guide** — Electronic Program Guide with XMLTV support
+- **Category Filters** — Sports, News, Entertainment, Kids, and more
+- **Channel Management** — Enable/disable sources and organize channels
 
-### 📱 IPTV Compatibility
-| Feature | Description |
-|---------|-------------|
-| **Xtream-Compatible API** | Works with TiviMate, iMPlayer, IPTV Smarters, XCIPTV, OTT Navigator |
-| **M3U Playlist** | Standard M3U8 playlist for VLC, Kodi, and any M3U-compatible player |
-| **Apple TV** | Works with Chillio, iPlayTV, and other Apple TV IPTV apps |
-| **VOD Support** | Movies and Series appear as VOD content in IPTV apps |
-<br/>
-Note: Use only with content you are legally entitled to access. Examples below use placeholder credentials; configure your own secure values.
+### 📱 IPTV App Compatibility
+- **Xtream Codes API** — Full compatibility with popular IPTV apps
+- **Tested Apps** — TiviMate, iMPlayer, Chillio, IPTV Smarters, XCIPTV, OTT Navigator
+- **M3U Export** — Standard playlist for VLC, Kodi, and any M3U player
+- **VOD Support** — Movies and series appear as Video on Demand
 
-### 🎨 Web Interface
-| Feature | Description |
-|---------|-------------|
-| **Netflix-Style UI** | Modern dark theme with horizontal scrolling rows, hover cards, and smooth animations |
-| **Detail Modals** | Click any movie/series to see full details, seasons, episodes, and available streams |
-| **Responsive Design** | Works on desktop, tablet, and mobile browsers |
-| **Dashboard** | Quick stats, recently added content, and upcoming releases |
-| **Calendar** | See upcoming movie releases and episode air dates |
+### 🎨 Modern Interface
+- **Netflix-Style UI** — Dark theme with horizontal scrolling, hover effects, and smooth animations
+- **Discover Page** — Browse trending content with sorting by popularity, rating, and release date
+- **Detail Modals** — Full movie/series info with seasons, episodes, and stream selection
+- **Responsive Design** — Works on desktop, tablet, and mobile
 
-### ⚙️ Advanced Features
-| Feature | Description |
-|---------|-------------|
-| **Background Services** | Auto-sync MDBList, refresh channels, update EPG on schedule |
-| **Release Filters** | Exclude specific release groups, languages, or qualities |
-| **Stream Sorting** | Sort by quality, size, seeders, or cached status |
-| **User Accounts** | Multi-user support with admin controls |
-| **API Access** | Full REST API for integration with other tools |
+---
+
+## 🛠️ Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| **Backend** | Go 1.21+ with Gorilla Mux |
+| **Frontend** | React 18 + TypeScript + Vite |
+| **Styling** | Tailwind CSS |
+| **Database** | PostgreSQL 16 |
+| **Containerization** | Docker & Docker Compose |
+| **State Management** | TanStack Query |
 
 ---
 
 ## 🚀 Quick Start
 
-### Docker Installation (Recommended)
+### Prerequisites
+- Docker & Docker Compose
+- TMDB API Key ([Get free key](https://developer.themoviedb.org/docs/getting-started))
+
+### Installation
 
 ```bash
 # Clone the repository
@@ -103,312 +110,234 @@ cd StreamArr_Pro
 docker compose up -d
 
 # View logs (optional)
-docker compose logs -f streamarr_pro
+docker compose logs -f streamarr
 ```
 
-**Done!** Open http://localhost:8080 in your browser.
+**🎉 Done!** Open http://localhost:8080 in your browser.
+
+### Default Credentials
+- Username: `admin`
+- Password: `admin` (change in Settings)
 
 ---
 
-## ⚙️ Initial Setup
+## ⚙️ Configuration
 
-After installation, go to **Settings** (gear icon) and configure:
+### 1. API Keys (Settings → API Keys)
 
-### 1. API Keys Tab
 | Setting | Description | Required |
 |---------|-------------|----------|
-| **TMDB API Key** | For movie/series metadata. [Get free key →](https://developer.themoviedb.org/docs/getting-started) | ✅ Required |
-| **MDBList API Key** | For watchlist sync. [Get key →](https://mdblist.com/preferences/) | Optional |
+| **TMDB API Key** | For movie/series metadata | ✅ Yes |
+| **MDBList API Key** | For watchlist sync | Optional |
+| **Real-Debrid API Key** | For premium cached streams | Optional |
 
-### 2. Debrid Services
-| Service | Description |
-|---------|-------------|
-| **Premium Caching (e.g., Real-Debrid)** | Optional cached resolution. [Get API key →](https://real-debrid.com/apitoken) |
-| **Premiumize** | Alternative debrid service |
-| **TorBox** | Coming soon |
+### 2. Stream Providers (Settings → Addons)
 
-### 3. Stremio Addons
-Add your Stremio-compatible provider URLs. Examples:
+Add Stremio-compatible provider URLs:
 
-| Addon | URL | Notes |
-|-------|-----|-------|
+| Provider | Example URL | Notes |
+|----------|-------------|-------|
 | **Comet** | `https://comet.elfhosted.com` | Fast, good cache detection |
 | **Torrentio** | `https://torrentio.strem.fun` | Most sources, highly configurable |
 | **MediaFusion** | `https://mediafusion.elfhosted.com` | Good alternative |
 
-> **Tip:** You can add multiple addons. StreamArr will try each one in order until it finds streams.
+> 💡 **Tip:** Add multiple providers for automatic fallback if one fails.
+
+### 3. Quality Settings (Settings → Quality)
+
+- **Max Resolution** — 4K, 1080p, or 720p
+- **Max File Size** — Skip oversized files
+- **Excluded Qualities** — CAM, TS, SCR, HDTS
+- **Language Filters** — Exclude unwanted languages
 
 ---
 
 ## 📱 IPTV App Setup
 
-### Xtream Codes Login (All IPTV Apps)
+### Xtream Codes Login
 
 | Field | Value |
 |-------|-------|
 | **Server URL** | `http://YOUR-IP:8080` |
-| **Username** | Set in Settings → Xtream (default: `user`) |
-| **Password** | Set in Settings → Xtream (default: `pass`) |
+| **Username** | Set in Settings → Xtream |
+| **Password** | Set in Settings → Xtream |
 
-### M3U Playlist URL (VLC, Kodi)
+### M3U Playlist URL
 ```
 http://YOUR-IP:8080/get.php?username=user&password=pass&type=m3u_plus&output=ts
 ```
 
-### Tested Apps
+### Tested Applications
 
 | App | Platform | Status |
 |-----|----------|--------|
-| **TiviMate** | Android TV | ✅ Excellent |
-| **iMPlayer** | iOS / Apple TV | ✅ Excellent |
-| **Chillio** | Apple TV | ✅ Excellent |
-| **IPTV Smarters Pro** | All platforms | ✅ Works |
-| **XCIPTV** | Android | ✅ Works |
-| **OTT Navigator** | Android | ✅ Works |
-| **Kodi (PVR IPTV)** | All platforms | ✅ M3U only |
-| **VLC** | All platforms | ✅ M3U only |
+| TiviMate | Android TV | ✅ Excellent |
+| iMPlayer | iOS / Apple TV | ✅ Excellent |
+| Chillio | Apple TV | ✅ Excellent |
+| IPTV Smarters | All | ✅ Works |
+| OTT Navigator | Android | ✅ Works |
+| VLC / Kodi | All | ✅ M3U |
 
 ---
 
-## 🎯 How It Works
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        StreamArr Pro                             │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌──────────┐    ┌──────────────┐    ┌────────────────────┐    │
-│  │  Web UI  │───▶│   REST API   │───▶│  Stream Providers  │    │
-│  │ (React)  │    │    (Go)      │    │  (Comet/Torrentio) │    │
-│  └──────────┘    └──────────────┘    └────────────────────┘    │
-│       │                │                       │                │
-│       │                ▼                       ▼                │
-│       │         ┌──────────────┐    ┌────────────────────┐     │
-│       │         │  PostgreSQL  │    │    Real-Debrid     │     │
-│       │         │   Database   │    │  (Cached Streams)  │     │
-│       │         └──────────────┘    └────────────────────┘     │
-│       │                                        │                │
-│       ▼                                        ▼                │
-│  ┌──────────────────────────────────────────────────────┐      │
-│  │              Xtream Codes API                         │      │
-│  │     /player_api.php  •  /movie/  •  /series/         │      │
-│  └──────────────────────────────────────────────────────┘      │
-│                            │                                    │
-│                            ▼                                    │
-│  ┌──────────────────────────────────────────────────────┐      │
-│  │                    IPTV Apps                          │      │
-│  │  TiviMate • iMPlayer • Chillio • IPTV Smarters       │      │
-│  └──────────────────────────────────────────────────────┘      │
+│  ┌──────────────┐    ┌──────────────┐    ┌─────────────────┐   │
+│  │   React UI   │───▶│   Go API     │───▶│  PostgreSQL     │   │
+│  │  (Vite/TS)   │    │  (Gorilla)   │    │  (Database)     │   │
+│  └──────────────┘    └──────────────┘    └─────────────────┘   │
+│         │                   │                                   │
+│         │                   ▼                                   │
+│         │           ┌──────────────┐    ┌─────────────────┐    │
+│         │           │   Providers  │───▶│   Real-Debrid   │    │
+│         │           │  (Torrentio) │    │   (Caching)     │    │
+│         │           └──────────────┘    └─────────────────┘    │
+│         │                                                       │
+│         ▼                                                       │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │              Xtream Codes API                           │    │
+│  │   /player_api.php  •  /movie/  •  /series/  •  /live/  │    │
+│  └────────────────────────────────────────────────────────┘    │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │  TiviMate • iMPlayer • Chillio • IPTV Smarters • VLC   │    │
+│  └────────────────────────────────────────────────────────┘    │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Flow Explanation
-
-1. **Add Content** → Search TMDB, add movies/series to your library
-2. **Metadata Stored** → Titles, posters, descriptions saved to PostgreSQL
-3. **IPTV App Request** → App requests movie/episode via Xtream API
-4. **Fetch Streams** → StreamArr queries user-configured providers for available sources
-5. **Premium Caching** → Optional cached resolution via premium services where permitted
-6. **Playback** → Direct high-speed stream URL returned to IPTV app
-
 ---
 
-## 🖥️ Web UI Guide
-
-### Navigation
-| Page | Description |
-|------|-------------|
-| **Home** | Dashboard with stats, recent content, upcoming releases |
-| **Library** | Browse all movies and series with Netflix-style rows |
-| **Live TV** | Browse and filter live TV channels |
-| **Discover** | Search TMDB, see trending content, add to library |
-| **Settings** | Configure API keys, addons, quality, filters |
-
-### Library Features
-- **Hero Banner** - Featured content with backdrop image
-- **Content Rows** - Horizontal scrolling rows for Movies and Series
-- **Hover Cards** - Preview poster with play button on hover
-- **Detail Modal** - Click to see full info, seasons, episodes, streams
-- **Stream Selection** - See all available streams with:
-  - Quality badge (4K/1080p/720p)
-  - Source (Comet/Torrentio)
-  - Cached status (⚡ instant playback)
-  - File size in GB
-  - Codec (HEVC/H.264)
-  - Full filename (click to expand)
-
-### Adding Content
-1. Click **Discover** in the navigation
-2. Search for a movie or series
-3. Click the **+** button to add to library
-4. Content appears in Library immediately
-
----
-
-## 🔧 Advanced Configuration
-
-### Quality Settings
-- **Max Resolution** - Limit to 4K, 1080p, or 720p
-- **Max File Size** - Skip files over a certain size
-- **Quality Variants** - Show all qualities or just the best
-
-### Release Filters
-Filter out unwanted releases by:
-- **Release Groups** - Exclude specific groups (e.g., YIFY)
-- **Languages** - Exclude foreign language releases
-- **Qualities** - Exclude CAM, TS, SCR, HDTS
-
-### Stream Sorting
-Sort streams by:
-- Quality (highest first)
-- Size (largest first)
-- Seeds (most seeded first)
-- Cached status (cached first)
-
----
-
-## 📡 Live TV Sources
-
-### Built-in Sources
-| Source | Channels | Region |
-|--------|----------|--------|
-| PlutoTV | varies | User-configured |
-| Custom M3U | varies | User-configured |
-
-### Adding Custom Sources
-1. Go to **Settings → Live TV**
-2. Add M3U URL under "M3U Sources"
-3. Click Save, then refresh channels
-
-### EPG (Program Guide)
-EPG is automatically loaded from multiple sources (XMLTV, Pluto TV, and custom URLs from your M3U sources). Manual refresh available in **Settings → Services**.
-
----
-
-## 🐳 Docker Commands
+## 🔧 Docker Commands
 
 ```bash
-# Start
+# Start services
 docker compose up -d
 
-# Stop
+# Stop services
 docker compose down
 
 # View logs
 docker compose logs -f streamarr
 
-# Restart
-docker compose restart streamarr
+# Rebuild after updates
+git pull && docker compose up -d --build
 
-# Update to latest
-git pull
-docker compose build --no-cache
-docker compose up -d
-
-# Reset database (WARNING: deletes all data)
-docker compose down -v
-docker compose up -d
+# Full reset (WARNING: deletes all data)
+docker compose down -v && docker compose up -d
 ```
 
 ---
 
-## 🔄 Updating
+## 📊 API Endpoints
 
-```bash
-cd StreamArr
-git pull
-docker compose build
-docker compose up -d
-```
+### REST API (v1)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/movies` | List all movies |
+| GET | `/api/v1/movies/{id}/streams` | Get movie streams |
+| GET | `/api/v1/series` | List all series |
+| GET | `/api/v1/series/{id}/episodes` | Get series episodes |
+| GET | `/api/v1/channels` | List live channels |
+| GET | `/api/v1/health` | Health check |
+| POST | `/api/v1/movies` | Add movie to library |
+| DELETE | `/api/v1/movies/{id}` | Remove movie |
+
+### Xtream Codes API
+| Endpoint | Description |
+|----------|-------------|
+| `/player_api.php` | Main Xtream API |
+| `/get.php` | Playlist generation |
+| `/movie/{user}/{pass}/{id}.mp4` | Movie stream |
+| `/series/{user}/{pass}/{id}.mp4` | Episode stream |
+| `/live/{user}/{pass}/{id}.m3u8` | Live channel |
+| `/xmltv.php` | EPG data |
 
 ---
 
-## 🛠️ Troubleshooting
+## 🐛 Troubleshooting
 
 <details>
-<summary><b>No streams found for movies/series</b></summary>
+<summary><b>No streams found</b></summary>
 
-1. **Check Addons** - Go to Settings → Addons, ensure at least one is enabled
-2. **Check Real-Debrid** - Verify API key in Settings → API Keys
-3. **Check Addon URLs** - Make sure URLs are correct (no trailing slash)
-4. **Try Different Content** - Some obscure content may not have torrents
-
+1. Check that at least one provider addon is configured
+2. Verify your Real-Debrid API key is valid
+3. Ensure addon URLs don't have trailing slashes
+4. Try different content (some may not have sources)
 </details>
 
 <details>
 <summary><b>IPTV app won't connect</b></summary>
 
-1. **Use IP Address** - Use your server's IP, not `localhost`
-2. **Check Port** - Ensure port 8080 is accessible
-3. **Check Credentials** - Use credentials from Settings → Xtream
-4. **Full URL** - Some apps need `http://` prefix
-
+1. Use your server's IP address, not `localhost`
+2. Ensure port 8080 is open/accessible
+3. Check credentials in Settings → Xtream
+4. Some apps require `http://` prefix
 </details>
 
 <details>
 <summary><b>Streams buffer or won't play</b></summary>
 
-1. **Check Real-Debrid** - Verify your subscription is active
-2. **Cached Streams** - Prefer streams with ⚡ Cached badge
-3. **Lower Quality** - Try 1080p instead of 4K
-4. **Different Stream** - Try a different source
-
-</details>
-
-<details>
-<summary><b>Episodes not showing streams</b></summary>
-
-1. **IMDB ID** - Ensure the series has an IMDB ID (check metadata)
-2. **Air Date** - Episode must have aired
-3. **Refresh** - Try removing and re-adding the series
-
+1. Verify Real-Debrid subscription is active
+2. Prefer streams with ⚡ Cached badge
+3. Try lower quality (1080p instead of 4K)
+4. Try a different stream source
 </details>
 
 <details>
 <summary><b>Live TV not working</b></summary>
 
-1. **Refresh Channels** - Settings → Services → Channel Refresh
-2. **Enable Sources** - Settings → Live TV → Enable sources
-3. **Wait for EPG** - EPG can take a few minutes to load
-
+1. Go to Settings → Services → Refresh Channels
+2. Enable sources in Settings → Live TV
+3. Wait for EPG to load (can take a few minutes)
 </details>
 
 ---
 
-## 📊 API Reference
+## 📁 Project Structure
 
-### Xtream Codes Endpoints
-| Endpoint | Description |
-|----------|-------------|
-| `GET /player_api.php` | Main Xtream Codes API |
-| `GET /get.php` | Playlist generation |
-| `GET /movie/{user}/{pass}/{id}.mp4` | Movie stream |
-| `GET /series/{user}/{pass}/{id}.mp4` | Episode stream |
-| `GET /live/{user}/{pass}/{id}.m3u8` | Live channel |
-| `GET /xmltv.php` | EPG data |
-<br/>
-For personal use. Endpoints surface content only from user-configured, lawful sources.
-
-### REST API (v1)
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/v1/movies` | List all movies |
-| `GET /api/v1/movies/{id}/streams` | Get movie streams |
-| `GET /api/v1/series` | List all series |
-| `GET /api/v1/series/{id}/episodes` | Get series episodes |
-| `GET /api/v1/stream/series/{imdb}:{s}:{e}` | Get episode streams |
-| `GET /api/v1/channels` | List live channels |
-| `GET /api/v1/health` | Health check |
+```
+StreamArr_Pro/
+├── cmd/                    # Application entrypoints
+│   ├── server/             # Main server
+│   ├── worker/             # Background worker
+│   └── migrate/            # Database migrations
+├── internal/               # Core application code
+│   ├── api/                # REST API handlers & routes
+│   ├── auth/               # Authentication middleware
+│   ├── database/           # Database stores
+│   ├── models/             # Data models
+│   ├── providers/          # Stream providers
+│   ├── services/           # Business logic (TMDB, MDBList, etc.)
+│   └── xtream/             # Xtream Codes API
+├── streamarr-pro-ui/       # React frontend
+│   ├── src/
+│   │   ├── components/     # Reusable UI components
+│   │   ├── pages/          # Page components
+│   │   └── services/       # API client
+│   └── package.json
+├── migrations/             # SQL migrations
+├── docker-compose.yml      # Docker configuration
+└── Dockerfile              # Multi-stage build
+```
 
 ---
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
+
 1. Fork the repository
-2. Create a feature branch
-3. Submit a Pull Request
+2. Create a feature branch (`git checkout -b feature/amazing`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing`)
+5. Open a Pull Request
 
 ---
 
@@ -426,18 +355,12 @@ If StreamArr Pro is useful to you, consider supporting development:
 
 ---
 
-## 🛡️ Responsible Use
-
-StreamArr Pro is a self-hosted media organizer. It does not host, index, or distribute any media. You are responsible for ensuring that any configured sources and services comply with local laws and their terms of service. Use only with content you are legally entitled to access.
-
----
-
-## 🔗 Content & Providers
-
-StreamArr Pro does not include or endorse any particular provider. References to third-party addons or services (e.g., Stremio-compatible providers, caching services) are examples. Configuration and usage are at the user’s discretion and risk.
-
----
-
 ## ⚠️ Disclaimer
 
-This software is for personal, lawful use only. The project does not host, provide, index, or distribute any copyrighted content, nor does it encourage infringement. Users must ensure compliance with applicable laws, platform policies, and terms of service for any third-party services they configure.
+StreamArr Pro is a self-hosted media organizer for **personal, lawful use only**. It does not host, index, or distribute any media content. Users are responsible for ensuring compliance with local laws and terms of service for any third-party services they configure.
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/Zerr0-C00L">Zerr0-C00L</a>
+</p>
