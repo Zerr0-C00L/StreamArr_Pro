@@ -5,9 +5,9 @@ import { streamarrApi, tmdbImageUrl } from '../services/api';
 import type { TrendingItem } from '../services/api';
 import { 
   Search as SearchIcon, Film, Tv, Plus, Check, Loader2, 
-  TrendingUp, Flame, ChevronLeft, ChevronRight, Star, Layers, ExternalLink
+  TrendingUp, Flame, ChevronLeft, ChevronRight, Star, Layers
 } from 'lucide-react';
-import type { SearchResult, Collection } from '../types';
+import type { SearchResult } from '../types';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 
 export default function Search() {
@@ -68,26 +68,7 @@ export default function Search() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Popular Collections
-  const { data: popularCollections = [] } = useQuery({
-    queryKey: ['popular-collections'],
-    queryFn: () => streamarrApi.getPopularCollections().then(res => Array.isArray(res.data) ? res.data : []),
-    staleTime: 10 * 60 * 1000,
-  });
 
-  // Library Collections (to check which are already added)
-  const { data: libraryCollections = [] } = useQuery({
-    queryKey: ['library-collections'],
-    queryFn: () => streamarrApi.getCollections({ limit: 10000 }).then(res => Array.isArray(res.data) ? res.data : []),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Set of library collection TMDB IDs
-  const libraryCollectionIds = useMemo(() => {
-    const ids = new Set<number>();
-    libraryCollections.forEach((c: any) => c.tmdb_id && ids.add(c.tmdb_id));
-    return ids;
-  }, [libraryCollections]);
 
   // Sort helper function
   const sortItems = (items: TrendingItem[], sortBy: string): TrendingItem[] => {
@@ -294,6 +275,13 @@ export default function Search() {
             Trending Now
           </h2>
           <div className="flex items-center gap-3">
+            <Link
+              to="/collections"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <Layers className="w-4 h-4" />
+              Collections
+            </Link>
             <select
               value={trendingSortBy}
               onChange={(e) => setTrendingSortBy(e.target.value)}
@@ -392,29 +380,6 @@ export default function Search() {
           onCardClick={setSelectedMedia}
         />
       </div>
-
-      {/* Popular Collections */}
-      {popularCollections.length > 0 && (
-        <div className="px-8 pb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Layers className="w-6 h-6 text-cyan-500" />
-              Popular Collections
-            </h2>
-            <Link 
-              to="/collections"
-              className="flex items-center gap-1 text-cyan-500 hover:text-cyan-400 text-sm font-medium transition-colors"
-            >
-              Browse All Collections
-              <ExternalLink className="w-4 h-4" />
-            </Link>
-          </div>
-          <CollectionRow 
-            collections={popularCollections} 
-            libraryCollectionIds={libraryCollectionIds}
-          />
-        </div>
-      )}
 
       {/* Media Details Modal */}
       {selectedMedia && (
@@ -594,108 +559,5 @@ function MediaCard({
       <h3 className="text-white text-sm font-medium truncate">{title}</h3>
       {year && <p className="text-slate-500 text-xs">{year}</p>}
     </div>
-  );
-}
-// Collection Row Component
-function CollectionRow({ collections, libraryCollectionIds }: { collections: Collection[]; libraryCollectionIds: Set<number> }) {
-  const rowRef = useRef<HTMLDivElement>(null);
-
-  const scroll = (direction: 'left' | 'right') => {
-    if (rowRef.current) {
-      const scrollAmount = rowRef.current.clientWidth * 0.8;
-      rowRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  if (collections.length === 0) return null;
-
-  return (
-    <div className="relative group/row">
-      <button
-        onClick={() => scroll('left')}
-        className="absolute left-0 top-0 bottom-0 z-30 w-12 bg-gradient-to-r from-[#141414] to-transparent
-                   flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity"
-      >
-        <ChevronLeft className="w-8 h-8 text-white" />
-      </button>
-      
-      <div
-        ref={rowRef}
-        className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
-      >
-        {collections.map((collection) => (
-          <CollectionCard 
-            key={collection.tmdb_id} 
-            collection={collection}
-            isInLibrary={libraryCollectionIds.has(collection.tmdb_id)}
-          />
-        ))}
-      </div>
-
-      <button
-        onClick={() => scroll('right')}
-        className="absolute right-0 top-0 bottom-0 z-30 w-12 bg-gradient-to-l from-[#141414] to-transparent
-                   flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity"
-      >
-        <ChevronRight className="w-8 h-8 text-white" />
-      </button>
-    </div>
-  );
-}
-
-// Collection Card Component
-function CollectionCard({ collection, isInLibrary }: { collection: Collection; isInLibrary: boolean }) {
-  return (
-    <Link 
-      to={`/collections?query=${encodeURIComponent(collection.name)}`}
-      className="flex-shrink-0 w-40 group cursor-pointer"
-    >
-      <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-slate-800 mb-2 
-                      group-hover:ring-2 ring-cyan-500 transition-all">
-        {collection.poster_path ? (
-          <img
-            src={tmdbImageUrl(collection.poster_path, 'w342')}
-            alt={collection.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-900 to-slate-900">
-            <Layers className="w-12 h-12 text-cyan-500/50" />
-          </div>
-        )}
-        
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        
-        {/* Collection badge */}
-        <div className="absolute top-2 left-2">
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-600 text-white">
-            COLLECTION
-          </span>
-        </div>
-
-        {/* In Library badge */}
-        {isInLibrary && (
-          <div className="absolute top-2 right-2">
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-600 text-white flex items-center gap-0.5">
-              <Check className="w-3 h-3" />
-              ADDED
-            </span>
-          </div>
-        )}
-
-        {/* Hover overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
-          <span className="text-white text-sm font-semibold bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-sm">
-            Browse Similar
-          </span>
-        </div>
-      </div>
-
-      <h3 className="text-white text-sm font-medium line-clamp-2">{collection.name}</h3>
-    </Link>
   );
 }

@@ -4,7 +4,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { streamarrApi, tmdbImageUrl } from '../services/api';
 import { 
   Layers, ChevronLeft, ChevronRight, Plus, Check, Loader2, 
-  Search as SearchIcon, ArrowLeft
+  Search as SearchIcon, ArrowLeft, CheckCircle
 } from 'lucide-react';
 import type { Collection } from '../types';
 
@@ -16,6 +16,7 @@ export default function BrowseCollections() {
   const searchQuery = searchParams.get('query') || '';
   const [searchInput, setSearchInput] = useState(searchQuery);
   const [addingCollectionId, setAddingCollectionId] = useState<number | null>(null);
+  const [newlyAddedIds, setNewlyAddedIds] = useState<Set<number>>(new Set());
 
   // Fetch collections with pagination
   const { data: collectionsData, isLoading } = useQuery({
@@ -37,19 +38,26 @@ export default function BrowseCollections() {
     return ids;
   }, [libraryCollections]);
 
+  // Check if collection is in library (includes newly added)
+  const isInLibrary = (tmdbId: number) => libraryCollectionIds.has(tmdbId) || newlyAddedIds.has(tmdbId);
+
   // Add collection mutation
   const addCollectionMutation = useMutation({
     mutationFn: (tmdbId: number) => streamarrApi.addCollection(tmdbId),
-    onSuccess: () => {
+    onSuccess: (_data, tmdbId) => {
+      // Immediately mark as added
+      setNewlyAddedIds(prev => new Set([...prev, tmdbId]));
       queryClient.invalidateQueries({ queryKey: ['library-collections'] });
     },
   });
 
   const handleAddCollection = async (collection: Collection) => {
-    if (libraryCollectionIds.has(collection.tmdb_id)) return;
+    if (isInLibrary(collection.tmdb_id)) return;
     setAddingCollectionId(collection.tmdb_id);
     try {
       await addCollectionMutation.mutateAsync(collection.tmdb_id);
+    } catch (error) {
+      console.error('Failed to add collection:', error);
     } finally {
       setAddingCollectionId(null);
     }
@@ -134,7 +142,7 @@ export default function BrowseCollections() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-6">
               {collections.map((collection: Collection) => {
-                const isInLibrary = libraryCollectionIds.has(collection.tmdb_id);
+                const inLibrary = isInLibrary(collection.tmdb_id);
                 const isAdding = addingCollectionId === collection.tmdb_id;
                 
                 return (
@@ -163,7 +171,7 @@ export default function BrowseCollections() {
                       </div>
 
                       {/* In Library badge */}
-                      {isInLibrary && (
+                      {inLibrary && (
                         <div className="absolute top-2 right-2">
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-600 text-white flex items-center gap-0.5">
                             <Check className="w-3 h-3" />
@@ -174,9 +182,9 @@ export default function BrowseCollections() {
 
                       {/* Add button overlay */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                        {isInLibrary ? (
+                        {inLibrary ? (
                           <span className="flex items-center gap-2 text-green-400 bg-black/50 px-4 py-2 rounded-full">
-                            <Check className="w-5 h-5" />
+                            <CheckCircle className="w-5 h-5" />
                             In Library
                           </span>
                         ) : (
