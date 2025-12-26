@@ -972,14 +972,41 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 	// Apply quality filters from user settings
 	if h.settingsManager != nil && h.streamService != nil {
 		settings := h.settingsManager.Get()
-		if settings.EnableReleaseFilters {
-			log.Printf("[FILTER] Applying quality filters: excludedGroups=%s, excludedQualities=%s, excludedLanguages=%s",
-				settings.ExcludedReleaseGroups, settings.ExcludedQualities, settings.ExcludedLanguageTags)
-
-			// Convert provider streams to models.TorrentStream for filtering
+		excludedQualities := settings.ExcludedQualities
+		
+		// Apply quality type exclusions (REMUX, HDR, DV, etc.)
+		if excludedQualities != "" {
+			log.Printf("[FILTER] Applying quality exclusions: %s", excludedQualities)
+			
 			filteredStreams := make([]providers.TorrentioStream, 0, len(providerStreams))
 			for _, ps := range providerStreams {
-				// Convert to TorrentStream for filtering
+				// Parse stream to get quality details
+				if svc, ok := h.streamService.(*streams.StreamService); ok {
+					parsed := svc.ParseStreamFromTorrentName(ps.Title, ps.InfoHash, ps.Source, 0)
+					
+					// Check if should be excluded based on quality type
+					if svc.ShouldExcludeByQualityType(ps.Title, parsed.Resolution, parsed.HDRType, excludedQualities) {
+						log.Printf("[FILTER] 🚫 Excluded stream: %s", ps.Title)
+						continue
+					}
+				}
+				filteredStreams = append(filteredStreams, ps)
+			}
+
+			if len(filteredStreams) < len(providerStreams) {
+				log.Printf("[FILTER] Filtered out %d streams (kept %d/%d)",
+					len(providerStreams)-len(filteredStreams), len(filteredStreams), len(providerStreams))
+			}
+			providerStreams = filteredStreams
+		}
+		
+		// Apply release group/language filters if enabled
+		if settings.EnableReleaseFilters {
+			log.Printf("[FILTER] Applying release filters: excludedGroups=%s, excludedLanguages=%s",
+				settings.ExcludedReleaseGroups, settings.ExcludedLanguageTags)
+
+			filteredStreams := make([]providers.TorrentioStream, 0, len(providerStreams))
+			for _, ps := range providerStreams {
 				ts := models.TorrentStream{
 					Title:       ps.Title,
 					TorrentName: ps.Name,
@@ -987,22 +1014,17 @@ func (h *Handler) GetMovieStreams(w http.ResponseWriter, r *http.Request) {
 					Indexer:     ps.Source,
 				}
 
-				// Parse stream details from torrent name for quality scoring
 				if svc, ok := h.streamService.(*streams.StreamService); ok {
-					parsed := svc.ParseStreamFromTorrentName(ts.TorrentName, "", ts.Indexer, 0)
-					ts.Resolution = parsed.Resolution
-					ts.HDRType = parsed.HDRType
-					ts.AudioFormat = parsed.AudioFormat
-					ts.Source = parsed.Source
-					ts.Codec = parsed.Codec
+					if !svc.ShouldFilterStream(ts, settings.ExcludedReleaseGroups, "", settings.ExcludedLanguageTags) {
+						filteredStreams = append(filteredStreams, ps)
+					}
+				} else {
+					filteredStreams = append(filteredStreams, ps)
 				}
-
-				// Accept all streams - addon URL already filters
-				filteredStreams = append(filteredStreams, ps)
 			}
 
 			if len(filteredStreams) < len(providerStreams) {
-				log.Printf("[FILTER] Filtered out %d streams (kept %d/%d)",
+				log.Printf("[FILTER] Filtered out %d streams by release filters (kept %d/%d)",
 					len(providerStreams)-len(filteredStreams), len(filteredStreams), len(providerStreams))
 			}
 			providerStreams = filteredStreams

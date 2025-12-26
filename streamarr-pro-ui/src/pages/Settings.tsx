@@ -2007,6 +2007,67 @@ export default function Settings() {
 
               <hr className="border-white/10" />
 
+              {/* Quality Exclusions Section */}
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-4">🚫 Quality Exclusions</h3>
+                <p className="text-sm text-slate-400 mb-4">
+                  Exclude specific stream types from being cached. These filters apply locally after streams are fetched from providers.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    { id: 'remux', label: 'REMUX', desc: 'Blu-ray remux (huge files, 30-80GB)' },
+                    { id: 'hdr', label: 'HDR/HDR10+', desc: 'High Dynamic Range content' },
+                    { id: 'dv', label: 'Dolby Vision', desc: 'Dolby Vision HDR' },
+                    { id: 'dvhdr', label: 'DV + HDR', desc: 'Dual-layer Dolby Vision with HDR' },
+                    { id: '3d', label: '3D', desc: 'Stereoscopic 3D content' },
+                    { id: 'scr', label: 'Screener', desc: 'Pre-release screener copies' },
+                    { id: 'cam', label: 'CAM/TS', desc: 'Camera recordings & telecine' },
+                    { id: 'unknown', label: 'Unknown', desc: 'Streams with undetected quality' },
+                  ].map((quality) => {
+                    const excludedQualities = (settings?.excluded_qualities || '').split(',').map((q: string) => q.trim().toLowerCase());
+                    const isExcluded = excludedQualities.includes(quality.id);
+                    
+                    return (
+                      <div 
+                        key={quality.id}
+                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                          isExcluded 
+                            ? 'border-red-500/50 bg-red-900/20' 
+                            : 'border-white/10 bg-[#2a2a2a] hover:border-white/20'
+                        }`}
+                        onClick={() => {
+                          let qualities = (settings?.excluded_qualities || '').split(',').map((q: string) => q.trim()).filter((q: string) => q);
+                          if (isExcluded) {
+                            qualities = qualities.filter((q: string) => q.toLowerCase() !== quality.id);
+                          } else {
+                            qualities.push(quality.id);
+                          }
+                          updateSetting('excluded_qualities', qualities.join(','));
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`w-4 h-4 rounded border ${
+                            isExcluded 
+                              ? 'bg-red-500 border-red-500' 
+                              : 'border-slate-500'
+                          } flex items-center justify-center`}>
+                            {isExcluded && <span className="text-white text-xs">✓</span>}
+                          </div>
+                          <span className="text-sm font-medium text-white">{quality.label}</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1 ml-6">{quality.desc}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-500 mt-4">
+                  💡 Note: Your Stremio addons may also have their own quality filters configured in their URLs. 
+                  These local filters provide an additional layer of filtering.
+                </p>
+              </div>
+
+              <hr className="border-white/10" />
+
               {/* Sorting Section */}
               <div>
                 <h3 className="text-lg font-semibold text-white mb-4">↕️ Sorting</h3>

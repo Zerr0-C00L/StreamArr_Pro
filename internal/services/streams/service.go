@@ -140,6 +140,94 @@ func (s *StreamService) FindBestCachedStream(ctx context.Context, streams []mode
 	return best, nil
 }
 
+// ShouldExcludeByQualityType checks if a stream should be excluded based on quality type settings
+// Supported exclusion types: remux, hdr, dv, dvhdr, 3d, scr, cam, unknown
+func (s *StreamService) ShouldExcludeByQualityType(streamTitle, resolution, hdrType string, excludedQualities string) bool {
+	if excludedQualities == "" {
+		return false
+	}
+	
+	titleUpper := strings.ToUpper(streamTitle)
+	hdrUpper := strings.ToUpper(hdrType)
+	exclusions := strings.Split(strings.ToLower(excludedQualities), ",")
+	
+	for _, excl := range exclusions {
+		excl = strings.TrimSpace(excl)
+		
+		switch excl {
+		case "remux":
+			// Check for REMUX in title
+			if strings.Contains(titleUpper, "REMUX") || strings.Contains(titleUpper, "BDREMUX") {
+				s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "REMUX")
+				return true
+			}
+		case "hdr":
+			// HDR, HDR10, HDR10+
+			if hdrUpper == "HDR" || hdrUpper == "HDR10" || hdrUpper == "HDR10+" ||
+				strings.Contains(titleUpper, "HDR10+") || strings.Contains(titleUpper, "HDR10") ||
+				(strings.Contains(titleUpper, "HDR") && !strings.Contains(titleUpper, "DOLBY")) {
+				s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "HDR")
+				return true
+			}
+		case "dv":
+			// Dolby Vision only (not DV+HDR)
+			if (hdrUpper == "DV" || hdrUpper == "DOLBY VISION" || strings.Contains(titleUpper, "DOLBY.VISION") ||
+				strings.Contains(titleUpper, "DV") || strings.Contains(titleUpper, "DOVI")) &&
+				!strings.Contains(titleUpper, "DV.HDR") && !strings.Contains(titleUpper, "DVHDR") {
+				s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "Dolby Vision")
+				return true
+			}
+		case "dvhdr":
+			// Dolby Vision + HDR hybrid
+			if strings.Contains(titleUpper, "DV.HDR") || strings.Contains(titleUpper, "DVHDR") ||
+				strings.Contains(titleUpper, "DV HDR") || hdrUpper == "DV+HDR" {
+				s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "DV+HDR")
+				return true
+			}
+		case "3d":
+			// 3D content
+			if strings.Contains(titleUpper, "3D") || strings.Contains(titleUpper, "SBS") ||
+				strings.Contains(titleUpper, "HSBS") || strings.Contains(titleUpper, "OU") {
+				s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "3D")
+				return true
+			}
+		case "scr":
+			// Screeners
+			if strings.Contains(titleUpper, "SCR") || strings.Contains(titleUpper, "SCREENER") ||
+				strings.Contains(titleUpper, "DVDSCR") || strings.Contains(titleUpper, "BDSCR") {
+				s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "Screener")
+				return true
+			}
+		case "cam":
+			// CAM and Telecine
+			if strings.Contains(titleUpper, "CAM") || strings.Contains(titleUpper, "HDCAM") ||
+				strings.Contains(titleUpper, "TS") || strings.Contains(titleUpper, "HDTS") ||
+				strings.Contains(titleUpper, "TELESYNC") || strings.Contains(titleUpper, "TC") ||
+				strings.Contains(titleUpper, "TELECINE") {
+				// Avoid false positives from words containing "TS" or "TC"
+				// Check if TS/TC appears as a standalone tag
+				if (strings.Contains(titleUpper, ".TS.") || strings.Contains(titleUpper, ".TC.") ||
+					strings.Contains(titleUpper, " TS ") || strings.Contains(titleUpper, " TC ") ||
+					strings.HasSuffix(titleUpper, ".TS") || strings.HasSuffix(titleUpper, ".TC") ||
+					strings.Contains(titleUpper, "CAM") || strings.Contains(titleUpper, "HDCAM") ||
+					strings.Contains(titleUpper, "HDTS") || strings.Contains(titleUpper, "TELESYNC") ||
+					strings.Contains(titleUpper, "TELECINE")) {
+					s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "CAM/TS")
+					return true
+				}
+			}
+		case "unknown":
+			// Unknown quality
+			if resolution == "" || resolution == "Unknown" || strings.Contains(titleUpper, "UNKNOWN") {
+				s.logger.Debug("Stream excluded by quality type", "stream", streamTitle, "reason", "Unknown quality")
+				return true
+			}
+		}
+	}
+	
+	return false
+}
+
 // ShouldFilterStream checks if a stream should be filtered out based on user settings
 func (s *StreamService) ShouldFilterStream(stream models.TorrentStream, excludedGroups, excludedQualities, excludedLanguages string) bool {
 	if excludedGroups == "" && excludedQualities == "" && excludedLanguages == "" {

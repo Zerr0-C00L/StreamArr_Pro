@@ -171,6 +171,29 @@ func (cs *CacheScanner) ScanAndUpgrade(ctx context.Context) error {
 
 			log.Printf("[CACHE-SCANNER] Found %d RD-cached streams for %s", len(providerStreams), movie.Title)
 
+			// Apply local quality exclusion filters from settings
+			excludedQualities := cs.settingsManager.Get().ExcludedQualities
+			if excludedQualities != "" {
+				var filteredStreams []providers.TorrentioStream
+				for _, stream := range providerStreams {
+					parsed := cs.streamService.ParseStreamFromTorrentName(stream.Title, stream.InfoHash, stream.Source, 0)
+					if !cs.streamService.ShouldExcludeByQualityType(stream.Title, parsed.Resolution, parsed.HDRType, excludedQualities) {
+						filteredStreams = append(filteredStreams, stream)
+					} else {
+						log.Printf("[CACHE-SCANNER] 🚫 Filtered out stream: %s (excluded quality type)", stream.Title)
+					}
+				}
+				if len(filteredStreams) < len(providerStreams) {
+					log.Printf("[CACHE-SCANNER] Filtered %d/%d streams based on quality exclusions", len(providerStreams)-len(filteredStreams), len(providerStreams))
+				}
+				providerStreams = filteredStreams
+			}
+
+			if len(providerStreams) == 0 {
+				log.Printf("[CACHE-SCANNER] No streams remaining after quality filtering for %s", movie.Title)
+				continue
+			}
+
 			// Addon URL already filters content - accept whatever it returns
 			log.Printf("[CACHE-SCANNER] Processing %d streams from addon (addon-level filtering already applied)", len(providerStreams))
 
@@ -328,6 +351,23 @@ func (cs *CacheScanner) scanSeries(ctx context.Context) (int, int, int) {
 			// Fetch streams for this episode
 			providerStreams, err := cs.provider.GetSeriesStreams(imdbID, season, episode)
 			if err != nil || len(providerStreams) == 0 {
+				continue
+			}
+
+			// Apply local quality exclusion filters from settings
+			excludedQualities := cs.settingsManager.Get().ExcludedQualities
+			if excludedQualities != "" {
+				var filteredStreams []providers.TorrentioStream
+				for _, stream := range providerStreams {
+					parsed := cs.streamService.ParseStreamFromTorrentName(stream.Title, stream.InfoHash, stream.Source, 0)
+					if !cs.streamService.ShouldExcludeByQualityType(stream.Title, parsed.Resolution, parsed.HDRType, excludedQualities) {
+						filteredStreams = append(filteredStreams, stream)
+					}
+				}
+				providerStreams = filteredStreams
+			}
+
+			if len(providerStreams) == 0 {
 				continue
 			}
 
