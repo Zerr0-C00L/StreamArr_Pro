@@ -2685,12 +2685,37 @@ func (h *Handler) GetCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Also get movies in this collection
-	movies, _ := h.collectionStore.GetMoviesInCollection(ctx, id)
+	// Get full collection details from TMDB including all movies
+	_, tmdbMovies, err := h.tmdbClient.GetCollectionWithMovies(ctx, collection.TMDBID)
+	if err != nil {
+		// Fallback to database movies if TMDB fails
+		movies, _ := h.collectionStore.GetMoviesInCollection(ctx, id)
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"collection": collection,
+			"movies":     movies,
+		})
+		return
+	}
+
+	// Get all library movies with their TMDB IDs to check in_library status
+	libraryMovieTMDBIDs := make(map[int]bool)
+	libraryMovies, err := h.collectionStore.GetMoviesInCollection(ctx, id)
+	if err == nil {
+		for _, m := range libraryMovies {
+			libraryMovieTMDBIDs[m.TMDBID] = true
+		}
+	}
+
+	// Mark which movies are in library
+	for i := range tmdbMovies {
+		if libraryMovieTMDBIDs[tmdbMovies[i].TMDBID] {
+			tmdbMovies[i].InLibrary = true
+		}
+	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"collection": collection,
-		"movies":     movies,
+		"movies":     tmdbMovies,
 	})
 }
 
@@ -2736,6 +2761,7 @@ func (h *Handler) SyncCollection(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetCollectionMovies handles GET /api/collections/{id}/movies
+// Returns all movies in the collection from TMDB with in_library status
 func (h *Handler) GetCollectionMovies(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -2751,13 +2777,48 @@ func (h *Handler) GetCollectionMovies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	movies, err := h.collectionStore.GetMoviesInCollection(ctx, id)
+	// Get the collection to find its TMDB ID
+	collection, err := h.collectionStore.GetByID(ctx, id)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "failed to get collection movies")
+		respondError(w, http.StatusNotFound, "collection not found")
 		return
 	}
 
-	respondJSON(w, http.StatusOK, movies)
+	// Get full collection details from TMDB including all movies
+	_, tmdbMovies, err := h.tmdbClient.GetCollectionWithMovies(ctx, collection.TMDBID)
+	if err != nil {
+		// Fallback to database movies if TMDB fails
+		movies, err := h.collectionStore.GetMoviesInCollection(ctx, id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to get collection movies")
+			return
+		}
+		respondJSON(w, http.StatusOK, movies)
+		return
+	}
+
+	// Get all library movies with their TMDB IDs to check in_library status
+	libraryMovieTMDBIDs := make(map[int]bool)
+	if h.movieStore != nil {
+		// Get all movies from library that belong to this collection
+		libraryMovies, err := h.collectionStore.GetMoviesInCollection(ctx, id)
+		if err == nil {
+			for _, m := range libraryMovies {
+				libraryMovieTMDBIDs[m.TMDBID] = true
+			}
+		}
+	}
+
+	// Mark which movies are in library
+	for i := range tmdbMovies {
+		if libraryMovieTMDBIDs[tmdbMovies[i].TMDBID] {
+			tmdbMovies[i].InLibrary = true
+		}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"movies": tmdbMovies,
+	})
 }
 
 // SearchCollections handles GET /api/search/collections - search TMDB for collections

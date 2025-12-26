@@ -185,6 +185,18 @@ func (c *TMDBClient) GetMovieWithCollection(ctx context.Context, tmdbID int) (*m
 	return movie, collection, nil
 }
 
+// CollectionMovie represents a movie in a collection with library status
+type CollectionMovie struct {
+	TMDBID       int     `json:"tmdb_id"`
+	Title        string  `json:"title"`
+	Overview     string  `json:"overview"`
+	PosterPath   string  `json:"poster_path"`
+	BackdropPath string  `json:"backdrop_path"`
+	ReleaseDate  string  `json:"release_date"`
+	VoteAverage  float64 `json:"vote_average"`
+	InLibrary    bool    `json:"in_library"`
+}
+
 // GetCollection retrieves full collection details from TMDB
 func (c *TMDBClient) GetCollection(ctx context.Context, collectionID int) (*models.Collection, []int, error) {
 	endpoint := fmt.Sprintf("%s/collection/%d", tmdbBaseURL, collectionID)
@@ -217,6 +229,49 @@ func (c *TMDBClient) GetCollection(ctx context.Context, collectionID int) (*mode
 	}
 
 	return collection, movieIDs, nil
+}
+
+// GetCollectionWithMovies retrieves full collection details including all movie info from TMDB
+func (c *TMDBClient) GetCollectionWithMovies(ctx context.Context, collectionID int) (*models.Collection, []CollectionMovie, error) {
+	endpoint := fmt.Sprintf("%s/collection/%d", tmdbBaseURL, collectionID)
+	params := url.Values{}
+	params.Set("api_key", c.apiKey)
+
+	data, err := c.makeRequest(ctx, endpoint, params)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var tc tmdbCollection
+	if err := json.Unmarshal(data, &tc); err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal collection: %w", err)
+	}
+
+	collection := &models.Collection{
+		TMDBID:       tc.ID,
+		Name:         tc.Name,
+		Overview:     tc.Overview,
+		PosterPath:   tc.PosterPath,
+		BackdropPath: tc.BackdropPath,
+		TotalMovies:  len(tc.Parts),
+	}
+
+	// Convert parts to CollectionMovie slice
+	movies := make([]CollectionMovie, 0, len(tc.Parts))
+	for _, part := range tc.Parts {
+		movies = append(movies, CollectionMovie{
+			TMDBID:       part.ID,
+			Title:        part.Title,
+			Overview:     part.Overview,
+			PosterPath:   part.PosterPath,
+			BackdropPath: part.BackdropPath,
+			ReleaseDate:  part.ReleaseDate,
+			VoteAverage:  part.VoteAverage,
+			InLibrary:    false, // Will be set by the handler
+		})
+	}
+
+	return collection, movies, nil
 }
 
 // GetSeries retrieves series details from TMDB, including IMDB ID
