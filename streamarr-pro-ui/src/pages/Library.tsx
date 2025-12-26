@@ -944,9 +944,12 @@ export default function Library() {
                 Genres {selectedGenres.length > 0 && `(${selectedGenres.length})`}
               </button>
               {openDropdown === 'genres' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
+                <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
+              )}
+              {openDropdown === 'genres' && (
+                <div className="fixed mt-1 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg" style={{ top: '55px', left: '50px' }}>
                   {availableFilters.genres.map(g => (
-                    <label key={g} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                    <label key={g} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
                       <input
                         type="checkbox"
                         checked={selectedGenres.includes(g)}
@@ -958,9 +961,9 @@ export default function Library() {
                           }
                           setCurrentPage(1);
                         }}
-                        className="w-4 h-4"
+                        className="w-4 h-4 accent-white"
                       />
-                      <span className="text-sm text-white">{g}</span>
+                      <span className="text-sm">{g}</span>
                     </label>
                   ))}
                 </div>
@@ -976,9 +979,12 @@ export default function Library() {
                 Years {selectedYears.length > 0 && `(${selectedYears.length})`}
               </button>
               {openDropdown === 'years' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
+                <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
+              )}
+              {openDropdown === 'years' && (
+                <div className="fixed mt-1 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg" style={{ top: '55px', left: '160px' }}>
                   {availableFilters.years.map(y => (
-                    <label key={y} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                    <label key={y} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
                       <input
                         type="checkbox"
                         checked={selectedYears.includes(y)}
@@ -990,9 +996,9 @@ export default function Library() {
                           }
                           setCurrentPage(1);
                         }}
-                        className="w-4 h-4"
+                        className="w-4 h-4 accent-white"
                       />
-                      <span className="text-sm text-white">{y}</span>
+                      <span className="text-sm">{y}</span>
                     </label>
                   ))}
                 </div>
@@ -1008,7 +1014,10 @@ export default function Library() {
                 Rating {minRating > 0 && `(${minRating.toFixed(1)})`}
               </button>
               {openDropdown === 'rating' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-[999] w-64 shadow-lg">
+                <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
+              )}
+              {openDropdown === 'rating' && (
+                <div className="fixed mt-1 bg-[#242424] border border-white/20 rounded-lg p-4 z-[999] w-64 shadow-lg" style={{ top: '55px', left: '240px' }}>
                   <label className="block text-xs font-semibold text-slate-300 mb-2">Min Rating: {minRating.toFixed(1)}</label>
                   <input
                     type="range"
@@ -1035,7 +1044,10 @@ export default function Library() {
                 Votes {minVotes > 0 && `(${minVotes})`}
               </button>
               {openDropdown === 'votes' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-[999] w-64 shadow-lg">
+                <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
+              )}
+              {openDropdown === 'votes' && (
+                <div className="fixed mt-1 bg-[#242424] border border-white/20 rounded-lg p-4 z-[999] w-64 shadow-lg" style={{ top: '55px', left: '340px' }}>
                   <label className="block text-xs font-semibold text-slate-300 mb-2">Min Votes: {minVotes}</label>
                   <input
                     type="range"
@@ -1062,9 +1074,12 @@ export default function Library() {
                 Languages {selectedLanguages.length > 0 && `(${selectedLanguages.length})`}
               </button>
               {openDropdown === 'languages' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
+                <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
+              )}
+              {openDropdown === 'languages' && (
+                <div className="fixed mt-1 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg" style={{ top: '55px', left: '450px' }}>
                   {availableFilters.languages.map(l => (
-                    <label key={l} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                    <label key={l} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
                       <input
                         type="checkbox"
                         checked={selectedLanguages.includes(l)}
@@ -1076,9 +1091,9 @@ export default function Library() {
                           }
                           setCurrentPage(1);
                         }}
-                        className="w-4 h-4"
+                        className="w-4 h-4 accent-white"
                       />
-                      <span className="text-sm text-white">{l}</span>
+                      <span className="text-sm">{l}</span>
                     </label>
                   ))}
                 </div>
@@ -1094,9 +1109,12 @@ export default function Library() {
                 Countries {selectedCountries.length > 0 && `(${selectedCountries.length})`}
               </button>
               {openDropdown === 'countries' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
+                <div className="fixed top-0 left-0 w-full h-full z-[998]" onClick={() => setOpenDropdown(null)} />
+              )}
+              {openDropdown === 'countries' && (
+                <div className="fixed mt-1 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg" style={{ top: '55px', left: '580px' }}>
                   {availableFilters.countries.map(c => (
-                    <label key={c} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
+                    <label key={c} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer text-white">
                       <input
                         type="checkbox"
                         checked={selectedCountries.includes(c)}
@@ -1108,9 +1126,9 @@ export default function Library() {
                           }
                           setCurrentPage(1);
                         }}
-                        className="w-4 h-4"
+                        className="w-4 h-4 accent-white"
                       />
-                      <span className="text-sm text-white">{c}</span>
+                      <span className="text-sm">{c}</span>
                     </label>
                   ))}
                 </div>
