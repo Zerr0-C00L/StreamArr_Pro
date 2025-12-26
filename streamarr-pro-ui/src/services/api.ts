@@ -56,7 +56,7 @@ export const streamarrApi = {
     api.put('/settings', data),
 
   // Movies
-  getMovies: (params?: { offset?: number; limit?: number; monitored?: boolean }) =>
+  getMovies: (params?: { offset?: number; limit?: number; monitored?: boolean; sort?: string; order?: string }) =>
     api.get<Movie[]>('/movies', { params }),
   
   getMovie: (id: number) =>
@@ -78,7 +78,7 @@ export const streamarrApi = {
     api.get<{ stream_url: string; quality: string }>(`/movies/${id}/play`),
 
   // Series
-  getSeries: (params?: { offset?: number; limit?: number; monitored?: boolean }) =>
+  getSeries: (params?: { offset?: number; limit?: number; monitored?: boolean; sort?: string; order?: string }) =>
     api.get<Series[]>('/series', { params }),
   
   getSingleSeries: (id: number) =>

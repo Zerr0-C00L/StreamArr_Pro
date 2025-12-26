@@ -562,6 +562,8 @@ export default function Library() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState('title');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const ITEMS_PER_PAGE = 50;
 
   // Get current view from URL params (default to 'all')
@@ -571,16 +573,16 @@ export default function Library() {
   const movieIdParam = searchParams.get('movie');
   const seriesIdParam = searchParams.get('series');
 
-  // Fetch movies
+  // Fetch movies with sort params
   const { data: movies = [], isLoading: moviesLoading } = useQuery({
-    queryKey: ['movies', 'library'],
-    queryFn: () => streamarrApi.getMovies({ limit: 10000 }).then(res => Array.isArray(res.data) ? res.data : []),
+    queryKey: ['movies', 'library', sortBy, sortOrder],
+    queryFn: () => streamarrApi.getMovies({ limit: 10000, sort: sortBy, order: sortOrder }).then(res => Array.isArray(res.data) ? res.data : []),
   });
 
-  // Fetch series
+  // Fetch series with sort params
   const { data: series = [], isLoading: seriesLoading } = useQuery({
-    queryKey: ['series', 'library'],
-    queryFn: () => streamarrApi.getSeries({ limit: 10000 }).then(res => Array.isArray(res.data) ? res.data : []),
+    queryKey: ['series', 'library', sortBy, sortOrder],
+    queryFn: () => streamarrApi.getSeries({ limit: 10000, sort: sortBy, order: sortOrder }).then(res => Array.isArray(res.data) ? res.data : []),
   });
 
   const isLoading = moviesLoading || seriesLoading;
@@ -729,9 +731,9 @@ export default function Library() {
     <div className="min-h-screen bg-[#141414] -m-6 -mt-6">
       {/* Filter Tabs with Search */}
       <div className="relative z-10 px-12 pt-6 mb-6">
-        {/* Search Bar */}
-        <div className="mb-6 max-w-md">
-          <div className="relative">
+        {/* Search Bar and Sort Controls */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
@@ -748,6 +750,37 @@ export default function Library() {
                 <X className="w-4 h-4 text-slate-400" />
               </button>
             )}
+          </div>
+
+          {/* Sort Controls */}
+          <div className="flex gap-3 items-center">
+            <select
+              value={sortBy}
+              onChange={(e) => {
+                setSortBy(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm"
+            >
+              <option value="title">Sort by Title</option>
+              <option value="date_added">Sort by Date Added</option>
+              <option value="release_date">Sort by Release Date</option>
+              <option value="rating">Sort by Rating</option>
+              <option value="runtime">Sort by Runtime</option>
+              <option value="monitored">Sort by Monitored</option>
+              <option value="genre">Sort by Genre</option>
+            </select>
+
+            <button
+              onClick={() => {
+                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
+              title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+            >
+              {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+            </button>
           </div>
         </div>
 
