@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tmdbImageUrl } from '../services/api';
-import { ArrowLeft, Star, Calendar, Plus, Check, Loader2, Film, Tv } from 'lucide-react';
+import { ArrowLeft, Star, Calendar, Plus, Check, Loader2, Film, Tv, Play } from 'lucide-react';
 import type { SearchResult } from '../types';
 import type { TrendingItem } from '../services/api';
 
@@ -57,6 +57,16 @@ export default function MediaDetailsModal({
   const genres = details?.genres?.map((g: any) => g.name).join(', ') || '';
   const runtime = details?.runtime;
   const seasons = details?.number_of_seasons;
+
+  // Get the best trailer from videos
+  const trailer = useMemo(() => {
+    if (!details?.videos?.results) return null;
+    const videos = details.videos.results;
+    return videos.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer' && v.official) ||
+           videos.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') ||
+           videos.find((v: any) => v.site === 'YouTube') ||
+           null;
+  }, [details]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/95 overflow-y-auto" onClick={onClose}>
@@ -143,7 +153,18 @@ export default function MediaDetailsModal({
               </p>
 
               {/* Action Button */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                {trailer && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${trailer.key}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-6 py-3 bg-white hover:bg-white/90 text-black font-semibold rounded-lg transition-all hover:scale-105"
+                  >
+                    <Play className="w-5 h-5 fill-current" />
+                    Watch Trailer
+                  </a>
+                )}
                 {isAdded ? (
                   <button className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg cursor-default">
                     <Check className="w-5 h-5" />
@@ -153,7 +174,7 @@ export default function MediaDetailsModal({
                   <button
                     onClick={() => onAdd(item, mediaType)}
                     disabled={isAdding}
-                    className="flex items-center gap-2 px-6 py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:bg-slate-600 disabled:text-slate-400 transition-all hover:scale-105"
+                    className={`flex items-center gap-2 px-6 py-3 ${trailer ? 'bg-slate-700 hover:bg-slate-600' : 'bg-white hover:bg-white/90 text-black'} ${trailer ? 'text-white' : ''} font-semibold rounded-lg disabled:bg-slate-600 disabled:text-slate-400 transition-all hover:scale-105`}
                   >
                     {isAdding ? (
                       <>
