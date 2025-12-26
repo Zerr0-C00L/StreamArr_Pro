@@ -881,7 +881,7 @@ export default function Library() {
   return (
     <div className="min-h-screen bg-[#141414] -m-6 -mt-6">
       {/* Filter Tabs with Search */}
-      <div className="relative z-10 px-12 pt-6 mb-6">
+      <div className="relative z-50 px-12 pt-6 mb-6">
         {/* Search Bar and Sort Controls */}
         <div className="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
           <div className="relative flex-1 max-w-md">
@@ -1183,7 +1183,7 @@ export default function Library() {
       </div>
 
       {/* Content Grid */}
-      <div className="relative z-10 px-12 pb-12">
+      <div className="relative z-0 px-12 pb-12">
         <div className="mb-4">
           <h2 className="text-2xl font-bold text-white mb-2">{viewTitles[currentView]}</h2>
           <p className="text-slate-400">
