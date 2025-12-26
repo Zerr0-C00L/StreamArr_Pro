@@ -2967,7 +2967,7 @@ func (h *Handler) GetTMDBDetails(w http.ResponseWriter, r *http.Request) {
 		response["backdrop_path"] = series.BackdropPath
 		response["first_air_date"] = series.FirstAirDate
 		response["vote_average"] = series.VoteAverage
-		response["number_of_seasons"] = series.NumberOfSeasons
+		response["number_of_seasons"] = series.Seasons
 		response["genres"] = series.Genres
 	} else {
 		respondError(w, http.StatusBadRequest, "invalid media type, must be 'movie' or 'tv'")
