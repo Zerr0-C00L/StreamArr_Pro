@@ -28,7 +28,13 @@ export default function BrowseCollections() {
   // Fetch library collections to show which are already added
   const { data: libraryCollections = [] } = useQuery({
     queryKey: ['library-collections'],
-    queryFn: () => streamarrApi.getCollections({ limit: 10000 }).then(res => Array.isArray(res.data) ? res.data : []),
+    queryFn: () => streamarrApi.getCollections({ limit: 10000 }).then(res => {
+      // Response is { collections: [...], total: ... }
+      const data = res.data;
+      if (Array.isArray(data)) return data;
+      if (data?.collections && Array.isArray(data.collections)) return data.collections;
+      return [];
+    }),
     staleTime: 5 * 60 * 1000,
   });
 
