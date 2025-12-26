@@ -2922,6 +2922,121 @@ func (h *Handler) SearchCollections(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, collections)
 }
 
+// GetTMDBDetails handles GET /api/tmdb/{type}/{id} - get full TMDB details with videos
+func (h *Handler) GetTMDBDetails(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	
+	mediaType := vars["type"] // "movie" or "tv"
+	idStr := vars["id"]
+	
+	tmdbID, err := strconv.Atoi(idStr)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid TMDB ID")
+		return
+	}
+	
+	// Prepare response structure
+	response := make(map[string]interface{})
+	
+	if mediaType == "movie" {
+		movie, err := h.tmdbClient.GetMovie(ctx, tmdbID)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "movie not found")
+			return
+		}
+		response["id"] = movie.TMDBID
+		response["title"] = movie.Title
+		response["overview"] = movie.Overview
+		response["poster_path"] = movie.PosterPath
+		response["backdrop_path"] = movie.BackdropPath
+		response["release_date"] = movie.ReleaseDate
+		response["vote_average"] = movie.VoteAverage
+		response["runtime"] = movie.Runtime
+		response["genres"] = movie.Genres
+	} else if mediaType == "tv" {
+		series, err := h.tmdbClient.GetSeries(ctx, tmdbID)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "series not found")
+			return
+		}
+		response["id"] = series.TMDBID
+		response["name"] = series.Title
+		response["overview"] = series.Overview
+		response["poster_path"] = series.PosterPath
+		response["backdrop_path"] = series.BackdropPath
+		response["first_air_date"] = series.FirstAirDate
+		response["vote_average"] = series.VoteAverage
+		response["number_of_seasons"] = series.NumberOfSeasons
+		response["genres"] = series.Genres
+	} else {
+		respondError(w, http.StatusBadRequest, "invalid media type, must be 'movie' or 'tv'")
+		return
+	}
+	
+	// Get videos/trailers
+	videos, err := h.tmdbClient.GetVideos(ctx, mediaType, tmdbID)
+	if err == nil {
+		response["videos"] = map[string]interface{}{
+			"results": videos,
+		}
+	}
+	
+	respondJSON(w, http.StatusOK, response)
+}
+
+// GetPopularCollections handles GET /api/discover/collections - get popular collections from TMDB
+func (h *Handler) GetPopularCollections(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// TMDB doesn't have a direct "popular collections" endpoint,
+	// so we'll search for well-known collection keywords
+	popularSearchTerms := []string{
+		"Marvel Cinematic Universe",
+		"Star Wars",
+		"Harry Potter",
+		"The Lord of the Rings",
+		"Fast & Furious",
+		"Jurassic Park",
+		"Mission: Impossible",
+		"Pirates of the Caribbean",
+		"Transformers",
+		"James Bond",
+		"Batman",
+		"Spider-Man",
+		"X-Men",
+		"The Dark Knight",
+		"John Wick",
+		"Toy Story",
+		"Shrek",
+		"Ice Age",
+		"Indiana Jones",
+		"The Matrix",
+	}
+	
+	var allCollections []*models.Collection
+	seen := make(map[int]bool)
+	
+	for _, term := range popularSearchTerms {
+		collections, err := h.tmdbClient.SearchCollections(ctx, term)
+		if err != nil {
+			continue
+		}
+		for _, c := range collections {
+			if !seen[c.TMDBID] {
+				seen[c.TMDBID] = true
+				allCollections = append(allCollections, c)
+			}
+		}
+		// Limit total results
+		if len(allCollections) >= 30 {
+			break
+		}
+	}
+	
+	respondJSON(w, http.StatusOK, allCollections)
+}
+
 // GetServices handles GET /api/services - returns status of all background services
 func (h *Handler) GetServices(w http.ResponseWriter, r *http.Request) {
 	statuses := services.GlobalScheduler.GetAllStatus()

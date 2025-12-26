@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { tmdbImageUrl } from '../services/api';
+import { streamarrApi, tmdbImageUrl } from '../services/api';
 import { ArrowLeft, Star, Calendar, Plus, Check, Loader2, Film, Tv, Play } from 'lucide-react';
 import type { SearchResult } from '../types';
 import type { TrendingItem } from '../services/api';
@@ -25,16 +25,12 @@ export default function MediaDetailsModal({
   const isMovie = mediaType === 'movie';
   const tmdbId = ('tmdb_id' in item && item.tmdb_id) ? item.tmdb_id : item.id;
 
-  // Fetch full details from TMDB
+  // Fetch full details from backend (which calls TMDB)
   const { data: details, isLoading } = useQuery({
     queryKey: ['tmdb-details', mediaType, tmdbId],
     queryFn: async () => {
-      const endpoint = isMovie ? 'movie' : 'tv';
-      const response = await fetch(
-        `https://api.themoviedb.org/3/${endpoint}/${tmdbId}?api_key=${import.meta.env.VITE_TMDB_API_KEY || ''}&append_to_response=credits,videos`
-      );
-      if (!response.ok) throw new Error('Failed to fetch details');
-      return response.json();
+      const response = await streamarrApi.getTMDBDetails(isMovie ? 'movie' : 'tv', tmdbId);
+      return response.data;
     },
     enabled: !!tmdbId,
   });

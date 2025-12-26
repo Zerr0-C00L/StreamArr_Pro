@@ -143,6 +143,9 @@ export const streamarrApi = {
   
   searchSeries: (query: string) =>
     api.get<SearchResult[]>('/search/series', { params: { q: query } }),
+  
+  searchCollections: (query: string) =>
+    api.get('/search/collections', { params: { q: query } }),
 
   // Calendar
   getCalendar: (start: string, end: string) =>
@@ -157,6 +160,13 @@ export const streamarrApi = {
   
   getNowPlaying: (mediaType: 'movie' | 'tv' = 'movie') =>
     api.get<TrendingItem[]>('/discover/now-playing', { params: { media_type: mediaType } }),
+  
+  getPopularCollections: () =>
+    api.get('/discover/collections'),
+  
+  // TMDB Details (with videos)
+  getTMDBDetails: (mediaType: 'movie' | 'tv', tmdbId: number) =>
+    api.get(`/tmdb/${mediaType}/${tmdbId}`),
 
   // Statistics
   getStats: () =>
