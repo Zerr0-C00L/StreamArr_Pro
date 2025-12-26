@@ -402,10 +402,10 @@ export default function Search() {
               Popular Collections
             </h2>
             <Link 
-              to="/library?view=collections"
+              to="/collections"
               className="flex items-center gap-1 text-cyan-500 hover:text-cyan-400 text-sm font-medium transition-colors"
             >
-              View All in Library
+              Browse All Collections
               <ExternalLink className="w-4 h-4" />
             </Link>
           </div>
@@ -650,7 +650,7 @@ function CollectionRow({ collections, libraryCollectionIds }: { collections: Col
 function CollectionCard({ collection, isInLibrary }: { collection: Collection; isInLibrary: boolean }) {
   return (
     <Link 
-      to={`/library?view=collections`}
+      to={`/collections?query=${encodeURIComponent(collection.name)}`}
       className="flex-shrink-0 w-40 group cursor-pointer"
     >
       <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-slate-800 mb-2 
@@ -690,7 +690,7 @@ function CollectionCard({ collection, isInLibrary }: { collection: Collection; i
         {/* Hover overlay */}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
           <span className="text-white text-sm font-semibold bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-sm">
-            View Collection
+            Browse Similar
           </span>
         </div>
       </div>

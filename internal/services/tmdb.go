@@ -464,10 +464,16 @@ func (c *TMDBClient) SearchSeries(ctx context.Context, query string, page int) (
 
 // SearchCollections searches for collections
 func (c *TMDBClient) SearchCollections(ctx context.Context, query string) ([]*models.Collection, error) {
+	return c.SearchCollectionsPaged(ctx, query, 1)
+}
+
+// SearchCollectionsPaged searches for collections with pagination
+func (c *TMDBClient) SearchCollectionsPaged(ctx context.Context, query string, page int) ([]*models.Collection, error) {
 	endpoint := fmt.Sprintf("%s/search/collection", tmdbBaseURL)
 	params := url.Values{}
 	params.Set("api_key", c.apiKey)
 	params.Set("query", query)
+	params.Set("page", fmt.Sprintf("%d", page))
 
 	data, err := c.makeRequest(ctx, endpoint, params)
 	if err != nil {
@@ -482,6 +488,8 @@ func (c *TMDBClient) SearchCollections(ctx context.Context, query string) ([]*mo
 			PosterPath   string `json:"poster_path"`
 			BackdropPath string `json:"backdrop_path"`
 		} `json:"results"`
+		TotalPages   int `json:"total_pages"`
+		TotalResults int `json:"total_results"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal search results: %w", err)

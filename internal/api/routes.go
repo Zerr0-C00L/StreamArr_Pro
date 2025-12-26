@@ -239,9 +239,11 @@ func SetupRoutesWithXtream(handler *Handler, xtreamHandler interface{ RegisterRo
 	api.HandleFunc("/discover/popular", handler.GetPopular).Methods("GET")
 	api.HandleFunc("/discover/now-playing", handler.GetNowPlaying).Methods("GET")
 	api.HandleFunc("/discover/collections", handler.GetPopularCollections).Methods("GET")
+	api.HandleFunc("/discover/collections/browse", handler.BrowseCollections).Methods("GET")
 
 	// Collections
 	api.HandleFunc("/collections", handler.ListCollections).Methods("GET")
+	api.HandleFunc("/collections/add", handler.AddCollectionByTMDB).Methods("POST")
 	api.HandleFunc("/collections/{id}", handler.GetCollection).Methods("GET")
 	api.HandleFunc("/collections/{id}/sync", handler.SyncCollection).Methods("POST")
 	api.HandleFunc("/collections/{id}/movies", handler.GetCollectionMovies).Methods("GET")

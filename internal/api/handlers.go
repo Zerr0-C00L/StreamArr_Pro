@@ -2801,6 +2801,64 @@ func (h *Handler) GetCollection(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AddCollectionByTMDB handles POST /api/collections/add - adds a collection by TMDB ID
+func (h *Handler) AddCollectionByTMDB(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.collectionStore == nil {
+		respondError(w, http.StatusInternalServerError, "collection store not initialized")
+		return
+	}
+
+	var req struct {
+		TMDBID         int    `json:"tmdb_id"`
+		Monitored      bool   `json:"monitored"`
+		QualityProfile string `json:"quality_profile"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.TMDBID == 0 {
+		respondError(w, http.StatusBadRequest, "tmdb_id is required")
+		return
+	}
+
+	// Check if collection already exists
+	existing, _ := h.collectionStore.GetByTMDBID(ctx, req.TMDBID)
+	if existing != nil {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"message":    "Collection already exists",
+			"collection": existing,
+		})
+		return
+	}
+
+	// Get collection details from TMDB
+	collection, movies, err := h.tmdbClient.GetCollectionWithMovies(ctx, req.TMDBID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "collection not found in TMDB")
+		return
+	}
+
+	// Create the collection in database
+	collection.TotalMovies = len(movies)
+	if err := h.collectionStore.Create(ctx, collection); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to create collection")
+		return
+	}
+
+	// Start background sync to add all movies
+	go h.addCollectionMovies(ctx, collection.TMDBID, req.Monitored, req.QualityProfile)
+
+	respondJSON(w, http.StatusCreated, map[string]interface{}{
+		"message":    "Collection added successfully",
+		"collection": collection,
+	})
+}
+
 // SyncCollection handles POST /api/collections/{id}/sync - adds all missing movies from a collection
 func (h *Handler) SyncCollection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -3035,6 +3093,108 @@ func (h *Handler) GetPopularCollections(w http.ResponseWriter, r *http.Request) 
 	}
 	
 	respondJSON(w, http.StatusOK, allCollections)
+}
+
+// BrowseCollections handles GET /api/discover/collections/browse - browse all TMDB collections with pagination
+func (h *Handler) BrowseCollections(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
+	// Get page parameter (default 1)
+	page := 1
+	if p := r.URL.Query().Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	
+	// Get search query if provided
+	query := r.URL.Query().Get("query")
+	
+	// Expanded list of collection search terms for more variety
+	allSearchTerms := []string{
+		// Superhero/Comic
+		"Marvel", "Avengers", "Iron Man", "Captain America", "Thor", "Hulk", "Guardians of the Galaxy",
+		"Spider-Man", "X-Men", "Deadpool", "Batman", "Superman", "Justice League", "Wonder Woman",
+		"Aquaman", "DC Extended Universe", "The Dark Knight",
+		// Sci-Fi/Fantasy
+		"Star Wars", "Star Trek", "The Matrix", "Terminator", "Alien", "Predator", "Planet of the Apes",
+		"Jurassic", "Back to the Future", "Transformers", "Pacific Rim", "Godzilla", "King Kong",
+		"Blade Runner", "Dune", "Avatar",
+		// Action/Adventure
+		"James Bond", "Mission Impossible", "Fast Furious", "John Wick", "Die Hard", "Rambo",
+		"Indiana Jones", "Pirates of the Caribbean", "The Expendables", "Mad Max", "Kingsman",
+		"Jack Ryan", "Bourne", "Tomb Raider", "National Treasure",
+		// Fantasy
+		"Lord of the Rings", "Hobbit", "Harry Potter", "Fantastic Beasts", "Narnia", "The Hunger Games",
+		"Twilight", "Maze Runner", "Divergent", "Percy Jackson",
+		// Animation
+		"Toy Story", "Shrek", "Ice Age", "Madagascar", "Kung Fu Panda", "How to Train Your Dragon",
+		"Despicable Me", "Minions", "Finding Nemo", "Cars", "Monsters Inc", "The Incredibles",
+		"Frozen", "Moana", "Wreck-It Ralph", "Big Hero", "Zootopia",
+		// Horror
+		"Conjuring", "Insidious", "Paranormal Activity", "Saw", "Halloween", "Friday the 13th",
+		"A Nightmare on Elm Street", "Scream", "The Purge", "Final Destination", "Annabelle",
+		// Comedy
+		"Hangover", "American Pie", "Rush Hour", "Bad Boys", "Men in Black", "Ghostbusters",
+		"Night at the Museum", "Ocean's", "Austin Powers", "Ace Ventura",
+		// Drama/Crime
+		"Godfather", "Rocky", "Creed", "Ocean", "Now You See Me", "Taken",
+	}
+	
+	var searchTerms []string
+	if query != "" {
+		// If user provides a search query, use that
+		searchTerms = []string{query}
+	} else {
+		// Calculate which terms to use based on page (5 terms per page for variety)
+		termsPerPage := 5
+		startIdx := (page - 1) * termsPerPage
+		endIdx := startIdx + termsPerPage
+		if startIdx >= len(allSearchTerms) {
+			startIdx = 0
+			endIdx = termsPerPage
+		}
+		if endIdx > len(allSearchTerms) {
+			endIdx = len(allSearchTerms)
+		}
+		searchTerms = allSearchTerms[startIdx:endIdx]
+	}
+	
+	var allCollections []*models.Collection
+	seen := make(map[int]bool)
+	
+	for _, term := range searchTerms {
+		collections, err := h.tmdbClient.SearchCollections(ctx, term)
+		if err != nil {
+			continue
+		}
+		for _, c := range collections {
+			if !seen[c.TMDBID] {
+				seen[c.TMDBID] = true
+				allCollections = append(allCollections, c)
+			}
+		}
+	}
+	
+	// Calculate pagination
+	totalCollections := len(allCollections)
+	itemsPerPage := 50
+	totalPages := (len(allSearchTerms) + 4) / 5 // 5 terms per page
+	if query != "" {
+		totalPages = 1
+	}
+	
+	// Limit to 50 items per page
+	if totalCollections > itemsPerPage {
+		allCollections = allCollections[:itemsPerPage]
+	}
+	
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"collections": allCollections,
+		"page":        page,
+		"totalPages":  totalPages,
+		"total":       totalCollections,
+	})
 }
 
 // GetServices handles GET /api/services - returns status of all background services

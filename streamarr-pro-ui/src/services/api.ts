@@ -164,6 +164,9 @@ export const streamarrApi = {
   getPopularCollections: () =>
     api.get('/discover/collections'),
   
+  browseCollections: (page: number = 1, query?: string) =>
+    api.get('/discover/collections/browse', { params: { page, query } }),
+  
   // TMDB Details (with videos)
   getTMDBDetails: (mediaType: 'movie' | 'tv', tmdbId: number) =>
     api.get(`/tmdb/${mediaType}/${tmdbId}`),
@@ -178,6 +181,9 @@ export const streamarrApi = {
   
   getCollection: (id: number) =>
     api.get(`/collections/${id}`),
+  
+  addCollection: (tmdbId: number, monitored: boolean = true, qualityProfile: string = 'default') =>
+    api.post('/collections/add', { tmdb_id: tmdbId, monitored, quality_profile: qualityProfile }),
   
   syncCollection: (id: number) =>
     api.post(`/collections/${id}/sync`),
