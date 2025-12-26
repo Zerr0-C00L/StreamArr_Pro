@@ -4809,6 +4809,50 @@ func sortMovies(movies []*models.Movie, sortBy, sortOrder string) {
 			}
 			return iGenre > jGenre
 
+		case "language":
+			iLang := ""
+			jLang := ""
+			if movies[i].Metadata != nil {
+				if lang, ok := movies[i].Metadata["original_language"].(string); ok {
+					iLang = lang
+				}
+			}
+			if movies[j].Metadata != nil {
+				if lang, ok := movies[j].Metadata["original_language"].(string); ok {
+					jLang = lang
+				}
+			}
+			if ascending {
+				return iLang < jLang
+			}
+			return iLang > jLang
+
+		case "country":
+			iCountry := ""
+			jCountry := ""
+			if movies[i].Metadata != nil {
+				if countries, ok := movies[i].Metadata["production_countries"].([]interface{}); ok && len(countries) > 0 {
+					if c, ok := countries[0].(map[string]interface{}); ok {
+						if iso, ok := c["iso_3166_1"].(string); ok {
+							iCountry = iso
+						}
+					}
+				}
+			}
+			if movies[j].Metadata != nil {
+				if countries, ok := movies[j].Metadata["production_countries"].([]interface{}); ok && len(countries) > 0 {
+					if c, ok := countries[0].(map[string]interface{}); ok {
+						if iso, ok := c["iso_3166_1"].(string); ok {
+							jCountry = iso
+						}
+					}
+				}
+			}
+			if ascending {
+				return iCountry < jCountry
+			}
+			return iCountry > jCountry
+
 		default:
 			return strings.ToLower(movies[i].Title) < strings.ToLower(movies[j].Title)
 		}
@@ -4890,6 +4934,50 @@ func sortSeries(series []*models.Series, sortBy, sortOrder string) {
 				return iGenre < jGenre
 			}
 			return iGenre > jGenre
+
+		case "language":
+			iLang := ""
+			jLang := ""
+			if series[i].Metadata != nil {
+				if lang, ok := series[i].Metadata["original_language"].(string); ok {
+					iLang = lang
+				}
+			}
+			if series[j].Metadata != nil {
+				if lang, ok := series[j].Metadata["original_language"].(string); ok {
+					jLang = lang
+				}
+			}
+			if ascending {
+				return iLang < jLang
+			}
+			return iLang > jLang
+
+		case "country":
+			iCountry := ""
+			jCountry := ""
+			if series[i].Metadata != nil {
+				if countries, ok := series[i].Metadata["production_countries"].([]interface{}); ok && len(countries) > 0 {
+					if c, ok := countries[0].(map[string]interface{}); ok {
+						if iso, ok := c["iso_3166_1"].(string); ok {
+							iCountry = iso
+						}
+					}
+				}
+			}
+			if series[j].Metadata != nil {
+				if countries, ok := series[j].Metadata["production_countries"].([]interface{}); ok && len(countries) > 0 {
+					if c, ok := countries[0].(map[string]interface{}); ok {
+						if iso, ok := c["iso_3166_1"].(string); ok {
+							jCountry = iso
+						}
+					}
+				}
+			}
+			if ascending {
+				return iCountry < jCountry
+			}
+			return iCountry > jCountry
 
 		default:
 			return strings.ToLower(series[i].Title) < strings.ToLower(series[j].Title)

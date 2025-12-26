@@ -696,6 +696,22 @@ export default function Library() {
             ? aGenre.localeCompare(bGenre)
             : bGenre.localeCompare(aGenre);
 
+        case 'language':
+          const aLang = a.metadata?.original_language || '';
+          const bLang = b.metadata?.original_language || '';
+          return ascending 
+            ? aLang.localeCompare(bLang)
+            : bLang.localeCompare(aLang);
+
+        case 'country':
+          const aCountries = a.metadata?.production_countries as any[] || [];
+          const bCountries = b.metadata?.production_countries as any[] || [];
+          const aCountry = aCountries.length > 0 && aCountries[0].iso_3166_1 ? aCountries[0].iso_3166_1 : '';
+          const bCountry = bCountries.length > 0 && bCountries[0].iso_3166_1 ? bCountries[0].iso_3166_1 : '';
+          return ascending 
+            ? aCountry.localeCompare(bCountry)
+            : bCountry.localeCompare(aCountry);
+
         default:
           return ascending 
             ? a.title.toLowerCase().localeCompare(b.title.toLowerCase())
@@ -815,6 +831,8 @@ export default function Library() {
               <option value="runtime">Sort by Runtime</option>
               <option value="monitored">Sort by Monitored</option>
               <option value="genre">Sort by Genre</option>
+              <option value="language">Sort by Language</option>
+              <option value="country">Sort by Country</option>
             </select>
 
             <button
