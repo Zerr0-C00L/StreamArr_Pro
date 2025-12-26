@@ -936,7 +936,7 @@ export default function Library() {
             </button>
 
             {/* Genres Dropdown */}
-            <div className="relative">
+            <div className="relative z-40">
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'genres' ? null : 'genres')}
                 className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
@@ -944,7 +944,7 @@ export default function Library() {
                 Genres {selectedGenres.length > 0 && `(${selectedGenres.length})`}
               </button>
               {openDropdown === 'genres' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
                   {availableFilters.genres.map(g => (
                     <label key={g} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
                       <input
@@ -968,7 +968,7 @@ export default function Library() {
             </div>
 
             {/* Years Dropdown */}
-            <div className="relative">
+            <div className="relative z-40">
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'years' ? null : 'years')}
                 className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
@@ -976,7 +976,7 @@ export default function Library() {
                 Years {selectedYears.length > 0 && `(${selectedYears.length})`}
               </button>
               {openDropdown === 'years' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
                   {availableFilters.years.map(y => (
                     <label key={y} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
                       <input
@@ -1000,7 +1000,7 @@ export default function Library() {
             </div>
 
             {/* Rating Dropdown */}
-            <div className="relative">
+            <div className="relative z-40">
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'rating' ? null : 'rating')}
                 className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
@@ -1008,7 +1008,7 @@ export default function Library() {
                 Rating {minRating > 0 && `(${minRating.toFixed(1)})`}
               </button>
               {openDropdown === 'rating' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-50 w-56">
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-[999] w-64 shadow-lg">
                   <label className="block text-xs font-semibold text-slate-300 mb-2">Min Rating: {minRating.toFixed(1)}</label>
                   <input
                     type="range"
@@ -1027,7 +1027,7 @@ export default function Library() {
             </div>
 
             {/* Votes Dropdown */}
-            <div className="relative">
+            <div className="relative z-40">
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'votes' ? null : 'votes')}
                 className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
@@ -1035,7 +1035,7 @@ export default function Library() {
                 Votes {minVotes > 0 && `(${minVotes})`}
               </button>
               {openDropdown === 'votes' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-50 w-56">
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-4 z-[999] w-64 shadow-lg">
                   <label className="block text-xs font-semibold text-slate-300 mb-2">Min Votes: {minVotes}</label>
                   <input
                     type="range"
@@ -1054,7 +1054,7 @@ export default function Library() {
             </div>
 
             {/* Languages Dropdown */}
-            <div className="relative">
+            <div className="relative z-40">
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'languages' ? null : 'languages')}
                 className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
@@ -1062,7 +1062,7 @@ export default function Library() {
                 Languages {selectedLanguages.length > 0 && `(${selectedLanguages.length})`}
               </button>
               {openDropdown === 'languages' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
                   {availableFilters.languages.map(l => (
                     <label key={l} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
                       <input
@@ -1086,7 +1086,7 @@ export default function Library() {
             </div>
 
             {/* Countries Dropdown */}
-            <div className="relative">
+            <div className="relative z-40">
               <button
                 onClick={() => setOpenDropdown(openDropdown === 'countries' ? null : 'countries')}
                 className="px-3 py-2.5 bg-white/10 text-white rounded-lg border border-white/20 hover:bg-white/20 focus:border-white/40 focus:outline-none transition-colors text-sm font-medium"
@@ -1094,7 +1094,7 @@ export default function Library() {
                 Countries {selectedCountries.length > 0 && `(${selectedCountries.length})`}
               </button>
               {openDropdown === 'countries' && (
-                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-50 max-h-64 overflow-y-auto min-w-48">
+                <div className="absolute top-full mt-1 left-0 bg-[#242424] border border-white/20 rounded-lg p-2 z-[999] max-h-80 overflow-y-auto min-w-56 shadow-lg">
                   {availableFilters.countries.map(c => (
                     <label key={c} className="flex items-center gap-2 px-2 py-1 hover:bg-white/10 rounded cursor-pointer">
                       <input
